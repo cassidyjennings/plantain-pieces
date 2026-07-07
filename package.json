@@ -1,0 +1,28 @@
+{
+  "name": "plantain-pieces",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Plantain Pieces — online Bananagrams-style multiplayer word game",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @plantain/shared",
+    "test": "npm run test --workspaces --if-present",
+    "test:shared": "npm run test --workspace @plantain/shared",
+    "dev:web": "npm run dev --workspace @plantain/web",
+    "dev:api": "npm run dev --workspace @plantain/api",
+    "db:start": "npx supabase start",
+    "db:stop": "npx supabase stop",
+    "db:reset": "npx supabase db reset",
+    "db:seed": "node scripts/seed-dictionary.mjs"
+  },
+  "devDependencies": {
+    "supabase": "^2.20.5",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

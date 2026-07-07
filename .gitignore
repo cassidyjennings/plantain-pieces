@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.dev.vars
+*.log
+.DS_Store
+.wrangler/
+supabase/.temp/
+supabase/.branches/
+coverage/
+*.tsbuildinfo
+.vite/

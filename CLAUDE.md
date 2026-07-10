@@ -78,10 +78,12 @@ plantain-pieces/
       src/types.ts       #   shared domain types + DEFAULT_DICTIONARY_CONFIG
   supabase/
     migrations/
-      *_schema.sql       # tables, views, RLS, realtime — WRITTEN, not yet applied to a live DB
-      *_rpcs.sql         # SECURITY DEFINER game RPCs        — WRITTEN, not yet applied
-    config.toml          # local stack config (anonymous sign-ins enabled)
-  scripts/               # (dictionary seed loader goes here — NOT YET BUILT)
+      *_schema.sql       # tables, views, RLS, realtime — DONE, applied + smoke-tested locally
+      *_rpcs.sql         # SECURITY DEFINER game RPCs        — DONE, applied + smoke-tested locally
+    seed/enable1.txt     # vendored ENABLE1 word list (172,823 words)
+    config.toml          # local stack config (anonymous sign-ins enabled, analytics disabled)
+  scripts/
+    seed-dictionary.mjs  # loads enable1.txt into public.words — DONE, idempotent
 ```
 
 **Uses npm workspaces, NOT pnpm** (Corepack couldn't write into `Program Files` without admin on
@@ -111,7 +113,7 @@ npm run build:shared        # tsc build of shared
 npm run db:start            # npx supabase start   (needs Docker Desktop running)
 npm run db:reset            # npx supabase db reset (re-applies migrations + seed)
 npm run db:stop
-npm run db:seed             # load ENABLE1 into words  (script not written yet)
+npm run db:seed             # load ENABLE1 into words (idempotent; --reset to wipe base words first)
 
 npm run dev:api             # wrangler dev  (Worker — not built yet)
 npm run dev:web             # vite dev      (React — not built yet)
@@ -125,9 +127,12 @@ npm run dev:web             # vite dev      (React — not built yet)
   start_game (Split deals correctly) → peel (atomic per-player draw + stale-peel guard verified)
   → dump → find_invalid_words → get_my_state → finish_game (Plantains, bunch-low gate verified)
   all pass, and `room_events` payloads are confirmed public-safe.
+- ✅ ENABLE1 dictionary seed loader (`scripts/seed-dictionary.mjs`, word list vendored at
+  `supabase/seed/enable1.txt`, 172,823 words). Idempotent, run via `npm run db:seed`.
+  `find_invalid_words` verified against real seeded words.
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
-- ⬜ ENABLE1 seed loader, Worker gateway, React app, end-to-end test — not started.
+- ⬜ Worker gateway, React app, end-to-end test — not started.
 
 ### Windows/Docker gotchas hit during setup (for next time)
 - If `npx supabase start` fails with a docker-context pipe error, run

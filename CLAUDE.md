@@ -69,7 +69,11 @@ server validates that the grid's letter multiset exactly equals the player's `ra
 plantain-pieces/
   apps/
     web/                 # React app (Cloudflare Pages)      — NOT YET BUILT
-    api/                 # Cloudflare Worker gateway (Hono)   — NOT YET BUILT
+    api/                 # Cloudflare Worker gateway (Hono)   — DONE, verified over real HTTP
+      src/index.ts       #   routes: room lifecycle + peel/dump/plantains
+      src/auth.ts        #   requireAuth middleware (supabase.auth.getUser(jwt))
+      src/gridValidation.ts  # fetchRack() — direct service-role read of a player's rack
+      wrangler.toml       #   SUPABASE_URL in [vars]; keys in .dev.vars (gitignored)
   packages/
     shared/              # pure TS game logic — DONE, tested
       src/tiles.ts       #   144-tile distribution, deal counts, GRID_SIZE, MAX_PLAYERS
@@ -115,9 +119,12 @@ npm run db:reset            # npx supabase db reset (re-applies migrations + see
 npm run db:stop
 npm run db:seed             # load ENABLE1 into words (idempotent; --reset to wipe base words first)
 
-npm run dev:api             # wrangler dev  (Worker — not built yet)
+npm run dev:api             # wrangler dev  (Worker; needs apps/api/.dev.vars — see below)
 npm run dev:web             # vite dev      (React — not built yet)
 ```
+
+`apps/api/.dev.vars` (gitignored) needs `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
+Get them from `npx supabase status -o json` after `npm run db:start`.
 
 ## Current status (2026-07-09)
 
@@ -130,9 +137,12 @@ npm run dev:web             # vite dev      (React — not built yet)
 - ✅ ENABLE1 dictionary seed loader (`scripts/seed-dictionary.mjs`, word list vendored at
   `supabase/seed/enable1.txt`, 172,823 words). Idempotent, run via `npm run db:seed`.
   `find_invalid_words` verified against real seeded words.
+- ✅ Worker gateway (`apps/api`, Hono) — auth middleware, all room lifecycle + in-game routes,
+  structural validation before Peel/Plantains reach the RPC layer. Verified end-to-end over real
+  HTTP with genuine anonymous auth sessions (see git log for the full test list).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
-- ⬜ Worker gateway, React app, end-to-end test — not started.
+- ⬜ React app, browser-based multi-session end-to-end test — not started.
 
 ### Windows/Docker gotchas hit during setup (for next time)
 - If `npx supabase start` fails with a docker-context pipe error, run
@@ -143,6 +153,11 @@ npm run dev:web             # vite dev      (React — not built yet)
   `Docker\run` folder from an **admin** PowerShell, relaunch.
 - `docker cp` / `docker exec ... /tmp/...` from Git Bash mangles the unix-style destination path
   into a Windows path. Prefix the command with `MSYS_NO_PATHCONV=1` to stop that.
+- **Newer Supabase CLI versions do NOT implicitly grant `service_role` table/function access**
+  (see `config.toml`'s `auto_expose_new_tables` comment — the old "legacy" auto-grant behavior is
+  gone). If a service-role Supabase client gets a `permission denied for table X` error (or it
+  gets swallowed and surfaces as some other error upstream), check for a missing explicit
+  `GRANT ... TO service_role` — see `supabase/migrations/20260706000003_service_role_grants.sql`.
 
 ## Conventions & gotchas
 

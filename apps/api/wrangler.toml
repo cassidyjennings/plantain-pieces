@@ -1,0 +1,9 @@
+name = "plantain-pieces-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# SUPABASE_URL is not secret; SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY are set via
+# .dev.vars locally (gitignored) and `wrangler secret put` for deployed environments.
+[vars]
+SUPABASE_URL = "http://127.0.0.1:54321"

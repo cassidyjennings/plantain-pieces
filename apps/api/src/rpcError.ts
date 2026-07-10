@@ -1,0 +1,21 @@
+/** Maps the exception messages raised by our SQL RPCs to HTTP status codes. */
+const KNOWN_ERRORS: Record<string, number> = {
+  ROOM_NOT_FOUND: 404,
+  NOT_IN_ROOM: 404,
+  NOT_A_PLAYER: 403,
+  NOT_HOST: 403,
+  UNAUTHORIZED: 401,
+  GAME_ALREADY_STARTED: 409,
+  ALREADY_STARTED: 409,
+  ROOM_FULL: 409,
+  NEED_TWO_PLAYERS: 409,
+  GAME_NOT_ACTIVE: 409,
+  BUNCH_TOO_LOW: 409,
+  BUNCH_NOT_LOW: 409,
+  STALE_ACTION: 409,
+  TILE_NOT_HELD: 400,
+};
+
+export function statusForRpcError(message: string): 400 | 401 | 403 | 404 | 409 {
+  return (KNOWN_ERRORS[message] as 400 | 401 | 403 | 404 | 409 | undefined) ?? 400;
+}

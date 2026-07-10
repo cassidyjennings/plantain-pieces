@@ -117,13 +117,27 @@ npm run dev:api             # wrangler dev  (Worker — not built yet)
 npm run dev:web             # vite dev      (React — not built yet)
 ```
 
-## Current status (2026-07-06)
+## Current status (2026-07-09)
 
 - ✅ Monorepo scaffold, `packages/shared` complete and tested.
-- ✅ Supabase schema, RLS, views, realtime, and all game RPCs **written**.
-- ⛔ Migrations **not yet applied/verified** — Docker Desktop was down. First `supabase start`
-  will likely surface a SQL bug or two to fix.
+- ✅ Supabase schema, RLS, views, realtime, and all game RPCs **written, applied, and
+  functionally smoke-tested** against a local `supabase start` stack: create_room → join_room →
+  start_game (Split deals correctly) → peel (atomic per-player draw + stale-peel guard verified)
+  → dump → find_invalid_words → get_my_state → finish_game (Plantains, bunch-low gate verified)
+  all pass, and `room_events` payloads are confirmed public-safe.
+- ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
+  daemon over TCP for it — not worth it for a side service we don't use).
 - ⬜ ENABLE1 seed loader, Worker gateway, React app, end-to-end test — not started.
+
+### Windows/Docker gotchas hit during setup (for next time)
+- If `npx supabase start` fails with a docker-context pipe error, run
+  `docker context use desktop-linux` (the CLI sometimes points at the `default` npipe context,
+  which needs admin rights; `desktop-linux` doesn't).
+- A stale/corrupted socket file at `%LOCALAPPDATA%\Docker\run\*.sock` can block Docker Desktop
+  from starting ("file cannot be accessed by the system"). Fix: close Docker Desktop, delete the
+  `Docker\run` folder from an **admin** PowerShell, relaunch.
+- `docker cp` / `docker exec ... /tmp/...` from Git Bash mangles the unix-style destination path
+  into a Windows path. Prefix the command with `MSYS_NO_PATHCONV=1` to stop that.
 
 ## Conventions & gotchas
 

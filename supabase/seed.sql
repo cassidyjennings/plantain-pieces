@@ -1,0 +1,3 @@
+-- Local dev seed data. The ENABLE1 dictionary loader (scripts/seed-dictionary.mjs,
+-- not yet written) populates public.words separately since it's a large external
+-- word list, not something to inline here.

@@ -68,7 +68,13 @@ server validates that the grid's letter multiset exactly equals the player's `ra
 ```
 plantain-pieces/
   apps/
-    web/                 # React app (Cloudflare Pages)      — NOT YET BUILT
+    web/                 # React app (Cloudflare Pages)      — DONE, browser-verified
+      src/pages/          #   Home, Lobby, Game, Results
+      src/components/GridCanvas.tsx  # react-konva 50x50 pan/zoom grid, click-place/pick-up
+      src/hooks/useRoomEvents.ts     # Realtime subscription to room_events
+      src/lib/api.ts       #   typed client for the Worker (attaches Bearer token)
+      src/lib/rooms.ts     #   direct RLS-gated reads of rooms_public/room_players_public
+      .env.local           #   VITE_SUPABASE_URL/ANON_KEY/API_URL (gitignored)
     api/                 # Cloudflare Worker gateway (Hono)   — DONE, verified over real HTTP
       src/index.ts       #   routes: room lifecycle + peel/dump/plantains
       src/auth.ts        #   requireAuth middleware (supabase.auth.getUser(jwt))
@@ -120,13 +126,15 @@ npm run db:stop
 npm run db:seed             # load ENABLE1 into words (idempotent; --reset to wipe base words first)
 
 npm run dev:api             # wrangler dev  (Worker; needs apps/api/.dev.vars — see below)
-npm run dev:web             # vite dev      (React — not built yet)
+npm run dev:web             # vite dev      (React; needs apps/web/.env.local — see below)
 ```
 
 `apps/api/.dev.vars` (gitignored) needs `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
-Get them from `npx supabase status -o json` after `npm run db:start`.
+`apps/web/.env.local` (gitignored) needs `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
+`VITE_API_URL` (the Worker's local URL, e.g. `http://127.0.0.1:8787`).
+Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
 
-## Current status (2026-07-09)
+## Current status (2026-07-10)
 
 - ✅ Monorepo scaffold, `packages/shared` complete and tested.
 - ✅ Supabase schema, RLS, views, realtime, and all game RPCs **written, applied, and
@@ -140,9 +148,16 @@ Get them from `npx supabase status -o json` after `npm run db:start`.
 - ✅ Worker gateway (`apps/api`, Hono) — auth middleware, all room lifecycle + in-game routes,
   structural validation before Peel/Plantains reach the RPC layer. Verified end-to-end over real
   HTTP with genuine anonymous auth sessions (see git log for the full test list).
+- ✅ **Multiplayer core is fully built and browser-verified end-to-end.** React app (`apps/web`)
+  built and tested live in a browser: guest auth, room create/join, Lobby ready-up with live
+  Realtime sync across two independent sessions (zero page reloads), Split, Konva grid tile
+  placement/pickup, Bunch graphic, opponent tile counts. Peel/Dump/Plantains wiring reuses the
+  already-verified Worker endpoints.
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
-- ⬜ React app, browser-based multi-session end-to-end test — not started.
+- ⬜ Not yet built: box/shift-select for multi-tile grid operations (only single-tile click
+  place/pick-up exists), spectator mode UI, emoji reactions, rematch (currently a stub that just
+  navigates home), friends list, achievements, dictionary settings UI, daily challenge, solo play.
 
 ### Windows/Docker gotchas hit during setup (for next time)
 - If `npx supabase start` fails with a docker-context pipe error, run
@@ -158,6 +173,18 @@ Get them from `npx supabase status -o json` after `npm run db:start`.
   gone). If a service-role Supabase client gets a `permission denied for table X` error (or it
   gets swallowed and surfaces as some other error upstream), check for a missing explicit
   `GRANT ... TO service_role` — see `supabase/migrations/20260706000003_service_role_grants.sql`.
+- **The same is true for `authenticated`/`anon` — an RLS policy alone is NOT enough, you also
+  need the base `GRANT SELECT ... TO authenticated`** (see
+  `supabase/migrations/20260710000001_authenticated_grants.sql`). This one is nastier than the
+  service_role version because of *where* it breaks: **filtered** Postgres Changes realtime
+  subscriptions (e.g. `.on('postgres_changes', {..., filter: 'room_id=eq.X'})`) silently fail to
+  register when the grant is missing — the client-side `.subscribe()` callback still reports
+  `status: 'SUBSCRIBED'` with no error, but nothing ever shows up in `realtime.subscription` and
+  no events are ever delivered. **Unfiltered** subscriptions on the same table register fine,
+  which is what makes this so easy to miss. If realtime events aren't arriving, check
+  `select * from realtime.subscription;` in the DB (should have a row per active filtered
+  subscription) before suspecting anything else, and check
+  `select has_table_privilege('authenticated', 'public.<table>', 'SELECT');`.
 
 ## Conventions & gotchas
 

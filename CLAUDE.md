@@ -159,7 +159,8 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
   Realtime sync across two independent sessions (zero page reloads), Split, Bunch graphic,
   opponent tile counts. Peel/Dump/Plantains wiring reuses the already-verified Worker endpoints.
 - ✅ **Full UI redesign applied** from a design handoff (jungle theme, Grandstander/Nunito fonts,
-  design tokens in `src/styles/tokens.css`, plantain-bunch mascot that shrinks with the Bunch,
+  design tokens in `src/styles/tokens.css`, a plantain-bunch Bunch meter that shrinks with the
+  Bunch (later reworked — see the slice-fly bullet below),
   animated PEEL!/DUMP!/PLANTAINS! call-outs). All four screens restyled + browser-verified.
 - ✅ **Gameplay interaction overhaul (2026-07-10), browser-tested:**
   - Board moved off react-konva to a **DOM board** with a custom unified pointer-drag system:
@@ -173,6 +174,18 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
     board tiles green when they belong to a valid dictionary word.
   - **Collapse-duplicates tray toggle**: groups duplicate letters into one tile with a count badge
     that decrements as tiles are placed.
+- ✅ **Bunch slice-fly animation (2026-07-12), browser-verified:** the old vertical peel-mascot +
+  progress bar were replaced by a **stretched side-plantain** (`BunchPlantain.tsx`) in a rounded
+  groove that shrinks (fill clipped from the right = a "cut face") as the Bunch empties, with a
+  live count. Each *drawn* tile (Peel → 1, Dump → 3 staggered) flies a plantain "slice" from the
+  cut end: it rolls right off-screen, re-enters from the right at tray height, and rolls left into
+  the tile's real slot. Built in `SliceFlyLayer.tsx` — a fixed `pointer-events:none` overlay that
+  animates slices imperatively via the **Web Animations API** (transform/opacity only), measuring
+  target chip rects FLIP-style at leg-B start; the destination chip renders `.pending`
+  (visibility:hidden, keeps layout) until its slice lands, then pops in. Trigger reuses the
+  existing `justDrawn` flag (`Game.tsx` effect), so board/recall moves don't animate. Respects
+  `prefers-reduced-motion` (skips flight, reveals immediately) and caps concurrent flights.
+  `PlantainMascot.tsx` was removed (fully superseded).
 - ⚠️ **TEMP dev hack in place:** the 2-player minimum for Split is relaxed to 1 in two spots for
   solo testing — `Lobby.tsx` (marked `// TEMP`, revert by hand: `>= 1` → `>= 2`) and a
   runtime-only patch to the `start_game` SQL function on the local DB (auto-restored by any

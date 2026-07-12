@@ -300,29 +300,123 @@ button:disabled {
   gap: var(--space-3);
 }
 
-.bunch-progress-col {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.bunch-bar {
-  width: 140px;
-  height: 10px;
+/* The Bunch meter is a long side-plantain in a rounded groove. The fill clips the plantain from
+   the right as the Bunch empties (a flat "cut face"), while the SVG stays full width inside it. */
+.bunch-plantain-track {
+  --bunch-track-w: 200px;
+  position: relative;
+  width: var(--bunch-track-w);
+  height: 40px;
   background: var(--color-surface-inner);
   border-radius: var(--radius-pill);
-  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
-.bunch-bar-fill {
+.bunch-plantain-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%;
-  background: var(--color-accent);
-  transition: width var(--transition-base);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  transform-origin: right center;
+  /* A soft pale edge reads as the fresh cut face at the right end of what's left. */
+  box-shadow: inset -3px 0 0 rgba(238, 244, 214, 0.55);
+  transition: width 480ms ease;
+}
+
+.bunch-plantain-svg {
+  width: var(--bunch-track-w);
+  height: 100%;
+  display: block;
+}
+
+/* Zero-size anchor at the cut end; SliceFlyLayer reads its rect as each slice's launch point. */
+.bunch-plantain-cut {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* One-shot cut flash + tiny recoil, fired on each draw via the .cutting class. */
+.bunch-plantain-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: #fffdf0;
+  opacity: 0;
+}
+
+.bunch-plantain-fill.cutting {
+  animation: sliceCutRecoil 260ms ease-out;
+}
+
+.bunch-plantain-fill.cutting::after {
+  animation: sliceCutFlash 260ms ease-out;
+}
+
+@keyframes sliceCutFlash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes sliceCutRecoil {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  35% {
+    transform: scaleX(0.97);
+  }
 }
 
 .bunch-label {
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* The flying-slice overlay: fixed, above everything, never intercepts input. Slices are created
+   imperatively by SliceFlyLayer and positioned in viewport coordinates. */
+.slice-fly-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1200;
+}
+
+.slice-wedge {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  /* A plantain slice cross-section: pale core, green peel ring. */
+  background: radial-gradient(circle at 50% 45%, #f4e79a 0 52%, #cdbf5a 53% 60%, #a8c94a 61% 100%);
+  border: 2px solid #0f2f1e;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* SliceFlyLayer already skips the flight itself under reduced motion; also quiet the meter's own
+   flourishes (the depletion still shows, just without the flash/recoil/slide). */
+@media (prefers-reduced-motion: reduce) {
+  .bunch-plantain-fill {
+    transition: none;
+  }
+  .bunch-plantain-fill.cutting,
+  .bunch-plantain-fill.cutting::after {
+    animation: none;
+  }
 }
 
 .opponent-pills {
@@ -749,6 +843,12 @@ button:disabled {
 
 .tile-chip.just-drawn {
   animation: tileDrop 500ms ease-out;
+}
+
+/* A freshly-drawn chip whose flying slice hasn't arrived yet: keep its layout slot (so the slice
+   has an accurate target to fly into) but stay invisible until it lands. */
+.tile-chip.pending {
+  visibility: hidden;
 }
 
 /* Results */

@@ -8,6 +8,8 @@ interface Props {
   collapsed: boolean;
   draggingId: string | null;
   canRecall: boolean;
+  /** Tile ids currently hidden while their flying slice is still in transit. */
+  pendingIds: Set<string>;
   onToggleCollapse: () => void;
   onRecallInvalid: () => void;
   onTilePointerDown: (id: string, e: PointerEvent) => void;
@@ -19,6 +21,7 @@ export default function Tray({
   collapsed,
   draggingId,
   canRecall,
+  pendingIds,
   onToggleCollapse,
   onRecallInvalid,
   onTilePointerDown,
@@ -52,20 +55,25 @@ export default function Tray({
       </div>
 
       <div className="tile-rack" data-tray>
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            data-tile-id={item.id}
-            className={`tile-chip${item.id === selectedId ? ' selected' : ''}${
-              item.justDrawn ? ' just-drawn' : ''
-            }${item.id === draggingId ? ' dragging' : ''}`}
-            onPointerDown={(e) => onTilePointerDown(item.id, e)}
-          >
-            {item.letter}
-            {item.count > 1 && <span className="tile-count">{item.count}</span>}
-          </button>
-        ))}
+        {items.map((item) => {
+          const pending = pendingIds.has(item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              data-tile-id={item.id}
+              data-letter={item.letter}
+              className={`tile-chip${item.id === selectedId ? ' selected' : ''}${
+                // Hold the drop pop until the slice lands; adding the class on reveal restarts it.
+                item.justDrawn && !pending ? ' just-drawn' : ''
+              }${pending ? ' pending' : ''}${item.id === draggingId ? ' dragging' : ''}`}
+              onPointerDown={(e) => onTilePointerDown(item.id, e)}
+            >
+              {item.letter}
+              {item.count > 1 && <span className="tile-count">{item.count}</span>}
+            </button>
+          );
+        })}
         {items.length === 0 && <p className="hint">All tiles placed — nice.</p>}
       </div>
     </div>

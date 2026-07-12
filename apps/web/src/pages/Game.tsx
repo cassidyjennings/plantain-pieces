@@ -28,6 +28,7 @@ import BunchGraphic from '../components/BunchGraphic.js';
 import BigCallout from '../components/BigCallout.js';
 import InfoTooltip from '../components/InfoTooltip.js';
 import ZoomIcon from '../components/ZoomIcon.js';
+import SliceFlyLayer, { type SliceFlyHandle } from '../components/SliceFlyLayer.js';
 
 const CALLOUT_MS = 900;
 const DRAG_THRESHOLD = 5;
@@ -73,6 +74,10 @@ export default function Game() {
   const [callout, setCallout] = useState<string | null>(null);
   const [validCells, setValidCells] = useState<Set<string>>(new Set());
   const [wordsPending, setWordsPending] = useState(false);
+  // Slice-fly animation: chips waiting for their flying slice to land, and a counter that pulses
+  // the plantain's cut-flash on each draw.
+  const [pendingReveal, setPendingReveal] = useState<Set<string>>(new Set());
+  const [flashSignal, setFlashSignal] = useState(0);
 
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -85,6 +90,11 @@ export default function Game() {
   const busyRef = useRef(false);
   const autoSigRef = useRef<string | null>(null);
   const centeredRef = useRef(false);
+  // Slice-fly wiring: the plantain cut-end anchor (slice origin), the animation layer handle, and
+  // the set of tile ids we've already launched a slice for (so re-renders don't re-fire).
+  const plantainCutRef = useRef<HTMLSpanElement>(null);
+  const sliceRef = useRef<SliceFlyHandle>(null);
+  const animatedIds = useRef<Set<string>>(new Set());
 
   // Mirror the latest values into refs so the window pointer handlers (attached once) read fresh.
   const gridRef = useRef(grid);
@@ -106,6 +116,60 @@ export default function Game() {
     setCallout(text);
     setTimeout(() => setCallout((c) => (c === text ? null : c)), CALLOUT_MS);
   }
+
+  // Reveal a chip once its flying slice has landed (removes it from the pending/hidden set).
+  const revealChip = useCallback((id: string) => {
+    setPendingReveal((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // Fire the slice-fly animation for each newly *drawn* tile. `justDrawn` is set only for genuine
+  // draws (Peel/Dump) — tiles moved back from the board or recalled use newRackTile (no flag), so
+  // this correctly ignores those. Peel adds 1 tile → 1 slice; Dump adds 3 → 3 staggered slices.
+  useEffect(() => {
+    // Prune ids that have left the rack (placed on the board) so the guard set can't grow forever.
+    const liveIds = new Set(rack.map((t) => t.id));
+    for (const id of animatedIds.current) {
+      if (!liveIds.has(id)) animatedIds.current.delete(id);
+    }
+
+    const fresh = rack.filter((t) => t.justDrawn && !animatedIds.current.has(t.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((t) => animatedIds.current.add(t.id));
+
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // In expanded mode each fresh tile has its own chip we can hide until its slice lands. In
+    // collapsed mode duplicates share one chip (no per-tile slot), so we skip the hide/reveal and
+    // let the slice land as a flourish on the group chip instead.
+    if (!collapsed && !reduce) {
+      setPendingReveal((prev) => {
+        const next = new Set(prev);
+        fresh.forEach((t) => next.add(t.id));
+        return next;
+      });
+    }
+    setFlashSignal((s) => s + 1);
+
+    sliceRef.current?.launch({
+      from: () => plantainCutRef.current?.getBoundingClientRect() ?? null,
+      to: (i) => {
+        const t = fresh[i];
+        const selector = collapsed ? `[data-letter="${t.letter}"]` : `[data-tile-id="${t.id}"]`;
+        const el = document.querySelector(selector);
+        return el ? el.getBoundingClientRect() : null;
+      },
+      count: fresh.length,
+      staggerMs: fresh.length > 1 ? 180 : 0,
+      onLanded: (i) => revealChip(fresh[i].id),
+    });
+  }, [rack, collapsed, revealChip]);
 
   const loadState = useCallback(async () => {
     if (!roomId) return;
@@ -554,7 +618,7 @@ export default function Game() {
   return (
     <div className="game-layout">
       <div className="game-topbar">
-        <BunchGraphic bunchCount={bunchCount} />
+        <BunchGraphic ref={plantainCutRef} bunchCount={bunchCount} flashSignal={flashSignal} />
         <div className="opponent-pills">
           {opponents.map((p) => (
             <span key={p.profile_id} className="opponent-pill">
@@ -608,10 +672,13 @@ export default function Game() {
         collapsed={collapsed}
         draggingId={draggingId}
         canRecall={invalidPlacedCount > 0}
+        pendingIds={pendingReveal}
         onToggleCollapse={() => setCollapsed((c) => !c)}
         onRecallInvalid={handleRecallInvalid}
         onTilePointerDown={onTrayPointerDown}
       />
+
+      <SliceFlyLayer ref={sliceRef} />
 
       {ghost && <DragGhost letter={ghost.letter} x={pointer.x} y={pointer.y} />}
     </div>

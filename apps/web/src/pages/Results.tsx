@@ -24,12 +24,12 @@ export default function Results() {
 
   return (
     <div className="centered">
-      <div className="panel">
-        <h1>🍌 Plantains!</h1>
-        <p className="winner">{won ? 'You won!' : `${winnerName} won!`}</p>
-        <button onClick={() => navigate('/')}>Back to Home</button>
-        <p className="hint">(Rematch is coming soon — for now, start a new room.)</p>
-      </div>
+      <h1 className="results-callout">PLANTAINS!</h1>
+      <p className="winner-line">
+        🏆 {won ? 'You take the win!' : `${winnerName} takes the win!`}
+      </p>
+      <button onClick={() => navigate('/')}>Back to Home</button>
+      <p className="hint">(Rematch is coming soon.)</p>
     </div>
   );
 }

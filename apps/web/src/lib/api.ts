@@ -89,6 +89,12 @@ export const api = {
   dump: (roomId: string, tile: string) =>
     call<DumpResult>(`/rooms/${roomId}/dump`, { method: 'POST', body: JSON.stringify({ tile }) }),
 
+  validate: (roomId: string, words: string[]) =>
+    call<{ invalidWords: string[] }>(`/rooms/${roomId}/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ words }),
+    }),
+
   plantains: (roomId: string, grid: GridState) =>
     call<{ ok: true }>(`/rooms/${roomId}/plantains`, { method: 'POST', body: JSON.stringify({ grid }) }),
 };

@@ -1,65 +1,146 @@
+@import './styles/tokens.css';
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  background: #141414;
-  color: #f0f0f0;
+  font-family: var(--font-body);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  margin: 0;
 }
 
 .centered {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-8);
+  padding: var(--space-8);
 }
 
 .panel {
-  background: #1e1e1e;
-  border-radius: 12px;
-  padding: 32px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8) 40px;
   min-width: 320px;
+  width: 420px;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
+  box-shadow: var(--shadow-panel);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.9rem;
+  gap: var(--space-1);
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--color-text-muted);
 }
 
 input {
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #444;
-  background: #111;
-  color: #f0f0f0;
-  font-size: 1rem;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface-inner);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input::placeholder {
+  color: var(--color-text-faintest);
+}
+
+input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
 button {
-  padding: 10px 16px;
-  border-radius: 6px;
+  padding: 14px 24px;
+  border-radius: var(--radius-pill);
   border: none;
-  background: #f4d58d;
-  color: #2a2a2a;
-  font-weight: 600;
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
   cursor: pointer;
+  box-shadow: var(--shadow-press-md) var(--color-accent-shadow);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--color-accent-shadow);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 button:disabled {
-  opacity: 0.5;
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  box-shadow: none;
+  opacity: 0.7;
   cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background: var(--color-secondary);
+  box-shadow: var(--shadow-press-md) var(--color-secondary-shadow);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-secondary-hover);
+}
+
+.btn-secondary:active:not(:disabled) {
+  box-shadow: 0 2px 0 var(--color-secondary-shadow);
+}
+
+.btn-tertiary {
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  box-shadow: none;
+  opacity: 0.85;
+}
+
+.btn-tertiary:hover:not(:disabled) {
+  background: var(--color-disabled-bg);
+  opacity: 1;
+}
+
+.btn-tertiary:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .join-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .join-row input {
@@ -67,100 +148,651 @@ button:disabled {
 }
 
 .error {
-  color: #ff8080;
+  color: var(--color-danger);
+  font-size: var(--text-small);
 }
 
 .hint {
-  color: #999;
-  font-size: 0.85rem;
+  color: var(--color-text-faintest);
+  font-size: var(--text-caption);
 }
 
-.player-list {
-  list-style: none;
-  padding: 0;
+/* Home */
+.home-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 56px;
+  line-height: 1.05;
+  color: var(--color-text-primary);
+  text-shadow: 0 5px 0 #0a1e12;
+  -webkit-text-stroke: 2px #0f2f1e;
   margin: 0;
 }
 
-.player-list li {
-  padding: 4px 0;
+.wordmark .accent-line {
+  display: block;
+  color: var(--color-secondary);
 }
 
-.winner {
-  font-size: 1.4rem;
+/* Lobby */
+.room-code-pill {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 2px dashed var(--color-secondary);
+  background: var(--color-surface-inner);
+  border-radius: var(--radius-pill);
+  padding: 10px 24px;
 }
 
-.game-layout {
+.room-code-pill .label {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.1em;
+}
+
+.room-code-pill .code {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.15em;
+  color: var(--color-secondary);
+}
+
+.player-grid {
   display: flex;
-  height: 100vh;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.game-sidebar {
-  width: 280px;
-  padding: 16px;
-  background: #1e1e1e;
+.player-card {
+  width: 200px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  padding: var(--space-6) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+  align-items: center;
+  gap: var(--space-2);
+  box-shadow: var(--shadow-card);
 }
 
-.game-board {
-  flex: 1;
+.player-card.host {
+  border-color: var(--color-secondary);
+}
+
+.player-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0d0d0d;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--color-text-on-accent);
+  background: var(--color-accent);
 }
 
-.actions {
+.player-name {
+  font-family: var(--font-body);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.player-host-tag {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.player-ready {
+  font-size: var(--text-small);
+  font-weight: 700;
+}
+
+.player-ready.ready {
+  color: var(--color-success);
+}
+
+.player-ready.waiting {
+  color: var(--color-waiting);
+}
+
+/* Game */
+.game-layout {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  height: 100vh;
+  /* Hard clip at the viewport edge. Without this, anything that pokes even 1px past the
+     viewport (a hidden tooltip bubble, a wrapped row of tiles) makes the whole page scrollable
+     in that direction, which defeats the point of a single-screen game layout. */
+  overflow: hidden;
 }
 
-.bunch {
-  text-align: center;
+.game-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  background: var(--color-surface);
+  padding: 14px 24px;
+  flex-wrap: wrap;
 }
 
-.bunch-emoji {
-  font-size: 2.5rem;
+.bunch-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.bunch-progress-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bunch-bar {
-  height: 8px;
-  background: #333;
-  border-radius: 4px;
+  width: 140px;
+  height: 10px;
+  background: var(--color-surface-inner);
+  border-radius: var(--radius-pill);
   overflow: hidden;
-  margin: 6px 0;
 }
 
 .bunch-bar-fill {
   height: 100%;
-  background: #f4d58d;
+  background: var(--color-accent);
+  transition: width var(--transition-base);
+}
+
+.bunch-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.opponent-pills {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.opponent-pill {
+  background: var(--color-surface-inner);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+}
+
+.game-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.game-actions button {
+  padding: 12px 20px;
+  font-size: 15px;
+}
+
+/* Wraps the board viewport + its floating zoom controls so the controls can anchor to a
+   corner regardless of board size. flex:1 + min-height:0 here (and repeated on
+   .board-viewport) is what actually lets this row shrink to fit above/below content instead
+   of forcing the page taller than 100vh — flex items default to min-height:auto, which
+   effectively means "don't shrink below your content," and this board's content is a huge
+   fixed-size world; min-height:0 overrides that so it fits the space it's actually given. */
+.board-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* DOM board: pannable/zoomable world of tile divs over a CSS grid background. */
+.board-viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.board-viewport:active {
+  cursor: grabbing;
+}
+
+.board-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  background-color: var(--color-board-bg);
+  border: 6px solid var(--color-board-border);
+  /* Grid lines must share the tiles' top-left origin so tiles sit inside cells, not across
+     lines. Both gradients are anchored top-left (`to bottom` / `to right`, measured from the top
+     and left edges) with a 1px line at the start of every 40px cell (= CELL in lib/board.ts).
+     Using `0deg`/`90deg` here would measure from the bottom/right and phase-shift the lines
+     relative to the tile rows, which is what made tiles land between squares. */
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--color-board-grid) 0,
+      var(--color-board-grid) 1px,
+      transparent 1px,
+      transparent 40px
+    ),
+    repeating-linear-gradient(
+      to right,
+      var(--color-board-grid) 0,
+      var(--color-board-grid) 1px,
+      transparent 1px,
+      transparent 40px
+    );
+}
+
+.board-tile {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-tile-bg);
+  border: 2px solid var(--color-tile-border);
+  border-radius: 8px 8px 12px 12px;
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: 0 2px 0 var(--color-tile-shadow);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.board-tile:active {
+  cursor: grabbing;
+}
+
+/* Part of a valid dictionary word — slightly but noticeably green. */
+.board-tile.valid {
+  background: #cde6b4;
+  border-color: #7fae57;
+}
+
+.drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  width: 48px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-secondary);
+  border: 2px solid var(--color-accent);
+  border-radius: 50% 50% 20px 20px;
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.callout-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 900;
+}
+
+.game-message {
+  margin: 0;
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-surface-inner);
+  color: var(--color-text-primary);
+  font-size: var(--text-small);
+  text-align: center;
+}
+
+/* Mouse-friendly zoom — a mouse wheel alone has no pinch gesture, so give it explicit
+   in/out buttons rather than requiring ctrl+wheel to be discoverable. */
+.zoom-controls {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 5;
+}
+
+.zoom-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-btn:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  border-color: var(--color-accent);
+}
+
+.zoom-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.big-callout {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--color-accent);
+  animation: bigCallout 900ms ease-out;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.rack-dock {
+  background: var(--color-surface);
+  padding: var(--space-3) var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 84px;
+  touch-action: none;
+}
+
+/* Little toolbar row sitting above the tiles. */
+.tray-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface-inner);
+  border-radius: var(--radius-pill);
+}
+
+.tray-tool {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  box-shadow: none;
+  border: 2px solid var(--color-border);
+}
+
+.tray-tool.active {
+  background: var(--color-secondary);
+  color: var(--color-text-on-accent);
+  border-color: var(--color-secondary);
+}
+
+.tray-tool:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+}
+
+.tray-tool:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.tray-tool:disabled {
+  opacity: 0.45;
+  background: var(--color-surface-raised);
+  color: var(--color-text-faintest);
+}
+
+.tray-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Small "i" affordance that reveals a tooltip bubble on hover/focus — no JS state needed. */
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-tooltip-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 800;
+  font-style: italic;
+  cursor: help;
+  user-select: none;
+}
+
+.info-tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  /* Right-aligned to the icon (not centered) so the bubble only ever grows leftward. A
+     center-anchored bubble on an icon near the right edge of the screen (e.g. Dump's, top-right
+     of the topbar) pushed past the viewport even while invisible (visibility:hidden still
+     occupies layout space), which silently made the whole page horizontally scrollable. */
+  right: 0;
+  left: auto;
+  transform: translateY(4px);
+  width: max-content;
+  max-width: 220px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  z-index: 20;
+}
+
+.info-tooltip:hover .info-tooltip-bubble,
+.info-tooltip:focus-visible .info-tooltip-bubble,
+.info-tooltip:focus-within .info-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.tile-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .tile-rack {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  justify-content: center;
+  gap: 10px;
+  /* A large uncollapsed hand can wrap to several rows — cap it and scroll internally rather
+     than letting the dock grow tall enough to push the layout past 100vh. */
+  max-height: 30vh;
+  overflow-y: auto;
 }
 
 .tile-chip {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: #f4d58d;
-  color: #2a2a2a;
-  font-weight: 700;
-  font-size: 1.1rem;
+  position: relative;
+  width: 48px;
+  height: 52px;
+  border-radius: var(--radius-rack-tile);
+  background: var(--color-tile-bg);
+  border: 2px solid var(--color-tile-border);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
   padding: 0;
+  box-shadow: var(--shadow-press-md) var(--color-tile-shadow);
+  touch-action: none;
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+}
+
+.tile-chip.dragging {
+  opacity: 0.35;
+}
+
+.tile-chip:hover:not(:disabled):not(.selected) {
+  background: var(--color-tile-bg);
+  transform: translateY(-2px);
+}
+
+.tile-chip.selected:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.tile-chip:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--color-tile-shadow);
 }
 
 .tile-chip.selected {
-  background: #ffb703;
-  box-shadow: 0 0 0 2px #fff;
+  background: var(--color-secondary);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(255, 159, 67, 0.33);
 }
 
-.recenter-btn {
-  margin-top: 8px;
+.tile-chip.just-drawn {
+  animation: tileDrop 500ms ease-out;
+}
+
+/* Results */
+.results-callout {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 88px;
+  color: var(--color-accent);
+  -webkit-text-stroke: 5px var(--color-text-on-accent);
+  animation: bigCallout 900ms ease-out;
+  text-align: center;
+  margin: 0;
+}
+
+.winner-line {
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+/* Desktop scale-up: the top bar and tray are sized for compact/mobile viewports by default,
+   so give both more breathing room and bigger touch targets once there's room for it. */
+@media (min-width: 1024px) {
+  .game-topbar {
+    padding: 20px 32px;
+    gap: var(--space-8);
+  }
+
+  /* `zoom` (not `transform: scale`) so the bigger mascot/bar/label also claim more layout
+     space — a transform would leave the original (smaller) box, overlapping neighbors. */
+  .bunch-status {
+    zoom: 1.3;
+  }
+
+  .opponent-pill {
+    padding: 8px 18px;
+    font-size: 1rem;
+  }
+
+  .game-actions button {
+    padding: 16px 26px;
+    font-size: 17px;
+  }
+
+  .rack-dock {
+    padding: var(--space-6) var(--space-8);
+    min-height: 130px;
+    gap: var(--space-3);
+  }
+
+  .tray-toolbar {
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .tray-tool {
+    padding: 10px 18px;
+    font-size: 15px;
+  }
+
+  .tile-rack {
+    gap: 14px;
+  }
+
+  .tile-chip {
+    width: 60px;
+    height: 65px;
+    font-size: 22px;
+  }
+
+  .tile-count {
+    top: -8px;
+    right: -8px;
+    min-width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
 }

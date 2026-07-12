@@ -115,6 +115,22 @@ app.post('/rooms/:roomId/peel', async (c) => {
   return c.json(data);
 });
 
+// Live validation: which of the submitted words are NOT in the room's dictionary.
+// Used by the client for green-highlighting valid words during play (read-only, no mutation).
+app.post('/rooms/:roomId/validate', async (c) => {
+  const roomId = c.req.param('roomId');
+  const body = await c.req.json<{ words: string[] }>();
+  const admin = createAdminClient(c.env);
+  const words = Array.isArray(body.words) ? body.words : [];
+  if (words.length === 0) return c.json({ invalidWords: [] });
+  const { data, error } = await admin.rpc('find_invalid_words', {
+    p_room_id: roomId,
+    p_words: words,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json({ invalidWords: data ?? [] });
+});
+
 // Dump!: no grid validation needed, just an owned-tile check performed in SQL.
 app.post('/rooms/:roomId/dump', async (c) => {
   const profileId = c.get('profileId');

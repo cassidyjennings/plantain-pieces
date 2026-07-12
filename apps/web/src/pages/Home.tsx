@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
+import PlantainMascot from '../components/PlantainMascot.js';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -42,8 +43,15 @@ export default function Home() {
 
   return (
     <div className="centered">
+      <div className="home-header">
+        <PlantainMascot size={100} sway />
+        <h1 className="wordmark">
+          PLANTAIN
+          <span className="accent-line">PIECES</span>
+        </h1>
+      </div>
+
       <div className="panel">
-        <h1>🍌 Plantain Pieces</h1>
         <label className="field">
           Display name
           <input
@@ -65,7 +73,7 @@ export default function Home() {
             placeholder="Room code"
             maxLength={6}
           />
-          <button disabled={busy || !joinCode.trim()} onClick={handleJoin}>
+          <button className="btn-secondary" disabled={busy || !joinCode.trim()} onClick={handleJoin}>
             Join
           </button>
         </div>

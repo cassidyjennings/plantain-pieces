@@ -34,7 +34,10 @@ export default function Lobby() {
   const me = players.find((p) => p.profile_id === profileId);
   const isHost = room?.host_id === profileId;
   const activePlayers = players.filter((p) => !p.is_spectator);
-  const allReady = activePlayers.length >= 2 && activePlayers.every((p) => p.is_ready);
+  // TEMP: relaxed from >= 2 to >= 1 for solo dev testing. Revert before real multiplayer use —
+  // the server-side minimum was patched the same way (runtime-only, not migrated) so a
+  // `db:reset` will restore the real 2-player rule; this client check needs reverting by hand.
+  const allReady = activePlayers.length >= 1 && activePlayers.every((p) => p.is_ready);
 
   async function toggleReady() {
     if (!roomId || !me) return;
@@ -66,37 +69,46 @@ export default function Lobby() {
 
   return (
     <div className="centered">
-      <div className="panel">
-        <h1>Room {room.code}</h1>
-        <p className="hint">Share this code so friends can join.</p>
-
-        <ul className="player-list">
-          {players.map((p) => (
-            <li key={p.profile_id}>
-              {p.display_name}
-              {p.profile_id === room.host_id ? ' (host)' : ''}
-              {p.is_spectator ? ' (spectator)' : p.is_ready ? ' ✅ ready' : ' ⏳ not ready'}
-            </li>
-          ))}
-        </ul>
-
-        {me && !me.is_spectator && (
-          <button disabled={busy} onClick={toggleReady}>
-            {me.is_ready ? 'Not ready' : "I'm ready"}
-          </button>
-        )}
-
-        {isHost && (
-          <button disabled={busy || !allReady} onClick={handleStart}>
-            Split! (start game)
-          </button>
-        )}
-        {isHost && !allReady && (
-          <p className="hint">Need 2+ players, all ready, to start.</p>
-        )}
-
-        {error && <p className="error">{error}</p>}
+      <div className="room-code-pill">
+        <span className="label">ROOM CODE</span>
+        <span className="code">{room.code}</span>
       </div>
+      <p className="hint">Share this code so friends can join.</p>
+
+      <div className="player-grid">
+        {players.map((p) => {
+          const isPlayerHost = p.profile_id === room.host_id;
+          return (
+            <div key={p.profile_id} className={`player-card${isPlayerHost ? ' host' : ''}`}>
+              <div className="player-avatar">{p.display_name.charAt(0).toUpperCase()}</div>
+              <span className="player-name">{p.display_name}</span>
+              {isPlayerHost && <span className="player-host-tag">Host</span>}
+              {p.is_spectator ? (
+                <span className="player-ready">Spectator</span>
+              ) : (
+                <span className={`player-ready ${p.is_ready ? 'ready' : 'waiting'}`}>
+                  {p.is_ready ? '✅ Ready' : '⏳ Waiting'}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {me && !me.is_spectator && (
+        <button disabled={busy} onClick={toggleReady}>
+          {me.is_ready ? 'Not ready' : "I'm ready"}
+        </button>
+      )}
+
+      {isHost && (
+        <button disabled={busy || !allReady} onClick={handleStart}>
+          Split! 🍌
+        </button>
+      )}
+      {isHost && !allReady && <p className="hint">Need 2+ players, all ready, to start.</p>}
+
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }

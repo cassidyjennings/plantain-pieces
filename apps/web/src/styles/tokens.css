@@ -1,0 +1,158 @@
+/**
+ * Design tokens from the "Plantain Pieces UI" design handoff (jungle theme).
+ * Reference these everywhere instead of raw values. The board is now DOM-based
+ * (GameBoard.tsx), so board/tile colors read these CSS variables directly.
+ */
+:root {
+  /* Background / surface */
+  --color-bg: #0a1710;
+  --color-surface: #173028;
+  --color-surface-raised: #1c3a2f;
+  --color-surface-inner: #0f2f1e;
+  --color-border: #2a4a37;
+
+  /* Text */
+  --color-text-primary: #fbf4e2;
+  --color-text-muted: #c9dcc7;
+  --color-text-faint: #a9c2ab;
+  --color-text-faintest: #7f9a83;
+  --color-text-on-accent: #1c3324;
+
+  /* Brand accent */
+  --color-accent: #ff9f43;
+  --color-accent-shadow: #c46f1f;
+  --color-accent-hover: #ffb266;
+  --color-secondary: #ffe08a;
+  --color-secondary-shadow: #c9a13f;
+  --color-secondary-hover: #ffe9ab;
+
+  /* Semantic */
+  --color-danger: #ff8080;
+  --color-success: #9be08a;
+  --color-waiting: #e0a256;
+  --color-disabled-bg: #3d5a48;
+
+  /* Board / tiles */
+  --color-board-bg: #ede3c7;
+  --color-board-border: #cbb887;
+  --color-board-grid: #d9c99e;
+  --color-tile-bg: #fbf4e2;
+  --color-tile-border: #d8c9a0;
+  --color-tile-shadow: #c9b98f;
+
+  /* Spacing scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-pill: 100px;
+  --radius-board-tile: 8px 8px 12px 12px;
+  --radius-rack-tile: 50% 50% 20px 20px;
+
+  /* Type scale */
+  --text-display: 2rem;
+  --text-heading: 1.4rem;
+  --text-body: 1rem;
+  --text-small: 0.9rem;
+  --text-caption: 0.8rem;
+
+  /* Fonts */
+  --font-display: 'Grandstander', sans-serif;
+  --font-body: 'Nunito', sans-serif;
+
+  /* Elevation — "pressed button" hard-offset shadows, no blur */
+  --shadow-panel: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.35);
+  --shadow-press-sm: 0 3px 0;
+  --shadow-press-md: 0 4px 0;
+
+  /* Motion */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+
+  /* Focus ring — must stay visible against both --color-bg and --color-accent */
+  --focus-ring: 0 0 0 3px rgba(255, 159, 67, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0ms;
+    --transition-base: 0ms;
+  }
+}
+
+@keyframes tileDrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.4) rotate(-8deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(4px) scale(1.08) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes bigCallout {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5) rotate(-6deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12) rotate(3deg);
+  }
+  75% {
+    transform: translate(-50%, -50%) scale(0.97) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes bunchSway {
+  0%,
+  100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.5deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes tileDrop {
+    0%,
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes bigCallout {
+    0%,
+    100% {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+  @keyframes bunchSway {
+    0%,
+    100% {
+      transform: none;
+    }
+  }
+}

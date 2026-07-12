@@ -73,6 +73,49 @@ export function extractWords(grid: GridState): string[] {
   return words;
 }
 
+/**
+ * Like extractWords, but each word carries the cell keys ("x,y") it occupies, in order.
+ * Used for live highlighting: map a validated word back to the board cells to tint.
+ */
+export function extractWordsWithCells(grid: GridState): { word: string; cells: string[] }[] {
+  const result: { word: string; cells: string[] }[] = [];
+  const cells = Object.keys(grid).map(parseKey);
+  if (cells.length === 0) return result;
+
+  const occupied = new Set(Object.keys(grid));
+  const has = (x: number, y: number) => occupied.has(makeKey(x, y));
+
+  for (const { x, y } of cells) {
+    if (!has(x - 1, y) && has(x + 1, y)) {
+      let word = '';
+      const keys: string[] = [];
+      let cx = x;
+      while (has(cx, y)) {
+        const key = makeKey(cx, y);
+        word += grid[key];
+        keys.push(key);
+        cx++;
+      }
+      result.push({ word, cells: keys });
+    }
+  }
+  for (const { x, y } of cells) {
+    if (!has(x, y - 1) && has(x, y + 1)) {
+      let word = '';
+      const keys: string[] = [];
+      let cy = y;
+      while (has(x, cy)) {
+        const key = makeKey(x, cy);
+        word += grid[key];
+        keys.push(key);
+        cy++;
+      }
+      result.push({ word, cells: keys });
+    }
+  }
+  return result;
+}
+
 /** Cells that are not part of any horizontal or vertical run of length >= 2. */
 export function findOrphans(grid: GridState): string[] {
   const occupied = new Set(Object.keys(grid));

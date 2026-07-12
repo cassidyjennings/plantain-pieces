@@ -56,8 +56,11 @@ server validates that the grid's letter multiset exactly equals the player's `ra
 
 ## Tech stack
 
-- **Frontend:** React + Vite + TypeScript, `react-konva` for the 50×50 grid (pan/zoom, box/
-  shift-select), Zustand, React Router, `@supabase/supabase-js`. → Cloudflare Pages.
+- **Frontend:** React + Vite + TypeScript, Zustand, React Router, `@supabase/supabase-js`. →
+  Cloudflare Pages. The 50×50 board is a **DOM-based pan/zoom surface** (`GameBoard.tsx`) with a
+  custom unified pointer-drag system (tray↔board, board reposition, tray reorder) — react-konva
+  was removed (cross-canvas/DOM dragging into the HTML tray was intractable; the design handoff is
+  also HTML-native).
 - **Backend:** Cloudflare Worker (Hono). → game-action gateway.
 - **DB/Auth/Realtime:** Supabase (Postgres + Auth + Realtime).
 - **Dictionary:** ENABLE1 (public domain) in the `words` table. Length + custom-set filtering
@@ -69,8 +72,11 @@ server validates that the grid's letter multiset exactly equals the player's `ra
 plantain-pieces/
   apps/
     web/                 # React app (Cloudflare Pages)      — DONE, browser-verified
-      src/pages/          #   Home, Lobby, Game, Results
-      src/components/GridCanvas.tsx  # react-konva 50x50 pan/zoom grid, click-place/pick-up
+      src/pages/          #   Home, Lobby, Game (owns the drag orchestration), Results
+      src/components/GameBoard.tsx   # DOM 50x50 pan/zoom board (tiles = divs, CSS grid bg)
+      src/components/Tray.tsx        # tile rack + collapse-duplicates toggle
+      src/components/DragGhost.tsx   # floating tile that follows the pointer during a drag
+      src/lib/board.ts     #   CELL size + world extent for board coordinate math
       src/hooks/useRoomEvents.ts     # Realtime subscription to room_events
       src/lib/api.ts       #   typed client for the Worker (attaches Bearer token)
       src/lib/rooms.ts     #   direct RLS-gated reads of rooms_public/room_players_public
@@ -150,14 +156,32 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
   HTTP with genuine anonymous auth sessions (see git log for the full test list).
 - ✅ **Multiplayer core is fully built and browser-verified end-to-end.** React app (`apps/web`)
   built and tested live in a browser: guest auth, room create/join, Lobby ready-up with live
-  Realtime sync across two independent sessions (zero page reloads), Split, Konva grid tile
-  placement/pickup, Bunch graphic, opponent tile counts. Peel/Dump/Plantains wiring reuses the
-  already-verified Worker endpoints.
+  Realtime sync across two independent sessions (zero page reloads), Split, Bunch graphic,
+  opponent tile counts. Peel/Dump/Plantains wiring reuses the already-verified Worker endpoints.
+- ✅ **Full UI redesign applied** from a design handoff (jungle theme, Grandstander/Nunito fonts,
+  design tokens in `src/styles/tokens.css`, plantain-bunch mascot that shrinks with the Bunch,
+  animated PEEL!/DUMP!/PLANTAINS! call-outs). All four screens restyled + browser-verified.
+- ✅ **Gameplay interaction overhaul (2026-07-10), browser-tested:**
+  - Board moved off react-konva to a **DOM board** with a custom unified pointer-drag system:
+    drag tray→board, reposition board tiles, reorder within the tray; snap to nearest cell on
+    release; a ~5px threshold distinguishes click from drag; empty-space drag pans, wheel zooms.
+  - **Peel and Plantains are auto-detected** (no buttons): when the local grid becomes
+    structurally valid (all tiles placed, connected, no orphans) the client auto-fires Peel if the
+    Bunch can still peel, else Plantains. A grid-signature guard prevents re-firing a rejected
+    ("rotten") Plantains until the grid changes. Dump is still a manual action on a selected tile.
+  - **Live word validation**: debounced `POST /rooms/:id/validate` (→ `find_invalid_words`) tints
+    board tiles green when they belong to a valid dictionary word.
+  - **Collapse-duplicates tray toggle**: groups duplicate letters into one tile with a count badge
+    that decrements as tiles are placed.
+- ⚠️ **TEMP dev hack in place:** the 2-player minimum for Split is relaxed to 1 in two spots for
+  solo testing — `Lobby.tsx` (marked `// TEMP`, revert by hand: `>= 1` → `>= 2`) and a
+  runtime-only patch to the `start_game` SQL function on the local DB (auto-restored by any
+  `npm run db:reset`, since it was NOT written to a migration file).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
-- ⬜ Not yet built: box/shift-select for multi-tile grid operations (only single-tile click
-  place/pick-up exists), spectator mode UI, emoji reactions, rematch (currently a stub that just
-  navigates home), friends list, achievements, dictionary settings UI, daily challenge, solo play.
+- ⬜ Not yet built: box/shift-select for multi-tile grid operations (drag moves one tile at a
+  time), spectator mode UI, emoji reactions, rematch (currently a stub that just navigates home),
+  friends list, achievements, dictionary settings UI, daily challenge, solo play.
 
 ### Windows/Docker gotchas hit during setup (for next time)
 - If `npx supabase start` fails with a docker-context pipe error, run

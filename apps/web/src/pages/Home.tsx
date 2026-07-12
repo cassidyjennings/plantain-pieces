@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
-import PlantainMascot from '../components/PlantainMascot.js';
+import Logo from '../components/Logo.js';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -44,7 +44,7 @@ export default function Home() {
   return (
     <div className="centered">
       <div className="home-header">
-        <PlantainMascot size={100} sway />
+        <Logo size={100} sway />
         <h1 className="wordmark">
           PLANTAIN
           <span className="accent-line">PIECES</span>

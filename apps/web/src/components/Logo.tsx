@@ -1,0 +1,49 @@
+interface Props {
+  size?: number;
+  /** Gentle idle sway, matching the Home-screen mascot's old animation. */
+  sway?: boolean;
+}
+
+/** The Plantain Pieces brand mark (also used as the favicon — keep apps/web/public/favicon.svg
+ * in sync with this if the logo ever changes). */
+export default function Logo({ size = 100, sway = false }: Props) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="-6 -6 132 132"
+      style={{ animation: sway ? 'bunchSway 4s ease-in-out infinite' : 'none' }}
+      aria-hidden="true"
+    >
+      <path
+        d="M 40 102
+           C 20 88, 14 56, 30 32
+           C 40 17, 58 10, 74 14
+           C 66 22, 60 32, 57 46
+           C 52 68, 55 84, 68 96
+           C 60 103, 49 106, 40 102 Z"
+        fill="#a8c94a"
+        stroke="#0f2f1e"
+        strokeWidth={5}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M 34 72
+           C 27 58, 29 44, 38 33
+           C 35 44, 34 56, 37 68
+           C 36 70, 35 71, 34 72 Z"
+        fill="#eef4d6"
+        opacity={0.6}
+      />
+      <path
+        d="M 58.2 15
+           C 64.4 8.7, 72.4 5.1, 80.4 8.7
+           C 77 17.4, 71 23.4, 63.9 27 Z"
+        fill="#5c3d1e"
+        stroke="#0f2f1e"
+        strokeWidth={5}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

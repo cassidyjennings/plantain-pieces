@@ -300,35 +300,30 @@ button:disabled {
   gap: var(--space-3);
 }
 
-/* The Bunch meter is a long side-plantain in a rounded groove. The fill clips the plantain from
-   the right as the Bunch empties (a flat "cut face"), while the SVG stays full width inside it. */
-.bunch-plantain-track {
-  --bunch-track-w: 200px;
+/* The Bunch meter is a single long, curved plantain — no groove/track, just the fruit sitting
+   directly on the top-bar surface. Height derives from width to preserve the design's 240:76
+   viewBox aspect ratio. */
+.bunch-plantain {
+  --bunch-w: 200px;
   position: relative;
-  width: var(--bunch-track-w);
-  height: 40px;
-  background: var(--color-surface-inner);
-  border-radius: var(--radius-pill);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+  width: var(--bunch-w);
+  height: calc(var(--bunch-w) * 76 / 240);
 }
 
-.bunch-plantain-fill {
+.bunch-plantain-body,
+.bunch-plantain-face {
   position: absolute;
-  left: 0;
-  top: 0;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  transform-origin: right center;
-  /* A soft pale edge reads as the fresh cut face at the right end of what's left. */
-  box-shadow: inset -3px 0 0 rgba(238, 244, 214, 0.55);
-  transition: width 480ms ease;
 }
 
-.bunch-plantain-svg {
-  width: var(--bunch-track-w);
-  height: 100%;
-  display: block;
+.bunch-plantain-face {
+  pointer-events: none;
+}
+
+.bunch-plantain-segments {
+  opacity: 0.26;
 }
 
 /* Zero-size anchor at the cut end; SliceFlyLayer reads its rect as each slice's launch point. */
@@ -341,42 +336,24 @@ button:disabled {
   pointer-events: none;
 }
 
-/* One-shot cut flash + tiny recoil, fired on each draw via the .cutting class. */
-.bunch-plantain-fill::after {
-  content: '';
+/* One-shot pale flash at the cut face on each draw — a fresh key remounts the element to restart
+   the animation. */
+.bunch-plantain-flash {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 4px;
-  height: 100%;
+  width: 9px;
+  border-radius: 50%;
   background: #fffdf0;
-  opacity: 0;
+  filter: blur(0.4px);
+  pointer-events: none;
+  animation: cutFlash 320ms ease-out forwards;
 }
 
-.bunch-plantain-fill.cutting {
-  animation: sliceCutRecoil 260ms ease-out;
-}
-
-.bunch-plantain-fill.cutting::after {
-  animation: sliceCutFlash 260ms ease-out;
-}
-
-@keyframes sliceCutFlash {
+@keyframes cutFlash {
   0% {
-    opacity: 0.9;
+    opacity: 0.85;
   }
   100% {
     opacity: 0;
-  }
-}
-
-@keyframes sliceCutRecoil {
-  0%,
-  100% {
-    transform: scaleX(1);
-  }
-  35% {
-    transform: scaleX(0.97);
   }
 }
 
@@ -408,14 +385,11 @@ button:disabled {
 }
 
 /* SliceFlyLayer already skips the flight itself under reduced motion; also quiet the meter's own
-   flourishes (the depletion still shows, just without the flash/recoil/slide). */
+   cut flash (the depletion still shows instantly, just without the pulse). */
 @media (prefers-reduced-motion: reduce) {
-  .bunch-plantain-fill {
-    transition: none;
-  }
-  .bunch-plantain-fill.cutting,
-  .bunch-plantain-fill.cutting::after {
+  .bunch-plantain-flash {
     animation: none;
+    opacity: 0;
   }
 }
 

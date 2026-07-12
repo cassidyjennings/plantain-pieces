@@ -1,75 +1,107 @@
-import { forwardRef, useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 
 interface Props {
-  /** 0-1 of the Bunch remaining. Drives how much of the plantain is still un-eaten. */
+  /** 0-1 of the Bunch remaining. Drives how much of the plantain is un-eaten. */
   fraction: number;
   /** Bump this on every draw to fire a one-shot "slice cut" flash at the cut end. */
   flashSignal: number;
 }
 
-// A plantain lying on its side, drawn intentionally long/stretched (viewBox ~5.5:1) so it reads
-// as a progress bar rather than the near-square Home logo. The body is clipped from the right as
-// the Bunch empties, leaving a flat "cut face" — which is exactly where slices fly off from.
-const PLANTAIN_PATH =
-  'M 10 20 C 26 8, 120 5, 198 12 C 207 13, 211 16, 211 20 C 211 24, 207 27, 198 28 C 120 35, 26 32, 10 20 Z';
-const HIGHLIGHT_PATH = 'M 34 12 C 100 9, 150 10, 188 14 C 150 14, 100 14, 34 16 Z';
-const STEM_PATH = 'M 12 20 C 4 16, 3 24, 9 25 C 12 24, 12 22, 12 20 Z';
-// Faint cross-cut segment lines suggesting a sliceable plantain.
-const SEGMENT_XS = [46, 74, 102, 130, 158, 186];
+// A long, curved plantain — the brand logo laid on its side and stretched — sliced from the tip
+// (right end) as the Bunch empties. No groove/track: it's just the fruit on the top-bar surface.
+// Geometry, colors, and timings are lifted verbatim from the design handoff
+// (design_handoff_plantain_meter), viewBox 0 0 240 76, stem/blunt end left, tip right.
+const BODY_PATH =
+  'M 20 28 C 60 33, 105 36, 145 36 C 180 36, 200 34, 214 30 C 224 27, 226 44, 216 48 C 205 60, 175 69, 135 70 C 98 71, 60 65, 26 51 C 14 47, 12 33, 20 28 Z';
+const STEM_PATH = 'M 16 33 C 6 28, 4 44, 12 46 C 18 47, 20 39, 16 33 Z';
+const SEGMENT_PATHS = [
+  'M 60 35 C 57 44, 57 56, 60 62',
+  'M 100 38 C 97 48, 97 61, 100 66',
+  'M 140 38 C 137 48, 137 62, 140 67',
+  'M 175 38 C 172 47, 172 60, 175 65',
+  'M 200 35 C 197 43, 197 54, 200 59',
+];
+
+// Cut-face ellipse samples: body centre-Y and half-thickness at points along the X axis, so the
+// slice's round cross-section is sized to the plantain's actual thickness at that point.
+const XS = [20, 60, 105, 145, 180, 205, 216, 224];
+const CY = [37.5, 48.5, 53, 53, 52, 46, 39, 38];
+const RY = [9.5, 15.5, 17, 17, 16, 14, 9, 3];
+
+function interp(x: number, xs: number[], ys: number[]): number {
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
+  for (let i = 0; i < xs.length - 1; i++) {
+    if (x <= xs[i + 1]) {
+      const t = (x - xs[i]) / (xs[i + 1] - xs[i]);
+      return ys[i] + (ys[i + 1] - ys[i]) * t;
+    }
+  }
+  return ys[ys.length - 1];
+}
 
 const BunchPlantain = forwardRef<HTMLSpanElement, Props>(function BunchPlantain(
   { fraction, flashSignal },
   cutRef,
 ) {
-  const fillRef = useRef<HTMLDivElement>(null);
-  const firstFlash = useRef(true);
+  // The cut jumps instantly to the new position (plus a flash) rather than tweening — a CSS
+  // transition on the clip-path would desync the flat green edge from the cut-face ellipse, since
+  // the ellipse is positioned by attribute every render, not transitioned.
+  const pct = fraction <= 0 ? 0 : Math.max(8, Math.min(100, fraction * 100));
+  const cutX = (pct / 100) * 240;
+  const faceCy = interp(cutX, XS, CY);
+  const faceRy = Math.max(0, interp(cutX, XS, RY));
+  const faceRx = Math.max(1.8, faceRy * 0.5);
+  const faceOpacity = pct > 0 && pct < 99.4 ? 1 : 0;
 
-  // Re-trigger the cut flash whenever flashSignal changes (but not on first mount).
+  const [flashKey, setFlashKey] = useState(0);
   useEffect(() => {
-    if (firstFlash.current) {
-      firstFlash.current = false;
-      return;
-    }
-    const el = fillRef.current;
-    if (!el) return;
-    el.classList.remove('cutting');
-    void el.offsetWidth; // force reflow so re-adding the class restarts the animation
-    el.classList.add('cutting');
-    const t = setTimeout(() => el.classList.remove('cutting'), 280);
-    return () => clearTimeout(t);
+    // Skip the very first mount — only re-fire on actual draws.
+    if (flashSignal === 0) return;
+    setFlashKey((k) => k + 1);
   }, [flashSignal]);
 
-  // Never let it fully vanish before the game ends — keep a nub visible.
-  const pct = Math.max(7, Math.min(100, fraction * 100));
-
   return (
-    <div className="bunch-plantain-track" aria-hidden="true">
-      <div className="bunch-plantain-fill" ref={fillRef} style={{ width: `${pct}%` }}>
-        <svg className="bunch-plantain-svg" viewBox="0 0 220 40" preserveAspectRatio="none">
-          <path
-            d={PLANTAIN_PATH}
-            fill="#a8c94a"
-            stroke="#0f2f1e"
-            strokeWidth={3}
-            strokeLinejoin="round"
-          />
-          <path d={HIGHLIGHT_PATH} fill="#eef4d6" opacity={0.5} />
-          {SEGMENT_XS.map((x) => (
-            <path
-              key={x}
-              d={`M ${x} 10 C ${x - 3} 20, ${x - 3} 20, ${x} 30`}
-              stroke="#0f2f1e"
-              strokeWidth={1.4}
-              strokeLinecap="round"
-              opacity={0.28}
-              fill="none"
-            />
+    <div className="bunch-plantain" aria-hidden="true">
+      <svg
+        className="bunch-plantain-body"
+        viewBox="0 0 240 76"
+        preserveAspectRatio="none"
+        style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }}
+      >
+        <path d={BODY_PATH} fill="#a8c94a" stroke="#0f2f1e" strokeWidth={3} strokeLinejoin="round" />
+        <g className="bunch-plantain-segments">
+          {SEGMENT_PATHS.map((d) => (
+            <path key={d} d={d} stroke="#0f2f1e" strokeWidth={1.4} strokeLinecap="round" fill="none" />
           ))}
-          <path d={STEM_PATH} fill="#5c3d1e" stroke="#0f2f1e" strokeWidth={2} strokeLinejoin="round" />
-        </svg>
-      </div>
+        </g>
+        <path d={STEM_PATH} fill="#5c3d1e" stroke="#0f2f1e" strokeWidth={3} strokeLinejoin="round" />
+      </svg>
+      <svg className="bunch-plantain-face" viewBox="0 0 240 76" preserveAspectRatio="none">
+        <ellipse
+          cx={cutX}
+          cy={faceCy}
+          rx={faceRx}
+          ry={faceRy}
+          fill="#f4e79a"
+          stroke="#0f2f1e"
+          strokeWidth={3}
+          opacity={faceOpacity}
+        />
+      </svg>
       {/* Zero-size anchor at the cut end — SliceFlyLayer measures this as each slice's origin. */}
       <span className="bunch-plantain-cut" ref={cutRef} style={{ left: `${pct}%` }} />
+      {flashKey > 0 && faceOpacity > 0 && (
+        <div
+          key={flashKey}
+          className="bunch-plantain-flash"
+          style={{
+            left: `calc(${pct}% - 5px)`,
+            top: `${((faceCy - faceRy) / 76) * 100}%`,
+            height: `${((faceRy * 2) / 76) * 100}%`,
+          }}
+        />
+      )}
     </div>
   );
 });

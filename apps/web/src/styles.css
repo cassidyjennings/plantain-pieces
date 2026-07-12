@@ -667,25 +667,57 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-content: flex-start;
   gap: 10px;
   /* A large uncollapsed hand can wrap to several rows — cap it and scroll internally rather
      than letting the dock grow tall enough to push the layout past 100vh. */
   max-height: 30vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  /* Room for each tile's own box-shadow (the "pressed" bottom edge), the hover lift
+     (translateY(-2px)), and the count-badge overhang (top:-6px/right:-6px) — without this,
+     overflow-y:auto's clipping box cuts those off at the scroll container's exact edges. */
+  padding: 8px 10px 12px;
+  /* Reserve the scrollbar's width up front so a hand that grows into scrolling territory
+     doesn't reflow/overlap the last column of tiles. */
+  scrollbar-gutter: stable;
+  /* Firefox scrollbar theming (Chromium/WebKit theming is the ::-webkit-scrollbar-* block below). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent) var(--color-surface-inner);
+}
+
+.tile-rack::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tile-rack::-webkit-scrollbar-track {
+  background: var(--color-surface-inner);
+  border-radius: var(--radius-pill);
+}
+
+.tile-rack::-webkit-scrollbar-thumb {
+  background: var(--color-accent);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-surface-inner);
+}
+
+.tile-rack::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-hover);
 }
 
 .tile-chip {
   position: relative;
-  width: 48px;
-  height: 52px;
+  width: 42px;
+  height: 46px;
   border-radius: var(--radius-rack-tile);
   background: var(--color-tile-bg);
   border: 2px solid var(--color-tile-border);
   color: var(--color-text-on-accent);
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 18px;
+  font-size: 16px;
   padding: 0;
+  flex-shrink: 0;
   box-shadow: var(--shadow-press-md) var(--color-tile-shadow);
   touch-action: none;
   transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
@@ -783,9 +815,9 @@ button:disabled {
   }
 
   .tile-chip {
-    width: 60px;
-    height: 65px;
-    font-size: 22px;
+    width: 54px;
+    height: 58px;
+    font-size: 19px;
   }
 
   .tile-count {

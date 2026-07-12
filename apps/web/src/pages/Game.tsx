@@ -33,10 +33,16 @@ const CALLOUT_MS = 900;
 const DRAG_THRESHOLD = 5;
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 2.5;
-// Lower = gentler zoom per wheel/pinch tick. Tuned to feel noticeably calmer than the old flat
-// 1.1x-per-tick step without going sluggish (~8% change on a typical ~100-unit mouse-wheel notch).
-const WHEEL_ZOOM_SENSITIVITY = 0.0008;
+// Lower = gentler zoom per wheel/pinch tick. ~9.4% change on a typical ~100-unit mouse-wheel
+// notch — a bit snappier than the initial calm-down pass (~8%), but still under the original
+// flat 10%/tick that felt too twitchy.
+const WHEEL_ZOOM_SENSITIVITY = 0.0009;
 const BUTTON_ZOOM_STEP = 1.2;
+// Trackpads keep sending wheel events with a rapidly-decaying deltaY for a while after the
+// user's fingers actually stop (OS-level momentum/inertia) — without a floor, zoom keeps
+// gently drifting for a beat after the gesture ends. Ignoring near-zero deltas makes it stop
+// as soon as the real gesture tails off instead of chasing that last stretch of momentum.
+const MIN_ZOOM_DELTA = 1.5;
 
 type DragData =
   | { kind: 'pan'; startX: number; startY: number; startPan: { x: number; y: number } }
@@ -346,6 +352,8 @@ export default function Game() {
       e.preventDefault();
       const isPinchOrCtrlZoom = e.ctrlKey; // trackpad pinch and mouse "ctrl+wheel" both report ctrlKey
       if (isPinchOrCtrlZoom) {
+        // Skip the tail end of trackpad momentum instead of chasing it down to zero.
+        if (Math.abs(e.deltaY) < MIN_ZOOM_DELTA) return;
         // Continuous, magnitude-proportional zoom — smooth for a trackpad pinch, and a single
         // reasonably-sized step for a discrete mouse-wheel notch. Lower WHEEL_ZOOM_SENSITIVITY
         // for a gentler feel; this is intentionally less aggressive than the old flat 1.1x/tick.

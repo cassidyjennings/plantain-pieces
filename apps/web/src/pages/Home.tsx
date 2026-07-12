@@ -44,7 +44,7 @@ export default function Home() {
   return (
     <div className="centered">
       <div className="home-header">
-        <Logo size={100} sway />
+        <Logo size={160} sway />
         <h1 className="wordmark">
           PLANTAIN
           <span className="accent-line">PIECES</span>

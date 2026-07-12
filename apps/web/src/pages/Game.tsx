@@ -503,7 +503,9 @@ export default function Game() {
   // --- Dump (still a deliberate action on a selected tray tile) ---------------
 
   async function handleDump() {
-    if (!roomId || !selectedId) return;
+    // Share the same in-flight guard as runAutoAction — both mutate rack/grid/bunchCount from
+    // a server response, so letting them overlap risks one clobbering the other's update.
+    if (!roomId || !selectedId || busyRef.current) return;
     const tile = rack.find((t) => t.id === selectedId);
     if (!tile) return;
     busyRef.current = true;

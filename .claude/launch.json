@@ -5,7 +5,8 @@
       "name": "api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace", "@plantain/api", "--", "--port", "8787"],
-      "port": 8787
+      "port": 8787,
+      "autoPort": false
     },
     {
       "name": "web",

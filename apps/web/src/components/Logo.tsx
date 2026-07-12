@@ -11,7 +11,7 @@ export default function Logo({ size = 100, sway = false }: Props) {
     <svg
       width={size}
       height={size}
-      viewBox="-6 -6 132 132"
+      viewBox="10 1 75 109"
       style={{ animation: sway ? 'bunchSway 4s ease-in-out infinite' : 'none' }}
       aria-hidden="true"
     >

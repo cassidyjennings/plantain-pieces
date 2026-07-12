@@ -1,4 +1,4 @@
-import { forwardRef, type PointerEvent, type WheelEvent } from 'react';
+import { forwardRef, type PointerEvent } from 'react';
 import { parseKey, type GridState } from '@plantain/shared';
 import { CELL, WORLD } from '../lib/board.js';
 
@@ -12,25 +12,24 @@ interface Props {
   hiddenKey: string | null;
   onTilePointerDown: (key: string, e: PointerEvent) => void;
   onBackgroundPointerDown: (e: PointerEvent) => void;
-  onWheel: (e: WheelEvent) => void;
 }
 
 /**
  * DOM-based board: a pannable/zoomable world of absolutely-positioned tile divs over a
  * CSS grid background. Only occupied cells are rendered, so cost scales with tiles placed,
  * not the full 50x50 grid. Pointer dragging is orchestrated by the parent (Game).
+ *
+ * Wheel/pinch handling is deliberately NOT wired up here via a React `onWheel` prop — React
+ * attaches wheel listeners as passive by default, which silently ignores `preventDefault()` and
+ * lets the browser's native pinch/ctrl+wheel zoom the whole page instead of the board. Game.tsx
+ * attaches a real `{ passive: false }` listener directly to this div via the forwarded ref.
  */
 const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
-  { grid, pan, zoom, validCells, hiddenKey, onTilePointerDown, onBackgroundPointerDown, onWheel },
+  { grid, pan, zoom, validCells, hiddenKey, onTilePointerDown, onBackgroundPointerDown },
   viewportRef,
 ) {
   return (
-    <div
-      className="board-viewport"
-      ref={viewportRef}
-      onPointerDown={onBackgroundPointerDown}
-      onWheel={onWheel}
-    >
+    <div className="board-viewport" ref={viewportRef} onPointerDown={onBackgroundPointerDown}>
       <div
         className="board-world"
         style={{

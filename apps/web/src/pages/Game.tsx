@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   extractWordsWithCells,
@@ -338,21 +338,34 @@ export default function Game() {
     [],
   );
 
-  function onWheel(e: WheelEvent) {
-    e.preventDefault();
-    const isPinchOrCtrlZoom = e.ctrlKey; // trackpad pinch and mouse "ctrl+wheel" both report ctrlKey
-    if (isPinchOrCtrlZoom) {
-      // Continuous, magnitude-proportional zoom — smooth for a trackpad pinch, and a single
-      // reasonably-sized step for a discrete mouse-wheel notch. Lower WHEEL_ZOOM_SENSITIVITY
-      // for a gentler feel; this is intentionally less aggressive than the old flat 1.1x/tick.
-      const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_SENSITIVITY);
-      zoomAtPoint(factor, e.clientX, e.clientY);
-      return;
-    }
-    // Two-finger trackpad scroll (both fingers moving the same direction) or a plain mouse
-    // wheel — pan instead of zoom, using both axes so trackpad horizontal scroll pans sideways.
-    setPan((p) => ({ x: Math.round(p.x - e.deltaX), y: Math.round(p.y - e.deltaY) }));
-  }
+  const onWheel = useCallback(
+    (e: globalThis.WheelEvent) => {
+      // Must be a non-passive native listener (see the effect below) — React's synthetic
+      // onWheel is registered passive by default, which silently drops preventDefault() and
+      // lets the browser's own pinch/ctrl+wheel zoom the whole page instead of just the board.
+      e.preventDefault();
+      const isPinchOrCtrlZoom = e.ctrlKey; // trackpad pinch and mouse "ctrl+wheel" both report ctrlKey
+      if (isPinchOrCtrlZoom) {
+        // Continuous, magnitude-proportional zoom — smooth for a trackpad pinch, and a single
+        // reasonably-sized step for a discrete mouse-wheel notch. Lower WHEEL_ZOOM_SENSITIVITY
+        // for a gentler feel; this is intentionally less aggressive than the old flat 1.1x/tick.
+        const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_SENSITIVITY);
+        zoomAtPoint(factor, e.clientX, e.clientY);
+        return;
+      }
+      // Two-finger trackpad scroll (both fingers moving the same direction) or a plain mouse
+      // wheel — pan instead of zoom, using both axes so trackpad horizontal scroll pans sideways.
+      setPan((p) => ({ x: Math.round(p.x - e.deltaX), y: Math.round(p.y - e.deltaY) }));
+    },
+    [zoomAtPoint],
+  );
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    vp.addEventListener('wheel', onWheel, { passive: false });
+    return () => vp.removeEventListener('wheel', onWheel);
+  }, [onWheel]);
 
   function handleZoomButton(direction: 1 | -1) {
     const vp = viewportRef.current;
@@ -564,7 +577,6 @@ export default function Game() {
           hiddenKey={null}
           onTilePointerDown={onBoardTilePointerDown}
           onBackgroundPointerDown={onBackgroundPointerDown}
-          onWheel={onWheel}
         />
         <div className="zoom-controls">
           <button type="button" className="zoom-btn" onClick={() => handleZoomButton(1)} aria-label="Zoom in" title="Zoom in">

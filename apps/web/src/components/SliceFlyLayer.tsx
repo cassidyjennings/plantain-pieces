@@ -46,11 +46,17 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const rafs = useRef<Set<number>>(new Set());
   const activeCount = useRef(0);
+  // Slices requested while MAX_ACTIVE is already flying wait here instead of being dropped. A
+  // dropped slice reveals its tile with zero animation — which, in fast real play (e.g. several
+  // auto-Peels firing in quick succession), is exactly what "the tile appeared before it rolled
+  // in" looks like. Queueing guarantees every draw eventually gets a real flight, just delayed.
+  const queue = useRef<Array<{ opts: LaunchOpts; index: number }>>([]);
 
   useEffect(() => {
     const activeAnims = anims.current;
     const activeTimers = timers.current;
     const activeRafs = rafs.current;
+    const activeQueue = queue.current;
     return () => {
       activeAnims.forEach((a) => a.cancel());
       activeTimers.forEach((id) => clearTimeout(id));
@@ -58,19 +64,39 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       activeAnims.clear();
       activeTimers.clear();
       activeRafs.clear();
+      activeQueue.length = 0;
     };
   }, []);
+
+  function drainQueue() {
+    while (activeCount.current < MAX_ACTIVE && queue.current.length > 0) {
+      const next = queue.current.shift()!;
+      startFlight(next.opts, next.index);
+    }
+  }
 
   function runSlice(opts: LaunchOpts, index: number) {
     const reveal = () => opts.onLanded?.(index);
     const fromRect = opts.from();
     const layer = layerRef.current;
 
-    // Reduced motion, over capacity, or nothing to launch from → skip the flight, reveal now.
-    if (prefersReduced() || activeCount.current >= MAX_ACTIVE || !fromRect || !layer) {
+    // Reduced motion or nothing to launch from → skip the flight, reveal now. Being at/over
+    // capacity is *not* a skip condition — queue it instead so it still gets a real flight.
+    if (prefersReduced() || !fromRect || !layer) {
       reveal();
       return;
     }
+    if (activeCount.current >= MAX_ACTIVE) {
+      queue.current.push({ opts, index });
+      return;
+    }
+    startFlight(opts, index);
+  }
+
+  function startFlight(opts: LaunchOpts, index: number) {
+    const reveal = () => opts.onLanded?.(index);
+    const fromRect = opts.from()!;
+    const layer = layerRef.current!;
 
     // The full destination-chip size is known up front (the pending chip already occupies its
     // final tray slot, just hidden), but leg A deliberately renders *smaller* than that — a
@@ -110,6 +136,8 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     const removeNode = () => {
       node.remove();
       activeCount.current = Math.max(0, activeCount.current - 1);
+      // A slot just freed up — start the next queued slice, if any.
+      drainQueue();
     };
 
     const sx = fromRect.left + fromRect.width / 2 - sw / 2;

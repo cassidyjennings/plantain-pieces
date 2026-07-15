@@ -123,19 +123,19 @@ button:disabled {
 }
 
 .btn-tertiary {
-  background: var(--color-disabled-bg);
-  color: var(--color-text-muted);
-  box-shadow: none;
-  opacity: 0.85;
-}
-
-.btn-tertiary:hover:not(:disabled) {
-  background: var(--color-disabled-bg);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-press-md) var(--color-accent-shadow);
   opacity: 1;
 }
 
+.btn-tertiary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
 .btn-tertiary:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--color-accent-shadow);
 }
 
 .join-row {

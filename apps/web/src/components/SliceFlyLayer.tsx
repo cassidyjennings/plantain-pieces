@@ -8,6 +8,9 @@ export interface LaunchOpts {
   to: (index: number) => DOMRect | null;
   /** How many slices to fly (1 for a Peel draw, 3 for a Dump). */
   count: number;
+  /** The letter each slice carries, shown on its face throughout the roll — so the slice already
+   * reads as "becoming" that tile rather than a generic flourish that later reveals a letter. */
+  letters?: string[];
   /** Delay between successive slices (Dump rolls them in one after another). */
   staggerMs?: number;
   /** Called when slice `index` lands (or is skipped) — the caller reveals the real tile then. */
@@ -79,6 +82,19 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     node.style.willChange = 'transform';
     node.style.width = `${w}px`;
     node.style.height = `${h}px`;
+
+    // The letter rides in a child element with its own counter-rotation, so it stays upright and
+    // readable the whole time the outer disc visually rolls — like a wheel with a level label.
+    const letter = opts.letters?.[index];
+    let letterEl: HTMLDivElement | null = null;
+    if (letter) {
+      letterEl = document.createElement('div');
+      letterEl.className = 'slice-wedge-letter';
+      letterEl.style.fontSize = `${Math.round(Math.min(w, h) * 0.46)}px`;
+      letterEl.textContent = letter;
+      node.appendChild(letterEl);
+    }
+
     layer.appendChild(node);
     activeCount.current += 1;
 
@@ -92,14 +108,27 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     const exitX = window.innerWidth + w;
 
     // Leg A — roll right across the top bar and off the right edge (rightward = clockwise).
+    const legAEasing = 'cubic-bezier(0.45, 0, 0.9, 0.5)';
     const legA = node.animate(
       [
         { transform: `translate(${sx}px, ${sy}px) rotate(0deg)` },
         { transform: `translate(${exitX}px, ${sy}px) rotate(720deg)` },
       ],
-      { duration: LEG_A_MS, easing: 'cubic-bezier(0.45, 0, 0.9, 0.5)', fill: 'forwards' },
+      { duration: LEG_A_MS, easing: legAEasing, fill: 'forwards' },
     );
     anims.current.add(legA);
+    if (letterEl) {
+      // Exact inverse of the outer disc's rotation, same duration/easing, so the two cancel out.
+      const legALetter = letterEl.animate(
+        [{ transform: 'rotate(0deg)' }, { transform: 'rotate(-720deg)' }],
+        { duration: LEG_A_MS, easing: legAEasing, fill: 'forwards' },
+      );
+      anims.current.add(legALetter);
+      legA.finished.then(
+        () => anims.current.delete(legALetter),
+        () => anims.current.delete(legALetter),
+      );
+    }
 
     legA.finished
       .then(() => {
@@ -118,14 +147,26 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
 
         // Leg B — re-enter from the right at tray height, roll left to the slot (leftward = ccw).
         // The off-screen gap between legs hides the rotation reset.
+        const legBEasing = 'cubic-bezier(0.22, 1, 0.36, 1)';
         const legB = node.animate(
           [
             { transform: `translate(${reenterX}px, ${ty}px) rotate(0deg)` },
             { transform: `translate(${tx}px, ${ty}px) rotate(-560deg)` },
           ],
-          { duration: LEG_B_MS, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
+          { duration: LEG_B_MS, easing: legBEasing, fill: 'forwards' },
         );
         anims.current.add(legB);
+        if (letterEl) {
+          const legBLetter = letterEl.animate(
+            [{ transform: 'rotate(0deg)' }, { transform: 'rotate(560deg)' }],
+            { duration: LEG_B_MS, easing: legBEasing, fill: 'forwards' },
+          );
+          anims.current.add(legBLetter);
+          legB.finished.then(
+            () => anims.current.delete(legBLetter),
+            () => anims.current.delete(legBLetter),
+          );
+        }
         legB.finished
           .then(() => {
             anims.current.delete(legB);

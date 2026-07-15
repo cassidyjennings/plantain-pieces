@@ -155,4 +155,10 @@
       transform: none;
     }
   }
+  @keyframes sliceLand {
+    0%,
+    100% {
+      transform: none;
+    }
+  }
 }

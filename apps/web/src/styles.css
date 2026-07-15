@@ -386,6 +386,19 @@ button:disabled {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
+/* The letter riding on a flying slice — a separate child with its own counter-rotation animation
+   (see SliceFlyLayer) so it stays upright and readable while the disc itself visually rolls. */
+.slice-wedge-letter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--color-text-on-accent);
+}
+
 /* SliceFlyLayer already skips the flight itself under reduced motion; also quiet the meter's own
    cut flash (the depletion still shows instantly, just without the pulse). */
 @media (prefers-reduced-motion: reduce) {
@@ -819,6 +832,25 @@ button:disabled {
 
 .tile-chip.just-drawn {
   animation: tileDrop 500ms ease-out;
+}
+
+/* A tile revealed by a landed slice already had its letter carried in on the roll, so its reveal
+   is just a quick settle — not the big drop-from-above pop, which would read as a second,
+   redundant arrival right after the slice motion. */
+.tile-chip.slice-landed {
+  animation: sliceLand 220ms ease-out;
+}
+
+@keyframes sliceLand {
+  0% {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* A freshly-drawn chip whose flying slice hasn't arrived yet: keep its layout slot (so the slice

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   extractWordsWithCells,
@@ -74,9 +74,12 @@ export default function Game() {
   const [callout, setCallout] = useState<string | null>(null);
   const [validCells, setValidCells] = useState<Set<string>>(new Set());
   const [wordsPending, setWordsPending] = useState(false);
-  // Slice-fly animation: chips waiting for their flying slice to land, and a counter that pulses
-  // the plantain's cut-flash on each draw.
+  // Slice-fly animation: chips waiting for their flying slice to land, chips that were just
+  // revealed by a landed slice (so they get a soft settle instead of the drop-in pop — the slice
+  // rolling in with the letter already visible *is* their reveal), and a counter that pulses the
+  // plantain's cut-flash on each draw.
   const [pendingReveal, setPendingReveal] = useState<Set<string>>(new Set());
+  const [sliceRevealed, setSliceRevealed] = useState<Set<string>>(new Set());
   const [flashSignal, setFlashSignal] = useState(0);
 
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -117,7 +120,8 @@ export default function Game() {
     setTimeout(() => setCallout((c) => (c === text ? null : c)), CALLOUT_MS);
   }
 
-  // Reveal a chip once its flying slice has landed (removes it from the pending/hidden set).
+  // Reveal a chip once its flying slice has landed: unhide it and mark it as slice-delivered (a
+  // soft settle instead of the drop-in pop, since the rolling slice already showed its letter).
   const revealChip = useCallback((id: string) => {
     setPendingReveal((prev) => {
       if (!prev.has(id)) return prev;
@@ -125,17 +129,36 @@ export default function Game() {
       next.delete(id);
       return next;
     });
+    setSliceRevealed((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
 
   // Fire the slice-fly animation for each newly *drawn* tile. `justDrawn` is set only for genuine
   // draws (Peel/Dump) — tiles moved back from the board or recalled use newRackTile (no flag), so
   // this correctly ignores those. Peel adds 1 tile → 1 slice; Dump adds 3 → 3 staggered slices.
-  useEffect(() => {
-    // Prune ids that have left the rack (placed on the board) so the guard set can't grow forever.
+  //
+  // This is a layout effect (not a regular effect) so that `pendingReveal` is updated — and Tray
+  // re-rendered with the fresh chips already hidden — before the browser ever paints a frame.
+  // With a regular effect, the first paint briefly shows the fresh chips as `.just-drawn` (mid
+  // tileDrop's scale-from-0.4 keyframe) before the *next* render swaps them to `.pending`; the
+  // flying slice's size measurement could land inside that transient scaled-down frame, which is
+  // what caused the first slice of a multi-tile Dump to consistently come out too small.
+  useLayoutEffect(() => {
+    // Prune ids that have left the rack (placed on the board) so the guard sets can't grow forever.
     const liveIds = new Set(rack.map((t) => t.id));
     for (const id of animatedIds.current) {
       if (!liveIds.has(id)) animatedIds.current.delete(id);
     }
+    setSliceRevealed((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        if (!liveIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
     const fresh = rack.filter((t) => t.justDrawn && !animatedIds.current.has(t.id));
     if (fresh.length === 0) return;
@@ -165,6 +188,7 @@ export default function Game() {
         const el = document.querySelector(selector);
         return el ? el.getBoundingClientRect() : null;
       },
+      letters: fresh.map((t) => t.letter),
       count: fresh.length,
       staggerMs: fresh.length > 1 ? 180 : 0,
       onLanded: (i) => revealChip(fresh[i].id),
@@ -673,6 +697,7 @@ export default function Game() {
         draggingId={draggingId}
         canRecall={invalidPlacedCount > 0}
         pendingIds={pendingReveal}
+        sliceRevealedIds={sliceRevealed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
         onRecallInvalid={handleRecallInvalid}
         onTilePointerDown={onTrayPointerDown}

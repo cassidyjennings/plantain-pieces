@@ -10,6 +10,9 @@ interface Props {
   canRecall: boolean;
   /** Tile ids currently hidden while their flying slice is still in transit. */
   pendingIds: Set<string>;
+  /** Tile ids just unhidden by a landed slice — these get a soft settle instead of the classic
+   * drop-in pop, since the slice already carried their letter in on its roll. */
+  sliceRevealedIds: Set<string>;
   onToggleCollapse: () => void;
   onRecallInvalid: () => void;
   onTilePointerDown: (id: string, e: PointerEvent) => void;
@@ -22,6 +25,7 @@ export default function Tray({
   draggingId,
   canRecall,
   pendingIds,
+  sliceRevealedIds,
   onToggleCollapse,
   onRecallInvalid,
   onTilePointerDown,
@@ -57,16 +61,23 @@ export default function Tray({
       <div className="tile-rack" data-tray>
         {items.map((item) => {
           const pending = pendingIds.has(item.id);
+          const sliceLanded = sliceRevealedIds.has(item.id);
+          let revealClass = '';
+          if (item.justDrawn && !pending) {
+            // The rolling slice already showed this tile's letter, so its reveal is a quick
+            // settle, not the classic drop-in pop — that pop is reserved for tiles that never had
+            // a slice to carry the motion (collapsed duplicates, reduced motion).
+            revealClass = sliceLanded ? ' slice-landed' : ' just-drawn';
+          }
           return (
             <button
               key={item.id}
               type="button"
               data-tile-id={item.id}
               data-letter={item.letter}
-              className={`tile-chip${item.id === selectedId ? ' selected' : ''}${
-                // Hold the drop pop until the slice lands; adding the class on reveal restarts it.
-                item.justDrawn && !pending ? ' just-drawn' : ''
-              }${pending ? ' pending' : ''}${item.id === draggingId ? ' dragging' : ''}`}
+              className={`tile-chip${item.id === selectedId ? ' selected' : ''}${revealClass}${
+                pending ? ' pending' : ''
+              }${item.id === draggingId ? ' dragging' : ''}`}
               onPointerDown={(e) => onTilePointerDown(item.id, e)}
             >
               {item.letter}

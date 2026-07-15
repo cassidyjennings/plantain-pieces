@@ -14,23 +14,48 @@ function freshId(): string {
 
 /** The tiles a player still holds in hand: their full inventory minus what's on the grid.
  * `justDrawnLetters`, if given, flags that many tiles per letter as newly drawn (for the
- * tile-drop animation) — consumed one at a time as matching tiles are built. */
+ * slice-fly/tile-drop reveal) — consumed one at a time as matching tiles are built.
+ *
+ * `prevTiles`, if given, lets tiles that persist across this recompute keep their existing id
+ * instead of getting a fresh one. Every tile object here used to be rebuilt from scratch on every
+ * call (even ones with no new draw involved, e.g. after a Dump only 2-3 tiles are actually new),
+ * which meant React unmounted and remounted the *entire* tray on every single draw — a lot of
+ * unnecessary DOM churn that also risked transient rendering artifacts around the tiles that
+ * genuinely were mid reveal-animation. Reusing ids keeps identity stable for anything that isn't
+ * actually new. */
 export function computeUnplaced(
   fullRack: Letter[],
   grid: GridState,
   justDrawnLetters: Letter[] = [],
+  prevTiles: RackTile[] = [],
 ): RackTile[] {
   const remaining = letterMultiset(fullRack);
   for (const letter of Object.values(grid)) {
     remaining[letter] = (remaining[letter] ?? 0) - 1;
   }
   const justDrawnCounts = letterMultiset(justDrawnLetters);
+
+  const prevByLetter = new Map<Letter, RackTile[]>();
+  for (const t of prevTiles) {
+    if (!prevByLetter.has(t.letter)) prevByLetter.set(t.letter, []);
+    prevByLetter.get(t.letter)!.push(t);
+  }
+
   const tiles: RackTile[] = [];
   for (const [letter, count] of Object.entries(remaining)) {
+    const pool = prevByLetter.get(letter);
     for (let i = 0; i < count; i++) {
       const justDrawn = (justDrawnCounts[letter] ?? 0) > 0;
-      if (justDrawn) justDrawnCounts[letter] -= 1;
-      tiles.push({ id: freshId(), letter, justDrawn });
+      if (justDrawn) {
+        // A genuinely new draw always gets a fresh id/element, even if the letter matches a tile
+        // already in hand — it needs its own identity for the reveal animation to target.
+        justDrawnCounts[letter] -= 1;
+        tiles.push({ id: freshId(), letter, justDrawn: true });
+      } else if (pool && pool.length > 0) {
+        tiles.push({ id: pool.shift()!.id, letter, justDrawn: false });
+      } else {
+        tiles.push({ id: freshId(), letter, justDrawn: false });
+      }
     }
   }
   return tiles;

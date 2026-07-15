@@ -519,7 +519,7 @@ export default function Game() {
         ];
         const result = await api.peel(roomId, submittedGrid);
         const newLetters = diffNewLetters(priorRack, result.rack);
-        setRack(computeUnplaced(result.rack, submittedGrid, newLetters));
+        setRack(computeUnplaced(result.rack, submittedGrid, newLetters, rackRef.current));
         setBunchCount(result.bunchCount);
         fireCallout('PEEL!');
       } else {
@@ -602,7 +602,7 @@ export default function Game() {
     try {
       const result = await api.dump(roomId, tile.letter);
       const newLetters = diffNewLetters(priorRack, result.rack);
-      setRack(computeUnplaced(result.rack, grid, newLetters));
+      setRack(computeUnplaced(result.rack, grid, newLetters, rack));
       setBunchCount(result.bunchCount);
       setSelectedId(null);
       fireCallout('DUMP!');
@@ -630,14 +630,6 @@ export default function Game() {
   const opponents = players.filter((p) => p.profile_id !== profileId && !p.is_spectator);
   const items = trayItems(rack, collapsed);
   const invalidPlacedCount = Object.keys(grid).filter((k) => !validCells.has(k)).length;
-  const trayEmpty = rack.length === 0 && Object.keys(grid).length > 0;
-  const waitingStatus = !trayEmpty
-    ? null
-    : wordsPending
-      ? 'Checking words…'
-      : invalidPlacedCount > 0
-        ? "Some placed tiles aren't part of a valid word — fix them or use Recall invalid."
-        : null;
 
   return (
     <div className="game-layout">
@@ -661,7 +653,6 @@ export default function Game() {
       </div>
 
       {message && <p className="game-message">{message}</p>}
-      {!message && waitingStatus && <p className="game-message">{waitingStatus}</p>}
 
       <div className="board-area">
         <GameBoard

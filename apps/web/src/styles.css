@@ -380,10 +380,20 @@ button:disabled {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  /* A plantain slice cross-section: pale core, green peel ring. */
+  /* Leg A (rolling right across the top bar): a plantain slice cross-section — pale core, green
+     peel ring. Still reads as fruit while it's up near the Bunch meter. */
   background: radial-gradient(circle at 50% 45%, #f4e79a 0 52%, #cdbf5a 53% 60%, #a8c94a 61% 100%);
   border: 2px solid #0f2f1e;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Leg B (re-entering from the right to roll into the tray): swapped to look closer to the real
+   tile chip — pale cream face, tan edge, just a thin green rim as a nod to what it is — since the
+   slice is about to become that tile. SliceFlyLayer adds this class only once the slice is fully
+   off-screen between legs, so the switch itself is never visible. */
+.slice-wedge.tile-face {
+  background: radial-gradient(circle at 50% 45%, var(--color-tile-bg) 0 80%, var(--color-tile-border) 81% 88%, #a8c94a 89% 100%);
+  border-color: var(--color-tile-border);
 }
 
 /* The letter riding on a flying slice — a separate child with its own counter-rotation animation
@@ -835,21 +845,18 @@ button:disabled {
 }
 
 /* A tile revealed by a landed slice already had its letter carried in on the roll, so its reveal
-   is just a quick settle — not the big drop-from-above pop, which would read as a second,
-   redundant arrival right after the slice motion. */
+   is just a quiet fade at rest — no bounce, no scale, nothing "growing" — since a second motion
+   right after the slice's own arrival would read as a redundant, separate entrance. */
 .tile-chip.slice-landed {
-  animation: sliceLand 220ms ease-out;
+  animation: sliceLand 320ms ease-out;
 }
 
 @keyframes sliceLand {
   0% {
-    transform: scale(0.92);
-  }
-  60% {
-    transform: scale(1.03);
+    opacity: 0;
   }
   100% {
-    transform: scale(1);
+    opacity: 1;
   }
 }
 

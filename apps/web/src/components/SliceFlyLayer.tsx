@@ -25,6 +25,9 @@ const FALLBACK_SIZE = 42; // px, used only if the destination chip's real size c
 const LEG_A_MS = 650; // roll right, off-screen
 const LEG_B_MS = 850; // re-enter from the right, roll left into the tray
 const MAX_ACTIVE = 4; // cap concurrent flights so a burst of peels can't flood the compositor
+// Leg A reads as a small plantain slice rolling by, distinctly smaller than the tile it's about
+// to become — the size (and look, and letter) only change once it's off-screen for leg B.
+const SMALL_SIZE_RATIO = 0.6;
 
 function prefersReduced(): boolean {
   return (
@@ -69,27 +72,33 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       return;
     }
 
-    // Size the slice to match its real destination chip from the very start (the pending chip
-    // already occupies its final tray slot at full size, just hidden) — so it never has to
-    // visibly "grow" into the tile it becomes on landing, and stays that size for the whole
-    // flight rather than just at the end.
+    // The full destination-chip size is known up front (the pending chip already occupies its
+    // final tray slot, just hidden), but leg A deliberately renders *smaller* than that — a
+    // distinct little plantain slice rolling by, not a preview of the tile. It only grows to the
+    // real size (and swaps to the tile's look, and reveals its letter) once it's off-screen
+    // between legs, so none of that change is ever visible mid-flight.
     const sizeRect = opts.to(index);
     const w = sizeRect?.width ?? FALLBACK_SIZE;
     const h = sizeRect?.height ?? FALLBACK_SIZE;
+    const sw = Math.round(w * SMALL_SIZE_RATIO);
+    const sh = Math.round(h * SMALL_SIZE_RATIO);
 
     const node = document.createElement('div');
     node.className = 'slice-wedge';
     node.style.willChange = 'transform';
-    node.style.width = `${w}px`;
-    node.style.height = `${h}px`;
+    node.style.width = `${sw}px`;
+    node.style.height = `${sh}px`;
 
     // The letter rides in a child element with its own counter-rotation, so it stays upright and
     // readable the whole time the outer disc visually rolls — like a wheel with a level label.
+    // Hidden during leg A (it's just a plain slice at that point); revealed alongside the
+    // size/look swap before leg B.
     const letter = opts.letters?.[index];
     let letterEl: HTMLDivElement | null = null;
     if (letter) {
       letterEl = document.createElement('div');
       letterEl.className = 'slice-wedge-letter';
+      letterEl.style.opacity = '0';
       letterEl.style.fontSize = `${Math.round(Math.min(w, h) * 0.46)}px`;
       letterEl.textContent = letter;
       node.appendChild(letterEl);
@@ -103,9 +112,9 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       activeCount.current = Math.max(0, activeCount.current - 1);
     };
 
-    const sx = fromRect.left + fromRect.width / 2 - w / 2;
-    const sy = fromRect.top + fromRect.height / 2 - h / 2;
-    const exitX = window.innerWidth + w;
+    const sx = fromRect.left + fromRect.width / 2 - sw / 2;
+    const sy = fromRect.top + fromRect.height / 2 - sh / 2;
+    const exitX = window.innerWidth + sw;
 
     // Leg A — roll right across the top bar and off the right edge (rightward = clockwise).
     const legAEasing = 'cubic-bezier(0.45, 0, 0.9, 0.5)';
@@ -117,18 +126,6 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       { duration: LEG_A_MS, easing: legAEasing, fill: 'forwards' },
     );
     anims.current.add(legA);
-    if (letterEl) {
-      // Exact inverse of the outer disc's rotation, same duration/easing, so the two cancel out.
-      const legALetter = letterEl.animate(
-        [{ transform: 'rotate(0deg)' }, { transform: 'rotate(-720deg)' }],
-        { duration: LEG_A_MS, easing: legAEasing, fill: 'forwards' },
-      );
-      anims.current.add(legALetter);
-      legA.finished.then(
-        () => anims.current.delete(legALetter),
-        () => anims.current.delete(legALetter),
-      );
-    }
 
     legA.finished
       .then(() => {
@@ -144,6 +141,16 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
         const tx = toRect.left + toRect.width / 2 - w / 2;
         const ty = toRect.top + toRect.height / 2 - h / 2;
         const reenterX = window.innerWidth + w;
+
+        // Grow to the real tile size, swap from the plantain-slice look to the tile's look, and
+        // reveal the letter — all right here, while the node is still sitting fully off-screen
+        // (leg A ended at exitX, past the right edge) until leg B's animation starts moving it, so
+        // none of this is ever visible mid-flight. It should already look like — and be the size
+        // of — the real tile by the time it re-enters and rolls into the tray.
+        node.style.width = `${w}px`;
+        node.style.height = `${h}px`;
+        node.classList.add('tile-face');
+        if (letterEl) letterEl.style.opacity = '1';
 
         // Leg B — re-enter from the right at tray height, roll left to the slot (leftward = ccw).
         // The off-screen gap between legs hides the rotation reset.

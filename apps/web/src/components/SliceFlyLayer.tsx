@@ -18,9 +18,9 @@ export interface SliceFlyHandle {
   launch(opts: LaunchOpts): void;
 }
 
-const SLICE = 34; // px, matches .slice-wedge
-const LEG_A_MS = 430; // roll right, off-screen
-const LEG_B_MS = 560; // re-enter from the right, roll left into the tray
+const FALLBACK_SIZE = 42; // px, used only if the destination chip's real size can't be read yet
+const LEG_A_MS = 650; // roll right, off-screen
+const LEG_B_MS = 850; // re-enter from the right, roll left into the tray
 const MAX_ACTIVE = 4; // cap concurrent flights so a burst of peels can't flood the compositor
 
 function prefersReduced(): boolean {
@@ -38,16 +38,20 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
   const layerRef = useRef<HTMLDivElement>(null);
   const anims = useRef<Set<Animation>>(new Set());
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const rafs = useRef<Set<number>>(new Set());
   const activeCount = useRef(0);
 
   useEffect(() => {
     const activeAnims = anims.current;
     const activeTimers = timers.current;
+    const activeRafs = rafs.current;
     return () => {
       activeAnims.forEach((a) => a.cancel());
       activeTimers.forEach((id) => clearTimeout(id));
+      activeRafs.forEach((id) => cancelAnimationFrame(id));
       activeAnims.clear();
       activeTimers.clear();
+      activeRafs.clear();
     };
   }, []);
 
@@ -62,9 +66,19 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       return;
     }
 
+    // Size the slice to match its real destination chip from the very start (the pending chip
+    // already occupies its final tray slot at full size, just hidden) — so it never has to
+    // visibly "grow" into the tile it becomes on landing, and stays that size for the whole
+    // flight rather than just at the end.
+    const sizeRect = opts.to(index);
+    const w = sizeRect?.width ?? FALLBACK_SIZE;
+    const h = sizeRect?.height ?? FALLBACK_SIZE;
+
     const node = document.createElement('div');
     node.className = 'slice-wedge';
     node.style.willChange = 'transform';
+    node.style.width = `${w}px`;
+    node.style.height = `${h}px`;
     layer.appendChild(node);
     activeCount.current += 1;
 
@@ -73,9 +87,9 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       activeCount.current = Math.max(0, activeCount.current - 1);
     };
 
-    const sx = fromRect.left + fromRect.width / 2 - SLICE / 2;
-    const sy = fromRect.top + fromRect.height / 2 - SLICE / 2;
-    const exitX = window.innerWidth + SLICE;
+    const sx = fromRect.left + fromRect.width / 2 - w / 2;
+    const sy = fromRect.top + fromRect.height / 2 - h / 2;
+    const exitX = window.innerWidth + w;
 
     // Leg A — roll right across the top bar and off the right edge (rightward = clockwise).
     const legA = node.animate(
@@ -90,16 +104,17 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     legA.finished
       .then(() => {
         anims.current.delete(legA);
-        // Measure the target now — after the pending chip has taken its real tray slot.
+        // Re-measure the target position now — after the pending chip has taken its real tray
+        // slot — in case of reflow since spawn. Size was already locked in above.
         const toRect = opts.to(index);
         if (!toRect) {
           reveal();
           removeNode();
           return;
         }
-        const tx = toRect.left + toRect.width / 2 - SLICE / 2;
-        const ty = toRect.top + toRect.height / 2 - SLICE / 2;
-        const reenterX = window.innerWidth + SLICE;
+        const tx = toRect.left + toRect.width / 2 - w / 2;
+        const ty = toRect.top + toRect.height / 2 - h / 2;
+        const reenterX = window.innerWidth + w;
 
         // Leg B — re-enter from the right at tray height, roll left to the slot (leftward = ccw).
         // The off-screen gap between legs hides the rotation reset.
@@ -133,15 +148,28 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     launch(opts: LaunchOpts) {
       const stagger = opts.staggerMs ?? 0;
       for (let i = 0; i < opts.count; i++) {
-        if (stagger > 0 && i > 0) {
-          const id = setTimeout(() => {
-            timers.current.delete(id);
+        const delay = i * stagger;
+        const start = () => {
+          if (delay > 0) {
+            const id = setTimeout(() => {
+              timers.current.delete(id);
+              runSlice(opts, i);
+            }, delay);
+            timers.current.add(id);
+          } else {
             runSlice(opts, i);
-          }, i * stagger);
-          timers.current.add(id);
-        } else {
-          runSlice(opts, i);
-        }
+          }
+        };
+        // Defer every spawn by one frame — the destination chip mounted in the same React commit
+        // that triggered this launch, and measuring its size immediately (synchronously, before
+        // the browser has settled layout for the newly-inserted node) can read a transient,
+        // too-small box. A frame later it's reliably at full size. Staggered slices already get
+        // this for free from their setTimeout delay; this covers the un-staggered (first/only) one.
+        const rafId = requestAnimationFrame(() => {
+          rafs.current.delete(rafId);
+          start();
+        });
+        rafs.current.add(rafId);
       }
     },
   }));

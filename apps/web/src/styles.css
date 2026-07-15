@@ -375,8 +375,10 @@ button:disabled {
   position: fixed;
   left: 0;
   top: 0;
-  width: 34px;
-  height: 34px;
+  /* Width/height are set inline per-instance by SliceFlyLayer to match the real destination
+     chip's size — these are just a fallback in case that ever fails. */
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   /* A plantain slice cross-section: pale core, green peel ring. */
   background: radial-gradient(circle at 50% 45%, #f4e79a 0 52%, #cdbf5a 53% 60%, #a8c94a 61% 100%);

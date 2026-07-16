@@ -1,16 +1,18 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { validateStructure, type GridState } from '@plantain/shared';
+import { validateStructure, validateDictionaryConfig, type GridState, type DictionaryConfig } from '@plantain/shared';
 import type { Env } from './env.js';
 import { createAdminClient } from './supabase.js';
 import { requireAuth } from './auth.js';
 import { statusForRpcError } from './rpcError.js';
 import { fetchRack } from './gridValidation.js';
+import { fetchOwnedCustomSetIds, resolveCustomSetNames } from './dictionaries.js';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors());
 app.use('/rooms/*', requireAuth);
+app.use('/dictionaries/*', requireAuth);
 
 app.get('/', (c) => c.json({ ok: true, service: 'plantain-pieces-api' }));
 
@@ -193,6 +195,115 @@ app.post('/rooms/:roomId/plantains', async (c) => {
 
   await admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid });
   return c.json(data);
+});
+
+// --- Dictionary management ---------------------------------------------------
+
+// Custom word sets: reads of "my sets" go directly from the client via RLS
+// (see apps/web/src/lib/dictionaries.ts); only writes go through the Worker.
+app.post('/dictionaries/sets', async (c) => {
+  const profileId = c.get('profileId');
+  const body = await c.req.json<{ name: string; words: string[] }>();
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('create_custom_word_set', {
+    p_owner: profileId,
+    p_name: body.name,
+    p_words: Array.isArray(body.words) ? body.words : [],
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+app.patch('/dictionaries/sets/:setId', async (c) => {
+  const profileId = c.get('profileId');
+  const setId = c.req.param('setId');
+  const body = await c.req.json<{ name: string; words: string[] }>();
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('update_custom_word_set', {
+    p_owner: profileId,
+    p_set_id: setId,
+    p_name: body.name,
+    p_words: Array.isArray(body.words) ? body.words : [],
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+app.delete('/dictionaries/sets/:setId', async (c) => {
+  const profileId = c.get('profileId');
+  const setId = c.req.param('setId');
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('delete_custom_word_set', {
+    p_owner: profileId,
+    p_set_id: setId,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+// Dictionary presets: a named snapshot of a DictionaryConfig, reusable across rooms.
+app.post('/dictionaries/presets', async (c) => {
+  const profileId = c.get('profileId');
+  const body = await c.req.json<{ name: string; config: DictionaryConfig }>();
+  const admin = createAdminClient(c.env);
+
+  const owned = await fetchOwnedCustomSetIds(admin, profileId);
+  const validity = validateDictionaryConfig(body.config, owned);
+  if (!validity.valid) return c.json({ error: validity.reason }, statusForRpcError(validity.reason));
+
+  const { data, error } = await admin.rpc('save_dictionary_preset', {
+    p_owner: profileId,
+    p_name: body.name,
+    p_config: body.config,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+app.delete('/dictionaries/presets/:presetId', async (c) => {
+  const profileId = c.get('profileId');
+  const presetId = c.req.param('presetId');
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('delete_dictionary_preset', {
+    p_owner: profileId,
+    p_preset_id: presetId,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+// Room-owner control: set the active DictionaryConfig for a room pre-Split.
+app.patch('/rooms/:roomId/dictionary', async (c) => {
+  const profileId = c.get('profileId');
+  const roomId = c.req.param('roomId');
+  const body = await c.req.json<{ config: DictionaryConfig }>();
+  const admin = createAdminClient(c.env);
+
+  const owned = await fetchOwnedCustomSetIds(admin, profileId);
+  const validity = validateDictionaryConfig(body.config, owned);
+  if (!validity.valid) return c.json({ error: validity.reason }, statusForRpcError(validity.reason));
+
+  const { data, error } = await admin.rpc('set_dictionary_config', {
+    p_room_id: roomId,
+    p_host: profileId,
+    p_config: body.config,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+// Resolves {id, name} for the custom sets active in a room's config — a non-host can
+// read the config's raw customSetIds via rooms_public, but RLS correctly hides other
+// users' custom_word_sets rows, so this service-role-backed lookup fills in names.
+app.get('/rooms/:roomId/dictionary/set-names', async (c) => {
+  const roomId = c.req.param('roomId');
+  const admin = createAdminClient(c.env);
+  try {
+    const sets = await resolveCustomSetNames(admin, roomId);
+    return c.json({ sets });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 404);
+  }
 });
 
 export default app;

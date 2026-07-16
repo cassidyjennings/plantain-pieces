@@ -1,4 +1,4 @@
-import type { GridState } from '@plantain/shared';
+import type { DictionaryConfig, GridState } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -65,6 +65,19 @@ export interface DumpResult {
   bunchCount: number;
 }
 
+export interface WordSetResult {
+  id: string;
+  name: string;
+  wordCount: number;
+}
+
+export interface DictionaryPresetResult {
+  id: string;
+  name: string;
+  config: DictionaryConfig;
+  createdAt: string;
+}
+
 export const api = {
   createRoom: (displayName: string) =>
     call<CreateRoomResult>('/rooms', { method: 'POST', body: JSON.stringify({ displayName }) }),
@@ -97,4 +110,34 @@ export const api = {
 
   plantains: (roomId: string, grid: GridState) =>
     call<{ ok: true }>(`/rooms/${roomId}/plantains`, { method: 'POST', body: JSON.stringify({ grid }) }),
+
+  createWordSet: (name: string, words: string[]) =>
+    call<WordSetResult>('/dictionaries/sets', { method: 'POST', body: JSON.stringify({ name, words }) }),
+
+  updateWordSet: (setId: string, name: string, words: string[]) =>
+    call<WordSetResult>(`/dictionaries/sets/${setId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name, words }),
+    }),
+
+  deleteWordSet: (setId: string) =>
+    call<{ ok: true }>(`/dictionaries/sets/${setId}`, { method: 'DELETE' }),
+
+  savePreset: (name: string, config: DictionaryConfig) =>
+    call<DictionaryPresetResult>('/dictionaries/presets', {
+      method: 'POST',
+      body: JSON.stringify({ name, config }),
+    }),
+
+  deletePreset: (presetId: string) =>
+    call<{ ok: true }>(`/dictionaries/presets/${presetId}`, { method: 'DELETE' }),
+
+  setDictionaryConfig: (roomId: string, config: DictionaryConfig) =>
+    call<{ ok: true; config: DictionaryConfig }>(`/rooms/${roomId}/dictionary`, {
+      method: 'PATCH',
+      body: JSON.stringify({ config }),
+    }),
+
+  getRoomDictionarySetNames: (roomId: string) =>
+    call<{ sets: { id: string; name: string }[] }>(`/rooms/${roomId}/dictionary/set-names`),
 };

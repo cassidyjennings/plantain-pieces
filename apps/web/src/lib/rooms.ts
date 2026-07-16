@@ -1,3 +1,4 @@
+import type { DictionaryConfig } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 export interface PublicRoom {
@@ -5,6 +6,7 @@ export interface PublicRoom {
   code: string;
   host_id: string;
   status: 'lobby' | 'active' | 'finished';
+  dictionary_config: DictionaryConfig;
   bunch_count: number;
   winner_id: string | null;
 }

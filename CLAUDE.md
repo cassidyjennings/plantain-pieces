@@ -186,15 +186,46 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
   existing `justDrawn` flag (`Game.tsx` effect), so board/recall moves don't animate. Respects
   `prefers-reduced-motion` (skips flight, reveals immediately) and caps concurrent flights.
   `PlantainMascot.tsx` was removed (fully superseded).
+- ✅ **Custom Dictionaries feature (2026-07-15), browser-verified end-to-end.** Players build named
+  custom word lists, toggle word sources (base ENABLE1 + their own sets) and length bounds per game,
+  and save named **presets** (dictionary + settings combos) to reuse. The room host sets the active
+  config pre-Split; it broadcasts live to the lobby via a `dictionary_config_changed` `room_event`.
+  - **DB** (`supabase/migrations/20260715000001..3`): new `dictionary_presets` table; split the old
+    world-readable `words_select_all` RLS into `words_select_base` (base rows only) +
+    `words_select_own_custom` (owner-scoped) — a real privacy fix so users can't read each other's
+    custom words; `custom_word_sets_with_count` view for cheap listing. New `SECURITY DEFINER` RPCs
+    (`_validate_dictionary_config`, `create/update/delete_custom_word_set`,
+    `save/delete_dictionary_preset`, `set_dictionary_config`), locked to `service_role` in their own
+    do-block. `find_invalid_words`/`create_room` needed **zero** changes.
+  - **Shared** (`packages/shared/src/dictionary.ts` + tests): word normalization (`^[A-Z]{2,20}$`,
+    dedupe), caps (2000 words/set, 30 sets, 25 presets), `validateDictionaryConfig()` — reused by
+    client (instant feedback) and Worker (defense-in-depth 400s); RPC re-validates authoritatively.
+  - **Worker** (`apps/api/src/dictionaries.ts` + routes): CRUD for sets/presets, `PATCH
+    /rooms/:id/dictionary`, and `GET /rooms/:id/dictionary/set-names` (service-role name resolution
+    so non-hosts see set *names*, not raw UUIDs, without widening RLS). Reads of a user's own
+    sets/presets go **direct via RLS** from the client (`apps/web/src/lib/dictionaries.ts`), not the
+    Worker.
+  - **UI** (`DictionaryJournal.tsx` + `WordSetEditor.tsx`): an in-world **burnt/crinkled tan book
+    page** — layered parchment gradients + SVG turbulence grain + scorched vignette, torn deckle
+    edge via an **SVG displacement `mask`** (not a clip-path), parchment index tabs that tuck under
+    the page edge, and a **top-down page-flip** (`rotateX`, header title included) on tab change.
+    Tabs: Dictionaries (base list folded in at top + your sets below), Word Length, Presets. Opens
+    from **Home** ("My Dictionaries", standalone) and the **Lobby** (host edits + Apply; non-hosts
+    see a read-only live view). Lobby shows a settings summary chip that pulses on live changes; the
+    in-game top bar shows three pills (min length · base list · custom dictionaries). All motion
+    respects `prefers-reduced-motion`.
 - ⚠️ **TEMP dev hack in place:** the 2-player minimum for Split is relaxed to 1 in two spots for
   solo testing — `Lobby.tsx` (marked `// TEMP`, revert by hand: `>= 1` → `>= 2`) and a
   runtime-only patch to the `start_game` SQL function on the local DB (auto-restored by any
   `npm run db:reset`, since it was NOT written to a migration file).
+- ➡️ **Next up: OAuth + real accounts.** Guests are anonymous auth users today; next is Google/Apple
+  OAuth linking to the *same* id so custom dictionaries/presets/progress persist beyond a guest
+  session (the schema already ties `custom_word_sets`/`dictionary_presets` to `profiles.id`).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
-- ⬜ Not yet built: box/shift-select for multi-tile grid operations (drag moves one tile at a
-  time), spectator mode UI, emoji reactions, rematch (currently a stub that just navigates home),
-  friends list, achievements, dictionary settings UI, daily challenge, solo play.
+- ⬜ Not yet built: OAuth/accounts (next), box/shift-select for multi-tile grid operations (drag
+  moves one tile at a time), spectator mode UI, emoji reactions, rematch (currently a stub that just
+  navigates home), friends list, achievements, daily challenge, solo play.
 
 ### Windows/Docker gotchas hit during setup (for next time)
 - If `npx supabase start` fails with a docker-context pipe error, run

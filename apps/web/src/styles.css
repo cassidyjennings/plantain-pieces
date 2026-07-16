@@ -886,6 +886,523 @@ button:disabled {
   text-align: center;
 }
 
+/* Dictionaries panel — a scorched, crinkled page torn from a bound book, not a generic
+   settings modal. The whole surface is aged tan paper: layered gradients for the base tan +
+   scorched edges + fold sheen, an SVG turbulence layer for paper grain, and an SVG
+   displacement mask that tears the outline organically (a real deckle edge, not a saw-tooth
+   clip-path). The mask swallows box-shadow, so the drop shadow lives on the shell wrapper. */
+.journal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 12, 8, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 2000;
+}
+
+.journal-shell {
+  width: 580px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.55));
+}
+
+.journal {
+  position: relative;
+  /* Above the tabs, so their bodies tuck seamlessly under the page edge. */
+  z-index: 1;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  color: #3a2c12;
+  overflow: hidden;
+  perspective: 1600px;
+  background-color: #e4d4ad;
+  background-image:
+    /* fine paper grain / crinkle speckle */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E"),
+    /* diagonal crinkle fold catching light */
+    linear-gradient(115deg, rgba(255, 250, 235, 0.55) 0, rgba(255, 250, 235, 0) 32%, rgba(150, 118, 74, 0.16) 63%, rgba(255, 250, 235, 0) 100%),
+    /* scorched vignette darkening toward the edges */
+    radial-gradient(135% 96% at 50% 44%, rgba(120, 80, 35, 0) 50%, rgba(96, 58, 22, 0.34) 82%, rgba(48, 26, 8, 0.62) 100%),
+    /* two irregular corner burns */
+    radial-gradient(closest-side at 5% 7%, rgba(64, 34, 12, 0.5), rgba(64, 34, 12, 0) 60%),
+    radial-gradient(closest-side at 97% 95%, rgba(64, 34, 12, 0.46), rgba(64, 34, 12, 0) 55%),
+    /* base tan */
+    linear-gradient(160deg, #ece0be 0, #e0cfa4 55%, #d2bc8e 100%);
+  background-size: 200px 200px, cover, cover, cover, cover, cover;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='580' height='640' preserveAspectRatio='none'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013 0.024' numOctaves='4' seed='9' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='16' y='16' width='548' height='608' rx='5' fill='%23fff' filter='url(%23r)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='580' height='640' preserveAspectRatio='none'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013 0.024' numOctaves='4' seed='9' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='16' y='16' width='548' height='608' rx='5' fill='%23fff' filter='url(%23r)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+
+/* Binding holes down the torn-off spine edge. */
+.journal::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 20px;
+  bottom: 20px;
+  width: 0;
+  border-left: 3px dotted rgba(80, 52, 20, 0.45);
+  pointer-events: none;
+}
+
+.journal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-6) var(--space-2) 56px;
+  border-bottom: 2px dashed rgba(96, 64, 26, 0.4);
+}
+
+.journal-header h2 {
+  font-size: var(--text-heading);
+  color: #3a2c12;
+}
+
+.journal-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(70, 45, 18, 0.85);
+  color: #f2e6c8;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+/* Index tabs cut from the same parchment as the page: their long bodies tuck deep under the
+   page's torn top edge (the page paints over them, z-index above), so only the labelled nub
+   sticks up and each tab reads as part of the one sheet — not a sticker floating on top. All
+   parchment, no color; the active tab is set apart by tone + lift alone. */
+.journal-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 0 60px;
+  /* Deep negative margin pulls the page up over the tab bodies; must exceed the torn edge's
+     deepest dip so no backdrop ever shows between a tab and the page. */
+  margin: 0 6px -30px;
+  position: relative;
+  z-index: 0;
+}
+
+.journal-tab {
+  position: relative;
+  padding: 9px 18px 40px;
+  font-size: var(--text-caption);
+  font-family: var(--font-body);
+  font-weight: 800;
+  color: #6a5228;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(180deg, #ded0a4 0, #d3c091 100%);
+  box-shadow: 0 -3px 5px rgba(60, 40, 15, 0.16);
+  transition: background var(--transition-fast), transform var(--transition-fast), color var(--transition-fast);
+}
+
+.journal-tab:hover:not(:disabled) {
+  background: linear-gradient(180deg, #e6d8b0 0, #dccb9a 100%);
+  color: #4a3a1c;
+}
+
+/* Active tab: the page's own top tone, lifted a touch so it sits proud of its siblings and
+   flows straight into the page body with no seam. */
+.journal-tab.active {
+  background: linear-gradient(180deg, #efe4c4 0, #e7d8b2 100%);
+  color: #33280f;
+  transform: translateY(-3px);
+}
+
+.journal-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-6) var(--space-6) var(--space-6) 56px;
+  background: transparent;
+  color: #3a2c12;
+}
+
+/* The whole page — header title, body, and footer — flips top-down on tab change (the wrapper
+   is keyed by tab so it remounts and replays). It hinges at the top edge and swings down flat,
+   with a crease shadow that sweeps off the top as it settles, like a fresh page dropping into
+   place. Perspective lives on .journal (the parent) so the rotateX reads as real 3D depth. */
+.journal-flip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  transform-origin: top center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  animation: pageFlipDown 460ms cubic-bezier(0.33, 0, 0.2, 1);
+}
+
+.journal-flip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: linear-gradient(180deg, rgba(52, 32, 10, 0.55) 0, rgba(52, 32, 10, 0) 48%);
+  animation: pageFlipShade 460ms ease-out forwards;
+}
+
+@keyframes pageFlipDown {
+  0% {
+    transform: rotateX(72deg);
+    opacity: 0.25;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes pageFlipShade {
+  0% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.journal-sheet {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journal-flip {
+    animation: none;
+  }
+  .journal-flip::before {
+    animation: none;
+    opacity: 0;
+  }
+  .journal-tab {
+    transition: none;
+  }
+}
+
+/* Ink-on-parchment: everything inside the page reads as writing on aged paper. */
+.journal-page .hint {
+  color: rgba(74, 52, 22, 0.72);
+}
+
+.journal-section h3 {
+  font-size: var(--text-small);
+  color: #6a4a1e;
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.journal-section h3:first-child {
+  margin-top: 0;
+}
+
+.journal-readonly-note {
+  margin: 0 0 var(--space-3);
+}
+
+/* Cream lined-paper form fields, not the app's dark inkwell inputs. */
+.journal-page input {
+  background: rgba(255, 250, 235, 0.6);
+  border: 2px solid rgba(120, 88, 40, 0.45);
+  color: #2c2410;
+}
+
+.journal-page input::placeholder {
+  color: rgba(74, 52, 22, 0.5);
+}
+
+.journal-page input:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+.journal-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.journal-chip {
+  padding: 8px 16px;
+  font-size: var(--text-small);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 250, 235, 0.5);
+  color: #4a3a1c;
+  box-shadow: none;
+  border: 2px solid rgba(120, 88, 40, 0.5);
+}
+
+.journal-chip:hover:not(:disabled) {
+  background: rgba(255, 250, 235, 0.85);
+  color: #2c2410;
+}
+
+/* Active = a circled/highlighted choice in orange ink. */
+.journal-chip.active {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-color: var(--color-accent-shadow);
+}
+
+.journal-number {
+  width: 64px;
+  padding: 8px 10px;
+}
+
+.journal-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.journal-toggle-row input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-accent);
+}
+
+.journal-set-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.journal-set-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: rgba(255, 250, 235, 0.42);
+  border: 1px solid rgba(120, 88, 40, 0.32);
+  border-radius: var(--radius-md);
+}
+
+.journal-set-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.journal-set-name {
+  flex: 1;
+  font-weight: 700;
+  color: #33280f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-set-count {
+  font-size: var(--text-caption);
+  color: rgba(74, 52, 22, 0.7);
+  flex-shrink: 0;
+}
+
+.journal-icon-btn {
+  padding: 4px 10px;
+  min-width: 0;
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid rgba(120, 88, 40, 0.5);
+  border-radius: var(--radius-pill);
+  color: #5a4420;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.journal-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 250, 235, 0.7);
+  color: #2c2410;
+}
+
+.journal-icon-btn.danger:hover:not(:disabled) {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.journal-icon-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.journal-preset-blurb {
+  margin: 0 0 var(--space-3);
+}
+
+.journal-save-preset-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.journal-save-preset-row input {
+  flex: 1;
+}
+
+.journal-footer-note {
+  padding: var(--space-1) var(--space-6) var(--space-1) 56px;
+  margin: 0;
+  background: transparent;
+  color: rgba(74, 52, 22, 0.8);
+}
+
+.journal-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6) var(--space-6) 56px;
+  background: transparent;
+  border-top: 2px dashed rgba(96, 64, 26, 0.4);
+}
+
+/* Word set editor (nested inside the "My Dictionaries" page) */
+.word-set-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.word-set-textarea {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 2px solid rgba(120, 88, 40, 0.45);
+  background: rgba(255, 250, 235, 0.6);
+  color: #2c2410;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  resize: vertical;
+}
+
+.word-set-textarea::placeholder {
+  color: rgba(74, 52, 22, 0.5);
+}
+
+.word-set-textarea:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+.word-set-count {
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: #6a4a1e;
+}
+
+.word-set-count.over-limit {
+  color: var(--color-danger);
+}
+
+.word-set-rejected {
+  margin: 0;
+}
+
+.word-set-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Lobby: dictionary journal entry point + at-a-glance settings summary. */
+.dictionary-summary-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.dictionary-summary-chip {
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-inner);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-small);
+}
+
+.dictionary-summary-chip.pulse {
+  animation: dictionaryPulse 900ms ease-out;
+}
+
+@keyframes dictionaryPulse {
+  0% {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px rgba(255, 159, 67, 0.35);
+  }
+  100% {
+    border-color: var(--color-border);
+    box-shadow: none;
+  }
+}
+
+.dictionary-open-btn {
+  padding: 8px 16px;
+  font-size: var(--text-small);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  box-shadow: none;
+  border: 2px solid var(--color-border);
+}
+
+.dictionary-open-btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictionary-summary-chip.pulse {
+    animation: none;
+  }
+}
+
+/* In-game dictionary pills: min length · base list(s) · custom dictionaries. */
+.dict-pills {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dict-pill {
+  background: var(--color-surface-inner);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-caption);
+  color: var(--color-text-faint);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Desktop scale-up: the top bar and tray are sized for compact/mobile viewports by default,
    so give both more breathing room and bigger touch targets once there's room for it. */
 @media (min-width: 1024px) {

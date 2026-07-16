@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import Logo from '../components/Logo.js';
+import DictionaryJournal from '../components/DictionaryJournal.js';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function Home() {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
 
   const name = displayName.trim() || 'Guest';
 
@@ -80,6 +82,12 @@ export default function Home() {
 
         {error && <p className="error">{error}</p>}
       </div>
+
+      <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
+        My Dictionaries
+      </button>
+
+      {showJournal && <DictionaryJournal mode="standalone" onClose={() => setShowJournal(false)} />}
     </div>
   );
 }

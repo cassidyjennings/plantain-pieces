@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api.js';
 import { fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
+import { summarizeDictionaryConfig } from '../lib/dictionaries.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
+import DictionaryJournal from '../components/DictionaryJournal.js';
 
 export default function Lobby() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -13,6 +15,8 @@ export default function Lobby() {
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
+  const [pulseKey, setPulseKey] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!roomId) return;
@@ -27,7 +31,8 @@ export default function Lobby() {
     refresh();
   }, [refresh]);
 
-  useRoomEvents(roomId, () => {
+  useRoomEvents(roomId, (event) => {
+    if (event.type === 'dictionary_config_changed') setPulseKey((k) => k + 1);
     refresh();
   });
 
@@ -75,6 +80,15 @@ export default function Lobby() {
       </div>
       <p className="hint">Share this code so friends can join.</p>
 
+      <div className="dictionary-summary-row">
+        <span key={pulseKey} className={`dictionary-summary-chip${pulseKey > 0 ? ' pulse' : ''}`}>
+          {summarizeDictionaryConfig(room.dictionary_config)}
+        </span>
+        <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
+          {isHost ? 'Edit Dictionaries' : 'Dictionaries'}
+        </button>
+      </div>
+
       <div className="player-grid">
         {players.map((p) => {
           const isPlayerHost = p.profile_id === room.host_id;
@@ -109,6 +123,17 @@ export default function Lobby() {
       {isHost && !allReady && <p className="hint">Need 2+ players, all ready, to start.</p>}
 
       {error && <p className="error">{error}</p>}
+
+      {showJournal && roomId && (
+        <DictionaryJournal
+          mode="room"
+          roomId={roomId}
+          isHost={isHost}
+          activeConfig={room.dictionary_config}
+          onClose={() => setShowJournal(false)}
+          onConfigApplied={() => refresh()}
+        />
+      )}
     </div>
   );
 }

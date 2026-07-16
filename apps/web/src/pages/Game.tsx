@@ -4,6 +4,7 @@ import {
   extractWordsWithCells,
   makeKey,
   validateStructure,
+  type DictionaryConfig,
   type GridState,
 } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
@@ -69,6 +70,8 @@ export default function Game() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [bunchCount, setBunchCount] = useState(144);
+  const [dictConfig, setDictConfig] = useState<DictionaryConfig | null>(null);
+  const [dictSetNames, setDictSetNames] = useState<string[]>([]);
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [callout, setCallout] = useState<string | null>(null);
@@ -205,7 +208,16 @@ export default function Game() {
     setGrid(state.grid);
     setRack(computeUnplaced(state.rack, state.grid));
     setPlayers(playerList);
-    if (room) setBunchCount(room.bunch_count);
+    if (room) {
+      setBunchCount(room.bunch_count);
+      setDictConfig(room.dictionary_config);
+      if (room.dictionary_config.customSetIds.length > 0) {
+        api
+          .getRoomDictionarySetNames(roomId)
+          .then(({ sets }) => setDictSetNames(sets.map((s) => s.name)))
+          .catch(() => setDictSetNames([]));
+      }
+    }
   }, [roomId]);
 
   useEffect(() => {
@@ -635,6 +647,19 @@ export default function Game() {
     <div className="game-layout">
       <div className="game-topbar">
         <BunchGraphic ref={plantainCutRef} bunchCount={bunchCount} flashSignal={flashSignal} />
+        {dictConfig && (
+          <div className="dict-pills">
+            <span className="dict-pill">
+              {dictConfig.maxLength
+                ? `${dictConfig.minLength}–${dictConfig.maxLength} letters`
+                : `${dictConfig.minLength}+ letters`}
+            </span>
+            <span className="dict-pill">{dictConfig.baseEnabled ? 'English' : 'No base list'}</span>
+            <span className="dict-pill" title={dictSetNames.join(', ')}>
+              {dictSetNames.length > 0 ? dictSetNames.join(', ') : 'No custom dictionaries'}
+            </span>
+          </div>
+        )}
         <div className="opponent-pills">
           {opponents.map((p) => (
             <span key={p.profile_id} className="opponent-pill">

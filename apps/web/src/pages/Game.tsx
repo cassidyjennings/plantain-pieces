@@ -243,7 +243,12 @@ export default function Game() {
       navigate(`/room/${roomId}/results`, { replace: true });
       return;
     }
-    if (event.type === 'peel' || event.type === 'dump' || event.type === 'game_started') {
+    if (
+      event.type === 'peel' ||
+      event.type === 'dump' ||
+      event.type === 'game_started' ||
+      event.type === 'player_left'
+    ) {
       const payload = event.payload as { bunchCount?: number };
       if (typeof payload.bunchCount === 'number') setBunchCount(payload.bunchCount);
       if (roomId) fetchPlayers(roomId).then(setPlayers);
@@ -643,6 +648,17 @@ export default function Game() {
   const items = trayItems(rack, collapsed);
   const invalidPlacedCount = Object.keys(grid).filter((k) => !validCells.has(k)).length;
 
+  async function handleLeave() {
+    if (!roomId) return;
+    if (!window.confirm('Leave this game? Your tiles go back into the Bunch.')) return;
+    try {
+      await api.leaveRoom(roomId);
+    } catch {
+      // Even if the server call fails (e.g. already removed), still exit the screen.
+    }
+    navigate('/', { replace: true });
+  }
+
   return (
     <div className="game-layout">
       <div className="game-topbar">
@@ -674,6 +690,9 @@ export default function Game() {
             </button>
             <InfoTooltip text="Select a tile in your tray first. Dump returns it to the Bunch face-down and draws you 3 new tiles in exchange." />
           </span>
+          <button type="button" className="btn-leave" onClick={handleLeave}>
+            Leave
+          </button>
         </div>
       </div>
 

@@ -214,6 +214,12 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
     see a read-only live view). Lobby shows a settings summary chip that pulses on live changes; the
     in-game top bar shows three pills (min length · base list · custom dictionaries). All motion
     respects `prefers-reduced-motion`.
+- ✅ **Leave room / leave game + host migration (2026-07-15):** `leave_room` RPC
+  (`20260715000004`) — returns a leaver's tiles to the Bunch mid-game, hands host to the next
+  player by join order (seat) when the host leaves, deletes the room when the last player exits,
+  and appends a `player_left` event. Wired to a "Leave Room" button (Lobby) and "Leave" (Game, with
+  confirm). RPC logic done + migrated; the live two-session host-handoff walkthrough is the one
+  remaining browser check.
 - ⚠️ **TEMP dev hack in place:** the 2-player minimum for Split is relaxed to 1 in two spots for
   solo testing — `Lobby.tsx` (marked `// TEMP`, revert by hand: `>= 1` → `>= 2`) and a
   runtime-only patch to the `start_game` SQL function on the local DB (auto-restored by any

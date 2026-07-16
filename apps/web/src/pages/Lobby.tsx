@@ -70,6 +70,17 @@ export default function Lobby() {
     }
   }
 
+  async function handleLeave() {
+    if (!roomId) return;
+    setBusy(true);
+    try {
+      await api.leaveRoom(roomId);
+    } catch {
+      // Even if the server call fails (e.g. already removed), still exit the screen.
+    }
+    navigate('/', { replace: true });
+  }
+
   if (!room) return <div className="centered">Loading room...</div>;
 
   return (
@@ -121,6 +132,10 @@ export default function Lobby() {
         </button>
       )}
       {isHost && !allReady && <p className="hint">Need 2+ players, all ready, to start.</p>}
+
+      <button type="button" className="btn-leave" disabled={busy} onClick={handleLeave}>
+        ← Leave Room
+      </button>
 
       {error && <p className="error">{error}</p>}
 

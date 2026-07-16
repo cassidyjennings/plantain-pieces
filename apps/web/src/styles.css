@@ -1380,6 +1380,22 @@ button:disabled {
   }
 }
 
+/* Quiet exit affordance — visible but never competing with the primary actions. */
+.btn-leave {
+  padding: 8px 16px;
+  font-size: var(--text-small);
+  background: transparent;
+  color: var(--color-text-faint);
+  box-shadow: none;
+  border: 2px solid var(--color-border);
+}
+
+.btn-leave:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
 /* In-game dictionary pills: min length · base list(s) · custom dictionaries. */
 .dict-pills {
   display: flex;

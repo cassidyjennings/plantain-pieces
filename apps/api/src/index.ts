@@ -72,6 +72,18 @@ app.post('/rooms/:roomId/start', async (c) => {
   return c.json(data);
 });
 
+app.post('/rooms/:roomId/leave', async (c) => {
+  const profileId = c.get('profileId');
+  const roomId = c.req.param('roomId');
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('leave_room', {
+    p_room_id: roomId,
+    p_profile: profileId,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
 app.get('/rooms/:roomId/me', async (c) => {
   const profileId = c.get('profileId');
   const roomId = c.req.param('roomId');

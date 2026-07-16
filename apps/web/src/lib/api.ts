@@ -94,6 +94,12 @@ export const api = {
   startGame: (roomId: string) =>
     call<{ ok: true }>(`/rooms/${roomId}/start`, { method: 'POST', body: '{}' }),
 
+  leaveRoom: (roomId: string) =>
+    call<{ ok: true; newHostId?: string; roomDeleted?: boolean }>(`/rooms/${roomId}/leave`, {
+      method: 'POST',
+      body: '{}',
+    }),
+
   getMyState: (roomId: string) => call<MyState>(`/rooms/${roomId}/me`),
 
   peel: (roomId: string, grid: GridState) =>

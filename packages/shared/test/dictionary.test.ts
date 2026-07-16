@@ -124,4 +124,41 @@ describe('validateDictionaryConfig', () => {
     const config: DictionaryConfig = { ...DEFAULT_DICTIONARY_CONFIG, maxLength: null };
     expect(validateDictionaryConfig(config, owned)).toEqual({ valid: true });
   });
+
+  it('accepts a custom set as the base when it is also an included set', () => {
+    const config: DictionaryConfig = {
+      ...DEFAULT_DICTIONARY_CONFIG,
+      baseEnabled: false,
+      baseSetId: 'set-a',
+      customSetIds: ['set-a', 'set-b'],
+    };
+    expect(validateDictionaryConfig(config, owned)).toEqual({ valid: true });
+  });
+
+  it('rejects a base set that is not among the included sets', () => {
+    // Otherwise the union that decides validity wouldn't actually contain the base.
+    const config: DictionaryConfig = {
+      ...DEFAULT_DICTIONARY_CONFIG,
+      baseEnabled: false,
+      baseSetId: 'set-a',
+      customSetIds: ['set-b'],
+    };
+    expect(validateDictionaryConfig(config, owned)).toEqual({
+      valid: false,
+      reason: 'INVALID_CUSTOM_SET',
+    });
+  });
+
+  it('rejects a base set the caller does not own', () => {
+    const config: DictionaryConfig = {
+      ...DEFAULT_DICTIONARY_CONFIG,
+      baseEnabled: false,
+      baseSetId: 'not-mine',
+      customSetIds: ['not-mine'],
+    };
+    expect(validateDictionaryConfig(config, owned)).toEqual({
+      valid: false,
+      reason: 'INVALID_CUSTOM_SET',
+    });
+  });
 });

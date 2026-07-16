@@ -5,7 +5,7 @@ import { fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../
 import { summarizeDictionaryConfig } from '../lib/dictionaries.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
-import DictionaryJournal from '../components/DictionaryJournal.js';
+import WordlistModal from '../components/WordlistModal.js';
 
 export default function Lobby() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -17,6 +17,7 @@ export default function Lobby() {
   const [busy, setBusy] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [pulseKey, setPulseKey] = useState(0);
+  const [setNames, setSetNames] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     if (!roomId) return;
@@ -31,8 +32,27 @@ export default function Lobby() {
     refresh();
   }, [refresh]);
 
+  /** The config only carries set ids, and the host's dictionaries are RLS-private to them, so
+   * the summary chip needs the Worker to resolve the names it's allowed to show. */
+  const refreshSetNames = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const { sets } = await api.getRoomDictionarySetNames(roomId);
+      setSetNames(Object.fromEntries(sets.map((s) => [s.id, s.name])));
+    } catch {
+      setSetNames({});
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    refreshSetNames();
+  }, [refreshSetNames]);
+
   useRoomEvents(roomId, (event) => {
-    if (event.type === 'dictionary_config_changed') setPulseKey((k) => k + 1);
+    if (event.type === 'dictionary_config_changed') {
+      setPulseKey((k) => k + 1);
+      refreshSetNames();
+    }
     refresh();
   });
 
@@ -93,10 +113,13 @@ export default function Lobby() {
 
       <div className="dictionary-summary-row">
         <span key={pulseKey} className={`dictionary-summary-chip${pulseKey > 0 ? ' pulse' : ''}`}>
-          {summarizeDictionaryConfig(room.dictionary_config)}
+          {summarizeDictionaryConfig(
+            room.dictionary_config,
+            (id) => setNames[id] ?? 'Custom',
+          )}
         </span>
         <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
-          {isHost ? 'Edit Dictionaries' : 'Dictionaries'}
+          Choose Wordlist
         </button>
       </div>
 
@@ -140,13 +163,12 @@ export default function Lobby() {
       {error && <p className="error">{error}</p>}
 
       {showJournal && roomId && (
-        <DictionaryJournal
-          mode="room"
+        <WordlistModal
           roomId={roomId}
           isHost={isHost}
           activeConfig={room.dictionary_config}
           onClose={() => setShowJournal(false)}
-          onConfigApplied={() => refresh()}
+          onApplied={() => refresh()}
         />
       )}
     </div>

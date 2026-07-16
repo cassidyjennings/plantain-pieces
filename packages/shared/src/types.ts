@@ -24,18 +24,29 @@ export type Rack = Letter[];
 
 export type RoomStatus = 'lobby' | 'active' | 'finished';
 
-/** Per-room dictionary configuration. Topic filtering is stubbed until tagged data exists. */
+/**
+ * Per-room dictionary configuration. Topic filtering is stubbed until tagged data exists.
+ *
+ * A wordlist is one **base** dictionary plus any number of **additional** ones. The accepted
+ * words are the union of all of them — base vs additional is a modelling/UI distinction, not a
+ * filtering one, which is why `customSetIds` alone still drives `find_invalid_words`.
+ * The base is either the built-in ENABLE1 list (`baseEnabled`, `baseSetId: null`) or one of the
+ * player's own custom sets (`baseSetId`, which is ALSO listed in `customSetIds` so the union
+ * stays correct without the SQL needing to know about bases at all).
+ */
 export interface DictionaryConfig {
   /** Minimum word length allowed (inclusive). Bananagrams default is 2. */
   minLength: number;
   /** Maximum word length allowed (inclusive), or null for no upper bound. */
   maxLength: number | null;
-  /** Whether the base ENABLE1 list is enabled. */
+  /** Whether the built-in ENABLE1 list is included (and, when baseSetId is null, is the base). */
   baseEnabled: boolean;
   /** Topic tags to exclude (no-op until words are topic-tagged). */
   excludedTopics: string[];
-  /** Custom word set ids to include in addition to the base list. */
+  /** Every custom word set included — the custom base (if any) plus the additional ones. */
   customSetIds: string[];
+  /** The custom set serving as the base, or null when the base is the built-in list. */
+  baseSetId?: string | null;
 }
 
 export const DEFAULT_DICTIONARY_CONFIG: DictionaryConfig = {
@@ -44,6 +55,7 @@ export const DEFAULT_DICTIONARY_CONFIG: DictionaryConfig = {
   baseEnabled: true,
   excludedTopics: [],
   customSetIds: [],
+  baseSetId: null,
 };
 
 /** Reasons a grid can fail structural validation. */

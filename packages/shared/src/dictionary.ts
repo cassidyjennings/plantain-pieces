@@ -64,7 +64,7 @@ export function validateDictionaryConfig(
   config: DictionaryConfig,
   ownedCustomSetIds: string[] | Set<string>,
 ): DictionaryConfigValidity {
-  const { minLength, maxLength, baseEnabled, customSetIds } = config;
+  const { minLength, maxLength, baseEnabled, customSetIds, baseSetId } = config;
 
   if (!Number.isInteger(minLength) || minLength < 1 || minLength > WORD_LENGTH_MAX) {
     return { valid: false, reason: 'INVALID_DICTIONARY_CONFIG' };
@@ -83,6 +83,12 @@ export function validateDictionaryConfig(
     if (!owned.has(id)) {
       return { valid: false, reason: 'INVALID_CUSTOM_SET' };
     }
+  }
+
+  // A custom base must also be one of the included sets — otherwise the union that actually
+  // decides word validity wouldn't contain the base at all.
+  if (baseSetId != null && !customSetIds.includes(baseSetId)) {
+    return { valid: false, reason: 'INVALID_CUSTOM_SET' };
   }
 
   return { valid: true };

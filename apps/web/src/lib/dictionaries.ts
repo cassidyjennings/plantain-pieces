@@ -41,17 +41,71 @@ export async function fetchCustomWordSetWords(setId: string): Promise<string[]> 
   return (data as { word: string }[]).map((row) => row.word);
 }
 
-/** One-line human summary of a config, e.g. "Standard + 2 custom · 3–8 letters". */
-export function summarizeDictionaryConfig(config: DictionaryConfig): string {
-  const sources: string[] = [];
-  if (config.baseEnabled) sources.push('Standard');
-  if (config.customSetIds.length > 0) {
-    sources.push(`${config.customSetIds.length} custom`);
+/** The built-in ENABLE1 English list — always available as a base, owned by no one. */
+export const ENGLISH_BASE_LABEL = 'English';
+
+/** Which dictionary a wordlist is built on: the built-in list, or one of your own sets. */
+export type BaseSource = { kind: 'english' } | { kind: 'custom'; id: string };
+
+/**
+ * The base a config is built on. Configs written before bases existed (and any where the base
+ * was implicit) fall back sensibly: base = English if it's on, else the first custom set.
+ */
+export function getBaseSource(config: DictionaryConfig): BaseSource | null {
+  if (config.baseSetId) return { kind: 'custom', id: config.baseSetId };
+  if (config.baseEnabled) return { kind: 'english' };
+  if (config.customSetIds.length > 0) return { kind: 'custom', id: config.customSetIds[0] };
+  return null;
+}
+
+/** The included custom sets that aren't the base — i.e. the "added on top" ones. */
+export function getAdditionalSetIds(config: DictionaryConfig): string[] {
+  const base = getBaseSource(config);
+  if (base?.kind === 'custom') return config.customSetIds.filter((id) => id !== base.id);
+  return config.customSetIds;
+}
+
+/** Swap the base, keeping the additional dictionaries. A custom base stays in customSetIds
+ * so the word-validity union (which is all the SQL looks at) still contains it. */
+export function withBaseSource(config: DictionaryConfig, base: BaseSource): DictionaryConfig {
+  const additional = getAdditionalSetIds(config);
+  if (base.kind === 'english') {
+    return { ...config, baseEnabled: true, baseSetId: null, customSetIds: additional };
   }
+  return {
+    ...config,
+    baseEnabled: false,
+    baseSetId: base.id,
+    customSetIds: [base.id, ...additional.filter((id) => id !== base.id)],
+  };
+}
+
+/** Replace the additional dictionaries, leaving the base untouched. */
+export function withAdditionalSetIds(config: DictionaryConfig, ids: string[]): DictionaryConfig {
+  const base = getBaseSource(config);
+  if (base?.kind === 'custom') {
+    return { ...config, customSetIds: [base.id, ...ids.filter((id) => id !== base.id)] };
+  }
+  return { ...config, customSetIds: ids };
+}
+
+/** One-line human summary of a config, e.g. "English + 2 more · 3–8 letters". */
+export function summarizeDictionaryConfig(
+  config: DictionaryConfig,
+  nameFor?: (id: string) => string,
+): string {
+  const base = getBaseSource(config);
+  const additional = getAdditionalSetIds(config);
+  let baseLabel: string;
+  if (!base) baseLabel = 'No dictionary!';
+  else if (base.kind === 'english') baseLabel = ENGLISH_BASE_LABEL;
+  else baseLabel = nameFor ? nameFor(base.id) : 'Custom';
+
+  const sources = additional.length > 0 ? `${baseLabel} + ${additional.length} more` : baseLabel;
   const lengthPart = config.maxLength
     ? `${config.minLength}–${config.maxLength} letters`
     : `${config.minLength}+ letters`;
-  return `${sources.join(' + ') || 'No dictionary!'} · ${lengthPart}`;
+  return `${sources} · ${lengthPart}`;
 }
 
 export async function fetchMyDictionaryPresets(): Promise<DictionaryPresetRow[]> {

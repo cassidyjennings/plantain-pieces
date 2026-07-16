@@ -87,7 +87,7 @@ export default function Home() {
         My Dictionaries
       </button>
 
-      {showJournal && <DictionaryJournal mode="standalone" onClose={() => setShowJournal(false)} />}
+      {showJournal && <DictionaryJournal onClose={() => setShowJournal(false)} />}
     </div>
   );
 }

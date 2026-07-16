@@ -919,7 +919,6 @@ button:disabled {
   flex-direction: column;
   color: #3a2c12;
   overflow: hidden;
-  perspective: 1600px;
   background-color: #e4d4ad;
   background-image:
     /* fine paper grain / crinkle speckle */
@@ -1026,70 +1025,26 @@ button:disabled {
   color: #3a2c12;
 }
 
-/* The whole page — header title, body, and footer — flips top-down on tab change (the wrapper
-   is keyed by tab so it remounts and replays). It hinges at the top edge and swings down flat,
-   with a crease shadow that sweeps off the top as it settles, like a fresh page dropping into
-   place. Perspective lives on .journal (the parent) so the rotateX reads as real 3D depth. */
+/* Holds the page's header/body/footer as one column. */
 .journal-flip {
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  transform-origin: top center;
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
-  animation: pageFlipDown 460ms cubic-bezier(0.33, 0, 0.2, 1);
-}
-
-.journal-flip::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
-  background: linear-gradient(180deg, rgba(52, 32, 10, 0.55) 0, rgba(52, 32, 10, 0) 48%);
-  animation: pageFlipShade 460ms ease-out forwards;
-}
-
-@keyframes pageFlipDown {
-  0% {
-    transform: rotateX(72deg);
-    opacity: 0.25;
-  }
-  55% {
-    opacity: 1;
-  }
-  100% {
-    transform: rotateX(0deg);
-    opacity: 1;
-  }
-}
-
-@keyframes pageFlipShade {
-  0% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 0.4;
-  }
-  100% {
-    opacity: 0;
-  }
 }
 
 .journal-sheet {
   position: relative;
 }
 
+.wordlist-readonly-value {
+  margin: 0 0 var(--space-2);
+  font-weight: 700;
+  color: #33280f;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .journal-flip {
-    animation: none;
-  }
-  .journal-flip::before {
-    animation: none;
-    opacity: 0;
-  }
   .journal-tab {
     transition: none;
   }
@@ -1198,7 +1153,8 @@ button:disabled {
   border-radius: var(--radius-md);
 }
 
-.journal-set-row input[type='checkbox'] {
+.journal-set-row input[type='checkbox'],
+.journal-set-row input[type='radio'] {
   width: 18px;
   height: 18px;
   accent-color: var(--color-accent);
@@ -1277,6 +1233,13 @@ button:disabled {
   padding: var(--space-3) var(--space-6) var(--space-6) 56px;
   background: transparent;
   border-top: 2px dashed rgba(96, 64, 26, 0.4);
+}
+
+/* Save-as-preset sits opposite Apply — anyone can take the list, only the host can change it. */
+.wordlist-footer {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
 }
 
 /* Word set editor (nested inside the "My Dictionaries" page) */
@@ -1417,6 +1380,58 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Word length is a live game setting, so its pill carries its own − / + controls for the host
+   rather than living behind a dialog. Padding tightens to let the round steppers sit flush in
+   the oval. */
+.dict-pill-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  max-width: none;
+  overflow: visible;
+}
+
+.dict-step-value {
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.dict-step {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dict-step:hover:not(:disabled) {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+.dict-step:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.dict-step:disabled {
+  opacity: 0.35;
+  background: var(--color-surface-raised);
+  box-shadow: none;
 }
 
 /* Desktop scale-up: the top bar and tray are sized for compact/mobile viewports by default,

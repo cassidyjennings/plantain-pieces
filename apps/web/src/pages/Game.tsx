@@ -4,11 +4,18 @@ import {
   extractWordsWithCells,
   makeKey,
   validateStructure,
+  WORD_LENGTH_MAX,
   type DictionaryConfig,
   type GridState,
 } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
 import { fetchPlayers, fetchRoom, type PublicPlayer } from '../lib/rooms.js';
+import {
+  ENGLISH_BASE_LABEL,
+  getAdditionalSetIds,
+  getBaseSource,
+} from '../lib/dictionaries.js';
+import WordlistModal from '../components/WordlistModal.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import {
@@ -71,7 +78,9 @@ export default function Game() {
   const [collapsed, setCollapsed] = useState(false);
   const [bunchCount, setBunchCount] = useState(144);
   const [dictConfig, setDictConfig] = useState<DictionaryConfig | null>(null);
-  const [dictSetNames, setDictSetNames] = useState<string[]>([]);
+  const [dictSetNames, setDictSetNames] = useState<Record<string, string>>({});
+  const [showWordlist, setShowWordlist] = useState(false);
+  const [roomHostId, setRoomHostId] = useState<string | null>(null);
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [callout, setCallout] = useState<string | null>(null);
@@ -198,6 +207,26 @@ export default function Game() {
     });
   }, [rack, collapsed, revealChip]);
 
+  /** Pull the room's wordlist plus the names for whichever dictionaries it references (the
+   * config only carries ids, and the host's sets are RLS-private to them). */
+  const loadDictionary = useCallback(async () => {
+    if (!roomId) return;
+    const room = await fetchRoom(roomId);
+    if (!room) return;
+    setDictConfig(room.dictionary_config);
+    setRoomHostId(room.host_id);
+    if (room.dictionary_config.customSetIds.length > 0) {
+      try {
+        const { sets } = await api.getRoomDictionarySetNames(roomId);
+        setDictSetNames(Object.fromEntries(sets.map((s) => [s.id, s.name])));
+      } catch {
+        setDictSetNames({});
+      }
+    } else {
+      setDictSetNames({});
+    }
+  }, [roomId]);
+
   const loadState = useCallback(async () => {
     if (!roomId) return;
     const [state, room, playerList] = await Promise.all([
@@ -208,17 +237,9 @@ export default function Game() {
     setGrid(state.grid);
     setRack(computeUnplaced(state.rack, state.grid));
     setPlayers(playerList);
-    if (room) {
-      setBunchCount(room.bunch_count);
-      setDictConfig(room.dictionary_config);
-      if (room.dictionary_config.customSetIds.length > 0) {
-        api
-          .getRoomDictionarySetNames(roomId)
-          .then(({ sets }) => setDictSetNames(sets.map((s) => s.name)))
-          .catch(() => setDictSetNames([]));
-      }
-    }
-  }, [roomId]);
+    if (room) setBunchCount(room.bunch_count);
+    loadDictionary();
+  }, [roomId, loadDictionary]);
 
   useEffect(() => {
     loadState();
@@ -252,6 +273,9 @@ export default function Game() {
       const payload = event.payload as { bunchCount?: number };
       if (typeof payload.bunchCount === 'number') setBunchCount(payload.bunchCount);
       if (roomId) fetchPlayers(roomId).then(setPlayers);
+    }
+    if (event.type === 'dictionary_config_changed') {
+      loadDictionary();
     }
     if (event.type === 'plantains_rejected') {
       const payload = event.payload as { actor: string; reason: string };
@@ -659,21 +683,77 @@ export default function Game() {
     navigate('/', { replace: true });
   }
 
+  /** Host-only nudge of the shortest word allowed. Applies live to everyone via the room event. */
+  async function stepMinLength(delta: number) {
+    if (!roomId || !dictConfig) return;
+    const next = Math.min(WORD_LENGTH_MAX, Math.max(1, dictConfig.minLength + delta));
+    if (next === dictConfig.minLength) return;
+    const optimistic = { ...dictConfig, maxLength: dictConfig.maxLength, minLength: next };
+    setDictConfig(optimistic);
+    try {
+      await api.setDictionaryConfig(roomId, optimistic);
+    } catch {
+      loadDictionary();
+    }
+  }
+
+  const isHost = roomHostId != null && roomHostId === profileId;
+  const dictBase = dictConfig ? getBaseSource(dictConfig) : null;
+  const dictAdditional = dictConfig ? getAdditionalSetIds(dictConfig) : [];
+  const nameForSet = (id: string) => dictSetNames[id] ?? 'Unknown dictionary';
+  const minLengthAtCap =
+    !!dictConfig && dictConfig.maxLength != null && dictConfig.minLength >= dictConfig.maxLength;
+
   return (
     <div className="game-layout">
       <div className="game-topbar">
         <BunchGraphic ref={plantainCutRef} bunchCount={bunchCount} flashSignal={flashSignal} />
         {dictConfig && (
           <div className="dict-pills">
+            <span className="dict-pill dict-pill-stepper">
+              {isHost && (
+                <button
+                  type="button"
+                  className="dict-step"
+                  aria-label="Shorter words allowed"
+                  disabled={dictConfig.minLength <= 1}
+                  onClick={() => stepMinLength(-1)}
+                >
+                  −
+                </button>
+              )}
+              <span className="dict-step-value">
+                {dictConfig.maxLength
+                  ? `${dictConfig.minLength}–${dictConfig.maxLength} letters`
+                  : `${dictConfig.minLength}+ letters`}
+              </span>
+              {isHost && (
+                <button
+                  type="button"
+                  className="dict-step"
+                  aria-label="Longer words required"
+                  disabled={dictConfig.minLength >= WORD_LENGTH_MAX || minLengthAtCap}
+                  onClick={() => stepMinLength(1)}
+                >
+                  +
+                </button>
+              )}
+            </span>
             <span className="dict-pill">
-              {dictConfig.maxLength
-                ? `${dictConfig.minLength}–${dictConfig.maxLength} letters`
-                : `${dictConfig.minLength}+ letters`}
+              {dictBase
+                ? dictBase.kind === 'english'
+                  ? ENGLISH_BASE_LABEL
+                  : nameForSet(dictBase.id)
+                : 'No base list'}
             </span>
-            <span className="dict-pill">{dictConfig.baseEnabled ? 'English' : 'No base list'}</span>
-            <span className="dict-pill" title={dictSetNames.join(', ')}>
-              {dictSetNames.length > 0 ? dictSetNames.join(', ') : 'No custom dictionaries'}
+            <span className="dict-pill" title={dictAdditional.map(nameForSet).join(', ')}>
+              {dictAdditional.length > 0
+                ? dictAdditional.map(nameForSet).join(', ')
+                : 'No added dictionaries'}
             </span>
+            <button type="button" className="dictionary-open-btn" onClick={() => setShowWordlist(true)}>
+              Choose Wordlist
+            </button>
           </div>
         )}
         <div className="opponent-pills">
@@ -739,6 +819,16 @@ export default function Game() {
       />
 
       <SliceFlyLayer ref={sliceRef} />
+
+      {showWordlist && roomId && dictConfig && (
+        <WordlistModal
+          roomId={roomId}
+          isHost={isHost}
+          activeConfig={dictConfig}
+          onClose={() => setShowWordlist(false)}
+          onApplied={(config) => setDictConfig(config)}
+        />
+      )}
 
       {ghost && <DragGhost letter={ghost.letter} x={pointer.x} y={pointer.y} />}
     </div>

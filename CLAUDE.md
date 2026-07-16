@@ -237,9 +237,21 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
 - If `npx supabase start` fails with a docker-context pipe error, run
   `docker context use desktop-linux` (the CLI sometimes points at the `default` npipe context,
   which needs admin rights; `desktop-linux` doesn't).
-- A stale/corrupted socket file at `%LOCALAPPDATA%\Docker\run\*.sock` can block Docker Desktop
-  from starting ("file cannot be accessed by the system"). Fix: close Docker Desktop, delete the
-  `Docker\run` folder from an **admin** PowerShell, relaunch.
+- **Docker Desktop's stale-socket startup crash is handled automatically — use `npm run db:start`**
+  (or `npm run docker:up`), which runs `scripts/docker-up.ps1` first. Don't hand-fix it, and don't
+  reboot for it.
+  - Symptom: Docker dies on launch with `listening on unix://.../dockerInference: remove ...:
+    The file cannot be accessed by the system.` It recreates the bad file each attempt, so it
+    loops forever. **It also masquerades as auth bugs**: with Supabase down, the Worker's
+    `requireAuth` can't reach Supabase Auth to verify tokens, so every route 401s and the UI shows
+    UNAUTHORIZED everywhere. Check Docker before debugging auth.
+  - Cause: Docker's services listen on AF_UNIX sockets, which Windows implements as **reparse
+    points** under `%LOCALAPPDATA%`. An unclean exit orphans them; Windows then can't open them,
+    so Docker's own `remove` fails. Affects at least `Docker\run\` and `docker-secrets-engine\`.
+  - Fix: the orphaned *files* can't be deleted unprivileged, but **renaming their parent
+    directory** never opens the children and works fine — Docker then recreates a clean folder.
+    That's what the script does (quarantine to `<name>.broken-<stamp>`, and sweep old ones, which
+    only become deletable after a reboot has released the handles).
 - `docker cp` / `docker exec ... /tmp/...` from Git Bash mangles the unix-style destination path
   into a Windows path. Prefix the command with `MSYS_NO_PATHCONV=1` to stop that.
 - **Newer Supabase CLI versions do NOT implicitly grant `service_role` table/function access**

@@ -13,7 +13,8 @@
     "test:shared": "npm run test --workspace @plantain/shared",
     "dev:web": "npm run dev --workspace @plantain/web",
     "dev:api": "npm run dev --workspace @plantain/api",
-    "db:start": "npx supabase start",
+    "docker:up": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker-up.ps1",
+    "db:start": "npm run docker:up && npx supabase start",
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
     "db:seed": "node scripts/seed-dictionary.mjs"

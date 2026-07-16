@@ -950,11 +950,13 @@ button:disabled {
   pointer-events: none;
 }
 
+/* Generous top padding: the torn edge displaces up to ~22px into the page, so a tighter
+   header lets the tear crowd the title. */
 .journal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6) var(--space-2) 56px;
+  padding: 30px var(--space-6) var(--space-3) 56px;
   border-bottom: 2px dashed rgba(96, 64, 26, 0.4);
 }
 
@@ -1050,9 +1052,24 @@ button:disabled {
   }
 }
 
-/* Ink-on-parchment: everything inside the page reads as writing on aged paper. */
+/* Ink-on-parchment: everything inside the page reads as writing on aged paper. The app's
+   default text colors are tuned for the dark jungle surfaces and vanish on tan, so every
+   inherited color that lands on the page gets an ink equivalent here. */
 .journal-page .hint {
   color: rgba(74, 52, 22, 0.72);
+}
+
+.journal-page .field {
+  color: #6a4a1e;
+}
+
+/* The app's danger red is pitched for a near-black background; on tan it needs to go darker
+   to stay legible. */
+.journal-page .error,
+.journal-footer .error,
+.journal-footer-note.error {
+  color: #a3231b;
+  font-weight: 700;
 }
 
 .journal-section h3 {
@@ -1359,79 +1376,22 @@ button:disabled {
   border-color: var(--color-danger);
 }
 
-/* In-game dictionary pills: min length · base list(s) · custom dictionaries. */
-.dict-pills {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.dict-pill {
+/* Who peeled last — the one bit of cross-player state worth carrying in the top bar, since a
+   peel is the event that just changed everyone's rack. */
+.last-peel-pill {
   background: var(--color-surface-inner);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  padding: 5px 12px;
+  padding: 5px 14px;
   font-family: var(--font-body);
   font-weight: 700;
   font-size: var(--text-caption);
   color: var(--color-text-faint);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Word length is a live game setting, so its pill carries its own − / + controls for the host
-   rather than living behind a dialog. Padding tightens to let the round steppers sit flush in
-   the oval. */
-.dict-pill-stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 4px;
-  max-width: none;
-  overflow: visible;
-}
-
-.dict-step-value {
-  padding: 0 6px;
-  white-space: nowrap;
-}
-
-.dict-step {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
-  color: var(--color-text-primary);
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.dict-step:hover:not(:disabled) {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-text-on-accent);
-}
-
-.dict-step:active:not(:disabled) {
-  transform: scale(0.9);
-}
-
-.dict-step:disabled {
-  opacity: 0.35;
-  background: var(--color-surface-raised);
-  box-shadow: none;
+.last-peel-pill strong {
+  color: var(--color-secondary);
 }
 
 /* Desktop scale-up: the top bar and tray are sized for compact/mobile viewports by default,

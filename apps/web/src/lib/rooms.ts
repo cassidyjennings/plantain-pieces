@@ -38,6 +38,20 @@ export async function fetchPlayers(roomId: string): Promise<PublicPlayer[]> {
   return data as PublicPlayer[];
 }
 
+/** Who peeled most recently, from the event log — so a player joining or reloading mid-game
+ * sees the current state rather than waiting for the next live peel. */
+export async function fetchLastPeelActor(roomId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('room_events')
+    .select('payload')
+    .eq('room_id', roomId)
+    .eq('type', 'peel')
+    .order('id', { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return ((data[0].payload as { actor?: string }).actor) ?? null;
+}
+
 export async function fetchDisplayName(profileId: string): Promise<string> {
   const { data } = await supabase.from('profiles').select('display_name').eq('id', profileId).single();
   return data?.display_name ?? 'Player';

@@ -230,9 +230,9 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
     validated by shared `validateDisplayName` (1–20 chars, non-unique). A customizable plantain SVG
     **`Avatar.tsx`** (config in `profiles.avatar_config`, options in shared `avatar.ts`), snapshotted
     into `room_players.avatar_config` by a trigger (migration `…05`) so it shows in the lobby grid.
-    Sign-out + config-gated Google/Apple `linkIdentity` guest-upgrade (`lib/auth.ts`;
-    `enable_manual_linking=true` + `[auth.external.google|apple]` in `config.toml`, providers
-    `enabled=false` locally so the stack boots without creds — the button surfaces a graceful error).
+    Sign-out + config-gated Google `linkIdentity` guest-upgrade (`lib/auth.ts`;
+    `enable_manual_linking=true` + `[auth.external.google]` in `config.toml`; Apple is
+    deliberately not offered — it requires a paid Apple Developer account).
     Data export (client JSON download) + account deletion (`prepare_account_deletion` clears the
     ephemeral-room FKs, then `auth.admin.deleteUser` cascades everything).
   - **Durable history + stats (server-authoritative):** new `games` / `game_players` / `profile_stats`
@@ -250,12 +250,13 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
     corpus exists); "streak" is a **general daily-play streak** (daily challenges don't exist yet);
     best-bunch-time, Daily Devotee, daily-streak milestones, Rematch Rival, and Sold Out Show were
     **cut** ("only what's computable now") — they unblock when solo/daily/rematch/spectator land.
-- ✅ **OAuth enabled + follow-up fixes (2026-07-20):** Google + Apple are now `enabled = true` in
-  `config.toml`, credentials read from `env()` → a gitignored root `.env` (template `.env.example`,
-  step-by-step in `docs/OAUTH_SETUP.md`). Verified: the stack boots with placeholder creds, `.env`
-  substitution flows into the OAuth `client_id`, and `linkIdentity` returns a real
-  accounts.google.com / appleid.apple.com authorize URL (redirect allow-list widened with
-  `/**`). Real sign-in just needs the user's own Google/Apple credentials pasted into `.env`.
+- ✅ **OAuth enabled + follow-up fixes (2026-07-20):** Google is `enabled = true` in `config.toml`,
+  credentials read from `env()` → a gitignored root `.env` (template `.env.example`, step-by-step
+  in `docs/OAUTH_SETUP.md`). Verified: the stack boots with placeholder creds, `.env` substitution
+  flows into the OAuth `client_id`, and `linkIdentity` returns a real accounts.google.com authorize
+  URL (redirect allow-list widened with `/**`). Real sign-in just needs the user's own Google
+  credentials pasted into `.env`. **Apple Sign In is deliberately not offered** (needs a paid Apple
+  Developer account) — `[auth.external.apple]` is disabled, and there's no Apple button in the UI.
   Also: display names now allow special characters/emoji (only control chars rejected —
   `validateDisplayName` + `update_profile` migration `20260720000001`); **solo play** is a real
   feature again (`start_game` allows 1 player, migration `20260720000002`; `Lobby.tsx` matches) so

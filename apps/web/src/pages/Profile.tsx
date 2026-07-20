@@ -144,7 +144,7 @@ function Overview() {
     window.location.href = '/';
   }
 
-  async function handleUpgrade(provider: 'google' | 'apple') {
+  async function handleUpgrade(provider: 'google') {
     setError(null);
     try {
       await upgradeWith(provider);
@@ -224,9 +224,6 @@ function Overview() {
             <div className="profile-oauth-row">
               <button className="btn-secondary" onClick={() => handleUpgrade('google')}>
                 Continue with Google
-              </button>
-              <button className="btn-secondary" onClick={() => handleUpgrade('apple')}>
-                Continue with Apple
               </button>
             </div>
           </>

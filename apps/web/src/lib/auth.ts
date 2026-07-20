@@ -3,9 +3,11 @@ import { supabase, ensureSession } from './supabase.js';
 
 /** OAuth guest→account upgrade + sign-out helpers. Providers are config-gated in
  * supabase/config.toml — when a provider is disabled (e.g. locally, with no real
- * credentials), linkIdentity rejects and the caller surfaces a friendly message. */
+ * credentials), linkIdentity rejects and the caller surfaces a friendly message.
+ * Only Google is offered — Apple Sign In requires a paid Apple Developer account,
+ * which this project intentionally does not use. */
 
-export type UpgradeProvider = 'google' | 'apple';
+export type UpgradeProvider = 'google';
 
 /** Sign out the current session, then immediately start a fresh anonymous guest
  * session (the app always requires a session). Returns the new guest's profile id. */
@@ -16,7 +18,7 @@ export async function signOut(): Promise<string> {
 }
 
 /** The identities linked to the current auth user. A pure guest has none (anonymous
- * users carry no identity row); a linked account has a google/apple identity. */
+ * users carry no identity row); a linked account has a google identity. */
 export async function getLinkedIdentities(): Promise<UserIdentity[]> {
   const { data, error } = await supabase.auth.getUserIdentities();
   if (error || !data) return [];
@@ -34,9 +36,6 @@ export async function upgradeWith(provider: UpgradeProvider): Promise<void> {
   });
   if (error) {
     // Provider disabled / not configured, or manual linking off — surface plainly.
-    throw new Error(
-      `Couldn't start ${provider === 'google' ? 'Google' : 'Apple'} sign-in. ` +
-        `This deployment may not have ${provider} configured yet.`,
-    );
+    throw new Error(`Couldn't start Google sign-in. This deployment may not have it configured yet.`);
   }
 }

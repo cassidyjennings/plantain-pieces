@@ -320,26 +320,15 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
-# --- Guest→account upgrade providers ---------------------------------------------------
-# Both are ENABLED and wired end-to-end (apps/web/src/lib/auth.ts → linkIdentity). The
+# --- Guest→account upgrade provider -----------------------------------------------------
+# Google is ENABLED and wired end-to-end (apps/web/src/lib/auth.ts → linkIdentity). The
 # client_id/secret are read from env() → a gitignored `.env` at the project root (see
 # .env.example). The local stack boots fine with placeholder values; the "Continue with
-# Google/Apple" buttons redirect to the real provider and only complete sign-in once you
-# put REAL credentials in `.env`. Step-by-step to obtain them: docs/OAUTH_SETUP.md.
+# Google" button redirects to the real provider and only completes sign-in once you put
+# REAL credentials in `.env`. Step-by-step to obtain them: docs/OAUTH_SETUP.md.
+# (Apple Sign In is deliberately NOT offered — it requires a paid Apple Developer account.)
 [auth.external.apple]
-enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_APPLE_CLIENT_ID)"
-# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
-secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
-# Overrides the default auth callback URL derived from auth.external_url.
-redirect_uri = ""
-# Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
-# or any other third-party OIDC providers.
-url = ""
-# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
-skip_nonce_check = true
-# If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
-email_optional = false
+enabled = false
 
 [auth.external.google]
 enabled = true

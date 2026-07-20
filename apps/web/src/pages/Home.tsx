@@ -99,7 +99,7 @@ export default function Home() {
       <div className="home-links">
         <button type="button" className="home-profile-btn" onClick={() => navigate('/profile')}>
           <Avatar config={avatarConfig} size={32} />
-          <span>{displayName.trim() || 'Your Profile'}</span>
+          <span>My Profile</span>
         </button>
         <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
           My Dictionaries

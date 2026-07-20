@@ -1545,6 +1545,9 @@ button:disabled {
   background: var(--color-accent);
   color: var(--color-text-on-accent);
 }
+.profile-tab.active:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
 .profile-content {
   width: 100%;
   display: flex;
@@ -1651,9 +1654,15 @@ button:disabled {
   font-family: var(--font-body);
   font-weight: 700;
 }
+.avatar-option:hover:not(:disabled) {
+  background: var(--color-surface-inner);
+}
 .avatar-option.selected {
   background: var(--color-accent);
   color: var(--color-text-on-accent);
+}
+.avatar-option.selected:hover:not(:disabled) {
+  background: var(--color-accent-hover);
 }
 .avatar-svg {
   flex-shrink: 0;
@@ -1805,10 +1814,17 @@ button:disabled {
   font-family: var(--font-body);
   font-weight: 700;
 }
+.segmented-option:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+}
 .segmented-option.selected {
   background: var(--color-accent);
   color: var(--color-text-on-accent);
   border-color: var(--color-accent);
+}
+.segmented-option.selected:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
 }
 
 /* Generic modal (delete confirm) */

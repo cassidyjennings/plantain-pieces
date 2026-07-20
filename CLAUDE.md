@@ -220,10 +220,9 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
   and appends a `player_left` event. Wired to a "Leave Room" button (Lobby) and "Leave" (Game, with
   confirm). RPC logic done + migrated; the live two-session host-handoff walkthrough is the one
   remaining browser check.
-- ⚠️ **TEMP dev hack in place:** the 2-player minimum for Split is relaxed to 1 in two spots for
-  solo testing — `Lobby.tsx` (marked `// TEMP`, revert by hand: `>= 1` → `>= 2`) and a
-  runtime-only patch to the `start_game` SQL function on the local DB (auto-restored by any
-  `npm run db:reset`, since it was NOT written to a migration file).
+- ✅ **Solo play is a real feature now** (2026-07-20): Split allows a single player. `start_game`
+  requires `>= 1` (migration `20260720000002`) and `Lobby.tsx` matches — the old TEMP runtime-patch
+  hack is retired and no longer needs reverting.
 - ✅ **Account / Profile system (2026-07-20), browser-verified end-to-end.** A single `/profile`
   route with in-page tabs (Overview/Stats/Achievements/History/Settings). Plan at
   `~/.claude/plans/implement-the-account-profile-system-velvet-pumpkin.md`.
@@ -251,8 +250,18 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
     corpus exists); "streak" is a **general daily-play streak** (daily challenges don't exist yet);
     best-bunch-time, Daily Devotee, daily-streak milestones, Rematch Rival, and Sold Out Show were
     **cut** ("only what's computable now") — they unblock when solo/daily/rematch/spectator land.
-- ➡️ **Next up: puzzle of the day, then bot opponent** (per build priority). OAuth is wired but needs
-  real Google/Apple credentials + `enabled=true` in a deployment to actually exercise.
+- ✅ **OAuth enabled + follow-up fixes (2026-07-20):** Google + Apple are now `enabled = true` in
+  `config.toml`, credentials read from `env()` → a gitignored root `.env` (template `.env.example`,
+  step-by-step in `docs/OAUTH_SETUP.md`). Verified: the stack boots with placeholder creds, `.env`
+  substitution flows into the OAuth `client_id`, and `linkIdentity` returns a real
+  accounts.google.com / appleid.apple.com authorize URL (redirect allow-list widened with
+  `/**`). Real sign-in just needs the user's own Google/Apple credentials pasted into `.env`.
+  Also: display names now allow special characters/emoji (only control chars rejected —
+  `validateDisplayName` + `update_profile` migration `20260720000001`); **solo play** is a real
+  feature again (`start_game` allows 1 player, migration `20260720000002`; `Lobby.tsx` matches) so
+  the old TEMP hack note is retired; the Home link says "My Profile"; and selected profile
+  tabs/segmented/avatar options hover to the accent-hover orange.
+- ➡️ **Next up: puzzle of the day, then bot opponent** (per build priority).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
 - ⬜ Not yet built: puzzle of the day (next), bot opponent, box/shift-select for multi-tile grid

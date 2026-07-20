@@ -15,6 +15,13 @@ describe('validateDisplayName', () => {
     expect(validateDisplayName('さくら')).toEqual({ valid: true });
   });
 
+  it('accepts special characters, symbols and emoji', () => {
+    expect(validateDisplayName('bad<name>')).toEqual({ valid: true });
+    expect(validateDisplayName('emoji😀here')).toEqual({ valid: true });
+    expect(validateDisplayName('semi;colon')).toEqual({ valid: true });
+    expect(validateDisplayName('x@#$%^&*!')).toEqual({ valid: true });
+  });
+
   it('rejects empty / whitespace-only', () => {
     expect(validateDisplayName('')).toEqual({ valid: false, reason: 'EMPTY' });
     expect(validateDisplayName('   ')).toEqual({ valid: false, reason: 'EMPTY' });
@@ -28,10 +35,9 @@ describe('validateDisplayName', () => {
     expect(validateDisplayName('a'.repeat(20))).toEqual({ valid: true });
   });
 
-  it('rejects disallowed characters', () => {
-    expect(validateDisplayName('bad<name>')).toEqual({ valid: false, reason: 'INVALID_CHARS' });
-    expect(validateDisplayName('emoji😀here')).toEqual({ valid: false, reason: 'INVALID_CHARS' });
-    expect(validateDisplayName('semi;colon')).toEqual({ valid: false, reason: 'INVALID_CHARS' });
+  it('rejects control characters', () => {
+    expect(validateDisplayName(`tab${String.fromCharCode(9)}tab`)).toEqual({ valid: false, reason: 'INVALID_CHARS' });
+    expect(validateDisplayName(`null${String.fromCharCode(0)}byte`)).toEqual({ valid: false, reason: 'INVALID_CHARS' });
   });
 
   it('trims surrounding whitespace before validating', () => {

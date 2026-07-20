@@ -109,7 +109,7 @@ function Overview() {
     !nameCheck.valid && nameDraft.trim().length > 0
       ? nameCheck.reason === 'TOO_LONG'
         ? 'Max 20 characters'
-        : 'Letters, numbers, spaces, - and _ only'
+        : 'No control characters allowed'
       : null;
 
   async function saveName() {

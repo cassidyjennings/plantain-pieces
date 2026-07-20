@@ -160,7 +160,7 @@ site_url = "http://127.0.0.1:5173"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["http://127.0.0.1:5173", "http://localhost:5173"]
+additional_redirect_urls = ["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5173/**", "http://localhost:5173/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -320,14 +320,14 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
-# --- Guest→account upgrade providers (config-gated) ------------------------------------
-# Both are wired end-to-end in the app (apps/web/src/lib/auth.ts → linkIdentity). They are
-# left `enabled = false` so the local stack always boots WITHOUT real credentials; the
-# upgrade buttons then surface a graceful "provider not configured" error. To turn them on
-# in a real deployment: set the SUPABASE_AUTH_EXTERNAL_*_CLIENT_ID / *_SECRET env vars and
-# flip enabled = true. client_id/secret already read from env() so no secrets live in git.
+# --- Guest→account upgrade providers ---------------------------------------------------
+# Both are ENABLED and wired end-to-end (apps/web/src/lib/auth.ts → linkIdentity). The
+# client_id/secret are read from env() → a gitignored `.env` at the project root (see
+# .env.example). The local stack boots fine with placeholder values; the "Continue with
+# Google/Apple" buttons redirect to the real provider and only complete sign-in once you
+# put REAL credentials in `.env`. Step-by-step to obtain them: docs/OAUTH_SETUP.md.
 [auth.external.apple]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_APPLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
@@ -342,7 +342,7 @@ skip_nonce_check = true
 email_optional = false
 
 [auth.external.google]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"

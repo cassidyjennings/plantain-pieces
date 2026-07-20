@@ -60,9 +60,8 @@ export default function Lobby() {
   const me = players.find((p) => p.profile_id === profileId);
   const isHost = room?.host_id === profileId;
   const activePlayers = players.filter((p) => !p.is_spectator);
-  // TEMP: relaxed from >= 2 to >= 1 for solo dev testing. Revert before real multiplayer use —
-  // the server-side minimum was patched the same way (runtime-only, not migrated) so a
-  // `db:reset` will restore the real 2-player rule; this client check needs reverting by hand.
+  // Solo play is allowed: one ready player can Split. The server-side minimum is also 1
+  // (migration 20260720000002); keep these in sync.
   const allReady = activePlayers.length >= 1 && activePlayers.every((p) => p.is_ready);
 
   async function toggleReady() {
@@ -155,7 +154,7 @@ export default function Lobby() {
           Split! 🍌
         </button>
       )}
-      {isHost && !allReady && <p className="hint">Need 2+ players, all ready, to start.</p>}
+      {isHost && !allReady && <p className="hint">Everyone needs to be ready to start.</p>}
 
       <button type="button" className="btn-leave" disabled={busy} onClick={handleLeave}>
         ← Leave Room

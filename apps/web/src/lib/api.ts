@@ -1,4 +1,4 @@
-import type { DictionaryConfig, GridState } from '@plantain/shared';
+import type { AvatarConfig, DictionaryConfig, GameSummary, GridState } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -78,6 +78,13 @@ export interface DictionaryPresetResult {
   createdAt: string;
 }
 
+export interface ProfileResult {
+  id: string;
+  displayName: string;
+  isGuest: boolean;
+  avatarConfig: AvatarConfig;
+}
+
 export const api = {
   createRoom: (displayName: string) =>
     call<CreateRoomResult>('/rooms', { method: 'POST', body: JSON.stringify({ displayName }) }),
@@ -115,7 +122,10 @@ export const api = {
     }),
 
   plantains: (roomId: string, grid: GridState) =>
-    call<{ ok: true }>(`/rooms/${roomId}/plantains`, { method: 'POST', body: JSON.stringify({ grid }) }),
+    call<{ ok: true; gameId?: string }>(`/rooms/${roomId}/plantains`, {
+      method: 'POST',
+      body: JSON.stringify({ grid }),
+    }),
 
   createWordSet: (name: string, words: string[]) =>
     call<WordSetResult>('/dictionaries/sets', { method: 'POST', body: JSON.stringify({ name, words }) }),
@@ -146,4 +156,17 @@ export const api = {
 
   getRoomDictionarySetNames: (roomId: string) =>
     call<{ sets: { id: string; name: string }[] }>(`/rooms/${roomId}/dictionary/set-names`),
+
+  updateProfile: (patch: { displayName?: string; avatarConfig?: AvatarConfig }) =>
+    call<ProfileResult>('/profile', { method: 'PATCH', body: JSON.stringify(patch) }),
+
+  exportMyData: () => call<Record<string, unknown>>('/profile/export'),
+
+  deleteAccount: () => call<{ ok: true }>('/profile', { method: 'DELETE' }),
+
+  submitGameSummary: (gameId: string, summary: GameSummary) =>
+    call<{ ok: true; longestWord: string | null; rarestWord: string | null }>(
+      `/games/${gameId}/summary`,
+      { method: 'POST', body: JSON.stringify(summary) },
+    ),
 };

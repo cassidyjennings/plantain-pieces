@@ -9,6 +9,7 @@ import {
 import { api, ApiError } from '../lib/api.js';
 import { fetchLastPeelActor, fetchPlayers, fetchRoom, type PublicPlayer } from '../lib/rooms.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
+import { useMoveTracker } from '../hooks/useMoveTracker.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import {
   computeUnplaced,
@@ -115,6 +116,10 @@ export default function Game() {
   collapsedRef.current = collapsed;
   playersRef.current = players;
   bunchRef.current = bunchCount;
+
+  // Per-game move tracking → the client end-of-game summary (words, placed count, move stats).
+  const moveTracker = useMoveTracker(grid, rack);
+  const summarySubmittedRef = useRef(false);
 
   function fireCallout(text: string) {
     setCallout(text);
@@ -229,8 +234,18 @@ export default function Game() {
     centeredRef.current = true;
   }, [grid]);
 
+  // Submit this player's end-of-game summary exactly once — the winner submits from the
+  // plantains response (complete grid), losers from the game_over event. gameId comes from
+  // whichever path fires first; the guard prevents a double submit.
+  function submitSummaryOnce(gameId: string | null | undefined) {
+    if (!gameId || summarySubmittedRef.current) return;
+    summarySubmittedRef.current = true;
+    api.submitGameSummary(gameId, moveTracker.buildSummary(gridRef.current)).catch(() => {});
+  }
+
   useRoomEvents(roomId, (event) => {
     if (event.type === 'game_over') {
+      submitSummaryOnce((event.payload as { gameId?: string | null }).gameId);
       navigate(`/room/${roomId}/results`, { replace: true });
       return;
     }
@@ -535,7 +550,8 @@ export default function Game() {
         setBunchCount(result.bunchCount);
         fireCallout('PEEL!');
       } else {
-        await api.plantains(roomId, submittedGrid);
+        const res = await api.plantains(roomId, submittedGrid);
+        submitSummaryOnce(res.gameId);
         fireCallout('PLANTAINS!');
         setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
       }
@@ -543,7 +559,8 @@ export default function Game() {
       if (err instanceof ApiError && err.message === 'BUNCH_TOO_LOW') {
         // Someone peeled the Bunch dry between our check and call — go for the win instead.
         try {
-          await api.plantains(roomId, submittedGrid);
+          const res = await api.plantains(roomId, submittedGrid);
+          submitSummaryOnce(res.gameId);
           fireCallout('PLANTAINS!');
           setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
         } catch (err2) {
@@ -613,6 +630,7 @@ export default function Game() {
     const priorRack = [...rack.map((t) => t.letter), ...Object.values(grid)];
     try {
       const result = await api.dump(roomId, tile.letter);
+      moveTracker.recordDump(tile.letter);
       const newLetters = diffNewLetters(priorRack, result.rack);
       setRack(computeUnplaced(result.rack, grid, newLetters, rack));
       setBunchCount(result.bunchCount);

@@ -3,3 +3,7 @@ export * from './tiles.js';
 export * from './bunch.js';
 export * from './grid.js';
 export * from './dictionary.js';
+export * from './profile.js';
+export * from './avatar.js';
+export * from './stats.js';
+export * from './achievements.js';

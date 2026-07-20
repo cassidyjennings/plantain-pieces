@@ -23,6 +23,14 @@ const KNOWN_ERRORS: Record<string, number> = {
   INVALID_DICTIONARY_CONFIG: 400,
   NO_WORD_SOURCE: 400,
   INVALID_CUSTOM_SET: 400,
+  // Profile / stats
+  EMPTY: 400,
+  TOO_LONG: 400,
+  INVALID_CHARS: 400,
+  INVALID_AVATAR_CONFIG: 400,
+  INVALID_SUMMARY: 400,
+  PROFILE_NOT_FOUND: 404,
+  NOT_A_PARTICIPANT: 404,
 };
 
 export function statusForRpcError(message: string): 400 | 401 | 403 | 404 | 409 {

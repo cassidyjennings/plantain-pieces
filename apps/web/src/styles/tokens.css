@@ -39,6 +39,9 @@
   --color-tile-bg: #fbf4e2;
   --color-tile-border: #d8c9a0;
   --color-tile-shadow: #7e9738;
+  /* "Part of a valid word" tile highlight — tokenized so colorblind modes can retint it. */
+  --color-tile-valid-bg: #cde6b4;
+  --color-tile-valid-border: #7fae57;
 
   /* Spacing scale (4px base) */
   --space-1: 4px;

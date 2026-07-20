@@ -1,18 +1,32 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { validateStructure, validateDictionaryConfig, type GridState, type DictionaryConfig } from '@plantain/shared';
+import {
+  validateStructure,
+  validateDictionaryConfig,
+  validateDisplayName,
+  validateAvatarConfig,
+  validateGameSummary,
+  type GridState,
+  type DictionaryConfig,
+  type AvatarConfig,
+  type GameSummary,
+} from '@plantain/shared';
 import type { Env } from './env.js';
 import { createAdminClient } from './supabase.js';
 import { requireAuth } from './auth.js';
 import { statusForRpcError } from './rpcError.js';
 import { fetchRack } from './gridValidation.js';
 import { fetchOwnedCustomSetIds, resolveCustomSetNames } from './dictionaries.js';
+import { assembleExport } from './profile.js';
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors());
 app.use('/rooms/*', requireAuth);
 app.use('/dictionaries/*', requireAuth);
+app.use('/profile', requireAuth);
+app.use('/profile/*', requireAuth);
+app.use('/games/*', requireAuth);
 
 app.get('/', (c) => c.json({ ok: true, service: 'plantain-pieces-api' }));
 
@@ -206,7 +220,31 @@ app.post('/rooms/:roomId/plantains', async (c) => {
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
 
   await admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid });
-  return c.json(data);
+
+  // Durably archive the finished game (Phase 1: server-authoritative stats + achievements)
+  // while room_players/room_events still exist, before anyone leaves and tears the room down.
+  // Archival failures must not fail the win. finish_game no longer emits game_over itself —
+  // we emit it here so it can carry the gameId (every client learns where to POST its
+  // end-of-game summary), and it still fires even if archival failed.
+  let gameId: string | undefined;
+  try {
+    const { data: archived, error: archiveError } = await admin.rpc('archive_game', {
+      p_room_id: roomId,
+      p_winner: profileId,
+    });
+    if (archiveError) console.error('archive_game failed', archiveError.message);
+    else gameId = (archived as { gameId?: string })?.gameId;
+  } catch (err) {
+    console.error('archive_game threw', (err as Error).message);
+  }
+
+  await admin.rpc('append_room_event', {
+    p_room_id: roomId,
+    p_type: 'game_over',
+    p_payload: { winner: profileId, gameId: gameId ?? null },
+  });
+
+  return c.json({ ...(data as object), gameId });
 });
 
 // --- Dictionary management ---------------------------------------------------
@@ -316,6 +354,74 @@ app.get('/rooms/:roomId/dictionary/set-names', async (c) => {
   } catch (err) {
     return c.json({ error: (err as Error).message }, 404);
   }
+});
+
+// --- Profile / account -------------------------------------------------------
+// Reads of a profile / stats / achievements / match history go DIRECT via RLS from the
+// client (apps/web/src/lib/profile.ts); only writes + the export/delete flows go here.
+
+// Update display name and/or avatar. Either field optional (null = leave unchanged).
+app.patch('/profile', async (c) => {
+  const profileId = c.get('profileId');
+  const body = await c.req.json<{ displayName?: string; avatarConfig?: AvatarConfig }>();
+
+  if (body.displayName !== undefined) {
+    const nameCheck = validateDisplayName(body.displayName);
+    if (!nameCheck.valid) return c.json({ error: nameCheck.reason }, statusForRpcError(nameCheck.reason));
+  }
+  if (body.avatarConfig !== undefined) {
+    const avatarCheck = validateAvatarConfig(body.avatarConfig);
+    if (!avatarCheck.valid) return c.json({ error: avatarCheck.reason }, statusForRpcError(avatarCheck.reason));
+  }
+
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('update_profile', {
+    p_profile: profileId,
+    p_display_name: body.displayName ?? null,
+    p_avatar_config: body.avatarConfig ?? null,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+// Full data export (client downloads it as JSON).
+app.get('/profile/export', async (c) => {
+  const profileId = c.get('profileId');
+  const admin = createAdminClient(c.env);
+  const data = await assembleExport(admin, profileId);
+  return c.json(data);
+});
+
+// Permanent account deletion. Clear ephemeral-room references first (they'd otherwise
+// block the cascade), then delete the auth user — which cascades to profiles and
+// everything FK'd to it (stats, achievements, game_players, custom sets, presets).
+app.delete('/profile', async (c) => {
+  const profileId = c.get('profileId');
+  const admin = createAdminClient(c.env);
+  const { error: cleanupError } = await admin.rpc('prepare_account_deletion', { p_profile: profileId });
+  if (cleanupError) return c.json({ error: cleanupError.message }, 400);
+  const { error } = await admin.auth.admin.deleteUser(profileId);
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json({ ok: true });
+});
+
+// Client end-of-game summary (Phase 2). Loosely validated, then merged per-player.
+app.post('/games/:gameId/summary', async (c) => {
+  const profileId = c.get('profileId');
+  const gameId = c.req.param('gameId');
+  const body = await c.req.json<GameSummary>();
+
+  const check = validateGameSummary(body);
+  if (!check.valid) return c.json({ error: 'INVALID_SUMMARY', reason: check.reason }, 400);
+
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('submit_game_summary', {
+    p_game_id: gameId,
+    p_profile: profileId,
+    p_summary: body,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
 });
 
 export default app;

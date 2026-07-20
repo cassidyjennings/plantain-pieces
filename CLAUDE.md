@@ -140,7 +140,7 @@ npm run dev:web             # vite dev      (React; needs apps/web/.env.local �
 `VITE_API_URL` (the Worker's local URL, e.g. `http://127.0.0.1:8787`).
 Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
 
-## Current status (2026-07-10)
+## Current status (2026-07-20)
 
 - ✅ Monorepo scaffold, `packages/shared` complete and tested.
 - ✅ Supabase schema, RLS, views, realtime, and all game RPCs **written, applied, and
@@ -224,14 +224,41 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
   solo testing — `Lobby.tsx` (marked `// TEMP`, revert by hand: `>= 1` → `>= 2`) and a
   runtime-only patch to the `start_game` SQL function on the local DB (auto-restored by any
   `npm run db:reset`, since it was NOT written to a migration file).
-- ➡️ **Next up: OAuth + real accounts.** Guests are anonymous auth users today; next is Google/Apple
-  OAuth linking to the *same* id so custom dictionaries/presets/progress persist beyond a guest
-  session (the schema already ties `custom_word_sets`/`dictionary_presets` to `profiles.id`).
+- ✅ **Account / Profile system (2026-07-20), browser-verified end-to-end.** A single `/profile`
+  route with in-page tabs (Overview/Stats/Achievements/History/Settings). Plan at
+  `~/.claude/plans/implement-the-account-profile-system-velvet-pumpkin.md`.
+  - **Identity:** display name is now persisted to `profiles.display_name` (was localStorage-only) —
+    validated by shared `validateDisplayName` (1–20 chars, non-unique). A customizable plantain SVG
+    **`Avatar.tsx`** (config in `profiles.avatar_config`, options in shared `avatar.ts`), snapshotted
+    into `room_players.avatar_config` by a trigger (migration `…05`) so it shows in the lobby grid.
+    Sign-out + config-gated Google/Apple `linkIdentity` guest-upgrade (`lib/auth.ts`;
+    `enable_manual_linking=true` + `[auth.external.google|apple]` in `config.toml`, providers
+    `enabled=false` locally so the stack boots without creds — the button surfaces a graceful error).
+    Data export (client JSON download) + account deletion (`prepare_account_deletion` clears the
+    ephemeral-room FKs, then `auth.admin.deleteUser` cascades everything).
+  - **Durable history + stats (server-authoritative):** new `games` / `game_players` / `profile_stats`
+    tables (migrations `…01`/`…02`). The Worker calls `archive_game` right after `finish_game`
+    (Phase 1: snapshots the roster, counts peels/dumps + first-peel timing from `room_events`, rolls
+    up `profile_stats`, unlocks server-side achievements). `finish_game` **no longer emits
+    `game_over`** (migration `…06`) — the **Worker** emits it post-archival so it can carry the
+    `gameId`; every client submits its own loosely-validated end-of-game summary (words/move-stats,
+    shared `stats.ts` `validateGameSummary`) to `POST /games/:id/summary` → `submit_game_summary`
+    (Phase 2, idempotent via `summary_applied`). `useMoveTracker.ts` builds the client summary.
+  - **9 achievements** wired (defs in shared `achievements.ts`); **accessibility** (colorblind /
+    font-size / contrast) via `<html>` data-attributes + a localStorage `settingsStore`, with the
+    valid-word tile tint tokenized so colorblind modes retint it.
+  - **Deliberate scoping calls** (see plan): word rarity is a **letter-scarcity proxy** (no frequency
+    corpus exists); "streak" is a **general daily-play streak** (daily challenges don't exist yet);
+    best-bunch-time, Daily Devotee, daily-streak milestones, Rematch Rival, and Sold Out Show were
+    **cut** ("only what's computable now") — they unblock when solo/daily/rematch/spectator land.
+- ➡️ **Next up: puzzle of the day, then bot opponent** (per build priority). OAuth is wired but needs
+  real Google/Apple credentials + `enabled=true` in a deployment to actually exercise.
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).
-- ⬜ Not yet built: OAuth/accounts (next), box/shift-select for multi-tile grid operations (drag
-  moves one tile at a time), spectator mode UI, emoji reactions, rematch (currently a stub that just
-  navigates home), friends list, achievements, daily challenge, solo play.
+- ⬜ Not yet built: puzzle of the day (next), bot opponent, box/shift-select for multi-tile grid
+  operations (drag moves one tile at a time), spectator mode UI, emoji reactions, rematch (currently
+  a stub that just navigates home), friends list, daily challenge, solo play. (Accounts/profile +
+  achievements now DONE — see the 2026-07-20 entry above.)
 
 ### Windows/Docker gotchas hit during setup (for next time)
 - If `npx supabase start` fails with a docker-context pipe error, run

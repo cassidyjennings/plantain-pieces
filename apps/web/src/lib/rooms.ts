@@ -1,4 +1,4 @@
-import type { DictionaryConfig } from '@plantain/shared';
+import type { AvatarConfig, DictionaryConfig } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 export interface PublicRoom {
@@ -20,6 +20,7 @@ export interface PublicPlayer {
   is_spectator: boolean;
   tile_count: number;
   connected: boolean;
+  avatar_config: AvatarConfig;
 }
 
 export async function fetchRoom(roomId: string): Promise<PublicRoom | null> {

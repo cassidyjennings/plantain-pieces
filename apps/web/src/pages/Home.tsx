@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { validateDisplayName } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import Logo from '../components/Logo.js';
+import Avatar from '../components/Avatar.js';
 import DictionaryJournal from '../components/DictionaryJournal.js';
 
 export default function Home() {
   const navigate = useNavigate();
   const displayName = useSessionStore((s) => s.displayName);
   const setDisplayName = useSessionStore((s) => s.setDisplayName);
+  const avatarConfig = useSessionStore((s) => s.avatarConfig);
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -16,10 +19,19 @@ export default function Home() {
 
   const name = displayName.trim() || 'Guest';
 
+  /** Persist the typed name to the account (fire-and-forget) so it survives across
+   * sessions/devices — the natural commit point is entering a game. */
+  function persistName() {
+    if (validateDisplayName(name).valid) {
+      api.updateProfile({ displayName: name }).catch(() => {});
+    }
+  }
+
   async function handleCreate() {
     setBusy(true);
     setError(null);
     try {
+      persistName();
       const room = await api.createRoom(name);
       navigate(`/room/${room.roomId}`);
     } catch (err) {
@@ -34,6 +46,7 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
+      persistName();
       const room = await api.joinRoom(joinCode.trim().toUpperCase(), name);
       navigate(`/room/${room.roomId}`);
     } catch (err) {
@@ -83,9 +96,15 @@ export default function Home() {
         {error && <p className="error">{error}</p>}
       </div>
 
-      <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
-        My Dictionaries
-      </button>
+      <div className="home-links">
+        <button type="button" className="home-profile-btn" onClick={() => navigate('/profile')}>
+          <Avatar config={avatarConfig} size={32} />
+          <span>{displayName.trim() || 'Your Profile'}</span>
+        </button>
+        <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
+          My Dictionaries
+        </button>
+      </div>
 
       {showJournal && <DictionaryJournal onClose={() => setShowJournal(false)} />}
     </div>

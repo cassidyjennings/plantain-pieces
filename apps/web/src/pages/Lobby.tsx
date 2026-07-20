@@ -6,6 +6,7 @@ import { summarizeDictionaryConfig } from '../lib/dictionaries.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import WordlistModal from '../components/WordlistModal.js';
+import Avatar from '../components/Avatar.js';
 
 export default function Lobby() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -128,7 +129,7 @@ export default function Lobby() {
           const isPlayerHost = p.profile_id === room.host_id;
           return (
             <div key={p.profile_id} className={`player-card${isPlayerHost ? ' host' : ''}`}>
-              <div className="player-avatar">{p.display_name.charAt(0).toUpperCase()}</div>
+              <Avatar config={p.avatar_config} size={52} />
               <span className="player-name">{p.display_name}</span>
               {isPlayerHost && <span className="player-host-tag">Host</span>}
               {p.is_spectator ? (

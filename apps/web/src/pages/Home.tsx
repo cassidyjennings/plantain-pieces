@@ -6,7 +6,6 @@ import { useSessionStore } from '../store/sessionStore.js';
 import Logo from '../components/Logo.js';
 import Avatar from '../components/Avatar.js';
 import DictionaryJournal from '../components/DictionaryJournal.js';
-import SoloSetupModal from '../components/SoloSetupModal.js';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
-  const [showSoloSetup, setShowSoloSetup] = useState(false);
 
   const name = displayName.trim() || 'Guest';
 
@@ -103,7 +101,7 @@ export default function Home() {
         className="btn-secondary"
         onClick={() => {
           persistName();
-          setShowSoloSetup(true);
+          navigate('/solo');
         }}
       >
         Play Solo
@@ -120,7 +118,6 @@ export default function Home() {
       </div>
 
       {showJournal && <DictionaryJournal onClose={() => setShowJournal(false)} />}
-      {showSoloSetup && <SoloSetupModal displayName={name} onClose={() => setShowSoloSetup(false)} />}
     </div>
   );
 }

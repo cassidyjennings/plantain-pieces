@@ -27,13 +27,13 @@ import DictionaryJournal from '../components/DictionaryJournal.js';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal.js';
 import { AccessibilitySettings } from '../components/AccessibilitySettings.js';
 
-type Tab = 'overview' | 'stats' | 'achievements' | 'history' | 'settings';
+type Tab = 'overview' | 'stats' | 'achievements' | 'history' | 'accessibility';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'stats', label: 'Stats' },
   { id: 'achievements', label: 'Achievements' },
   { id: 'history', label: 'History' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'accessibility', label: 'Accessibility' },
 ];
 
 type StatsFilter = 'all' | GameMode;
@@ -90,7 +90,7 @@ export default function Profile() {
         )}
         {tab === 'achievements' && <AchievementGrid achievements={achievements} />}
         {tab === 'history' && <MatchHistoryList history={history} />}
-        {tab === 'settings' && <AccessibilitySettings />}
+        {tab === 'accessibility' && <AccessibilitySettings />}
       </div>
     </div>
   );
@@ -227,7 +227,7 @@ function Overview() {
       </label>
       {nameError && <p className="error">{nameError}</p>}
       <button disabled={busy || !nameCheck.valid || nameDraft.trim() === displayName.trim()} onClick={saveName}>
-        {saved ? 'Saved ✓' : 'Save name'}
+        {saved ? 'Saved' : 'Save name'}
       </button>
 
       <div className="profile-section">
@@ -341,7 +341,7 @@ function StatsBoard({ stats, streak, filter, onFilterChange }: StatsBoardProps) 
       </div>
     );
   }
-  const avgLen = stats.total_words > 0 ? (stats.total_word_length / stats.total_words).toFixed(1) : '—';
+  const avgLen = stats.total_words > 0 ? (stats.total_word_length / stats.total_words).toFixed(1) : '-';
   const winRate = stats.games_played > 0 ? Math.round((stats.games_won / stats.games_played) * 100) : 0;
   // Solo games always end in a win (the only way not to finish is to leave, which isn't
   // archived), so choke rate / win rate read as trivial there — the multiplayer-only stats
@@ -351,14 +351,14 @@ function StatsBoard({ stats, streak, filter, onFilterChange }: StatsBoardProps) 
     stats.games_played - stats.games_won > 0
       ? Math.round((stats.choke_count / (stats.games_played - stats.games_won)) * 100)
       : 0;
-  const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '—';
+  const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '-';
 
   const tiles: { label: string; value: string | number }[] = [
     { label: 'Games played', value: stats.games_played },
     ...(showCompetitiveStats ? [{ label: 'Wins', value: `${stats.games_won} (${winRate}%)` }] : []),
-    ...(streak ? [{ label: 'Current streak', value: `${streak.current} 🔥` }, { label: 'Longest streak', value: streak.longest }] : []),
-    { label: 'Longest word', value: stats.longest_word ?? '—' },
-    { label: 'Rarest word', value: stats.rarest_word ?? '—' },
+    ...(streak ? [{ label: 'Current streak', value: streak.current }, { label: 'Longest streak', value: streak.longest }] : []),
+    { label: 'Longest word', value: stats.longest_word ?? '-' },
+    { label: 'Rarest word', value: stats.rarest_word ?? '-' },
     { label: 'Avg word length', value: avgLen },
     { label: 'Fastest peel', value: fastestPeel },
     { label: 'Tiles peeled', value: stats.total_peels },
@@ -394,7 +394,7 @@ function AchievementGrid({ achievements }: { achievements: AchievementRow[] }) {
           const isUnlocked = unlocked.has(type);
           return (
             <div key={type} className={`achievement-tile${isUnlocked ? ' unlocked' : ' locked'}`}>
-              <span className="achievement-icon">{isUnlocked ? def.icon : '🔒'}</span>
+              <span className="achievement-status">{isUnlocked ? 'Unlocked' : 'Locked'}</span>
               <span className="achievement-title">{def.title}</span>
               <span className="achievement-desc">{def.description}</span>
             </div>
@@ -421,7 +421,7 @@ function MatchHistoryList({ history }: { history: MatchHistoryRow[] }) {
         {history.map((m) => {
           const date = new Date(m.finished_at);
           const isSolo = m.mode === 'solo';
-          const opponents = m.opponents.map((o) => o.displayName).join(', ') || '—';
+          const opponents = m.opponents.map((o) => o.displayName).join(', ') || '-';
           const dur = m.duration_ms != null ? `${Math.round(m.duration_ms / 1000)}s` : '';
           return (
             <li key={m.id} className={`match-row${m.is_winner ? ' win' : ''}`}>

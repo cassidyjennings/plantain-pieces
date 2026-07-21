@@ -17,8 +17,6 @@ export type AchievementType =
 export interface AchievementDef {
   title: string;
   description: string;
-  /** Emoji shown in the achievement grid tile. */
-  icon: string;
 }
 
 /** Ordered for display (roughly easiest → rarest). */
@@ -26,47 +24,38 @@ export const ACHIEVEMENT_DEFS: Record<AchievementType, AchievementDef> = {
   speed_peeler: {
     title: 'Speed Peeler',
     description: 'Peel within 60 seconds of a Split.',
-    icon: '⚡',
   },
   marathon_mind: {
     title: 'Marathon Mind',
     description: 'Win a game with 100 or more tiles in your grid.',
-    icon: '🧠',
   },
   no_dumps_given: {
     title: 'No Dumps Given',
     description: 'Win a game without dumping a single tile.',
-    icon: '🚫',
   },
   word_nerd: {
     title: 'Word Nerd',
     description: 'Play an especially rare word.',
-    icon: '🤓',
   },
   alphabet_soup: {
     title: 'Alphabet Soup',
     description: 'Across all your games, play a word starting with every letter A–Z.',
-    icon: '🍲',
   },
   century_club: {
     title: 'Century Club',
     description: 'Play 100 games.',
-    icon: '💯',
   },
   peel_machine: {
     title: 'Peel Machine',
     description: 'Peel 1,000 tiles across all your games.',
-    icon: '⚙️',
   },
   full_house: {
     title: 'Full House',
     description: 'Play a game with all 8 player slots filled.',
-    icon: '🏠',
   },
   nail_biter: {
     title: 'Nail Biter',
     description: 'Win a game within 5 seconds of an opponent finishing.',
-    icon: '😬',
   },
 };
 

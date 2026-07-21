@@ -93,8 +93,11 @@ export interface ProfileResult {
 }
 
 export const api = {
-  createRoom: (displayName: string) =>
-    call<CreateRoomResult>('/rooms', { method: 'POST', body: JSON.stringify({ displayName }) }),
+  createRoom: (displayName: string, dictionaryConfig?: DictionaryConfig) =>
+    call<CreateRoomResult>('/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ displayName, dictionaryConfig }),
+    }),
 
   createSoloRoom: (displayName: string, dictionaryConfig: DictionaryConfig, modeConfig: SoloModeConfig) =>
     call<CreateSoloRoomResult>('/rooms/solo', {

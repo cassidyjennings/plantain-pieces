@@ -175,6 +175,25 @@ button:disabled {
   margin: 0;
 }
 
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 52px;
+  color: var(--color-text-primary);
+  text-shadow: 0 4px 0 #0a1e12;
+  -webkit-text-stroke: 2px #0f2f1e;
+  margin: 0;
+}
+
+.page-subtitle {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: 0;
+}
+
 .wordmark .accent-line {
   display: block;
   color: var(--color-secondary);
@@ -874,7 +893,7 @@ button:disabled {
   font-size: 88px;
   color: var(--color-accent);
   -webkit-text-stroke: 5px var(--color-text-on-accent);
-  animation: bigCallout 900ms ease-out;
+  animation: resultsCallout 900ms ease-out;
   text-align: center;
   margin: 0;
 }
@@ -985,35 +1004,44 @@ button:disabled {
   display: flex;
   gap: 6px;
   padding: 0 0 0 60px;
-  /* Deep negative margin pulls the page up over the tab bodies; must exceed the torn edge's
+  /* Negative margin pulls the page up over the tab bodies; must exceed the torn edge's
      deepest dip so no backdrop ever shows between a tab and the page. */
-  margin: 0 6px -30px;
+  margin: 0 6px -16px;
   position: relative;
   z-index: 0;
 }
 
 .journal-tab {
   position: relative;
-  padding: 9px 18px 40px;
+  padding: 8px 18px 18px;
   font-size: var(--text-caption);
   font-family: var(--font-body);
   font-weight: 800;
   color: #6a5228;
   border-radius: 10px 10px 0 0;
-  background: linear-gradient(180deg, #ded0a4 0, #d3c091 100%);
+  /* Sticky-note tint per tab (color-only distinction from the plain-parchment original). */
+  background: linear-gradient(180deg, #fff3b0 0, #ffe985 100%);
   box-shadow: 0 -3px 5px rgba(60, 40, 15, 0.16);
   transition: background var(--transition-fast), transform var(--transition-fast), color var(--transition-fast);
 }
 
+.journal-tab:nth-of-type(2) {
+  background: linear-gradient(180deg, #ffd6e8 0, #ffbfd9 100%);
+}
+
+.journal-tab:nth-of-type(3) {
+  background: linear-gradient(180deg, #c9f0ff 0, #a8e4ff 100%);
+}
+
 .journal-tab:hover:not(:disabled) {
-  background: linear-gradient(180deg, #e6d8b0 0, #dccb9a 100%);
+  filter: brightness(1.05);
   color: #4a3a1c;
 }
 
-/* Active tab: the page's own top tone, lifted a touch so it sits proud of its siblings and
-   flows straight into the page body with no seam. */
+/* Active tab: lifted a touch so it sits proud of its siblings and flows straight into the
+   page body with no seam; keeps its own sticky-note tint, just brightened. */
 .journal-tab.active {
-  background: linear-gradient(180deg, #efe4c4 0, #e7d8b2 100%);
+  filter: brightness(1.1);
   color: #33280f;
   transform: translateY(-3px);
 }
@@ -1041,6 +1069,42 @@ button:disabled {
   position: relative;
 }
 
+.length-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.length-stepper-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+  font-size: 1rem;
+  font-weight: 800;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-inner);
+  color: var(--color-text-primary);
+  border: 2px solid var(--color-border);
+  box-shadow: none;
+}
+.length-stepper-btn:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  border-color: var(--color-accent);
+}
+.length-stepper-value {
+  min-width: 1.6em;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-body);
+  color: var(--color-text-primary);
+}
+.length-stepper .hint {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .wordlist-readonly-value {
   margin: 0 0 var(--space-2);
   font-weight: 700;
@@ -1062,6 +1126,15 @@ button:disabled {
 
 .journal-page .field {
   color: #6a4a1e;
+}
+
+.journal-page .length-stepper-btn {
+  background: #efe4c4;
+  color: #33280f;
+  border-color: #b39a5e;
+}
+.journal-page .length-stepper-btn:hover:not(:disabled) {
+  background: #f7eeda;
 }
 
 /* The app's danger red is pitched for a near-black background; on tan it needs to go darker
@@ -1308,37 +1381,111 @@ button:disabled {
   gap: var(--space-2);
 }
 
-/* Lobby: dictionary journal entry point + at-a-glance settings summary. */
-.dictionary-summary-row {
+/* Lobby / solo setup: the "Wordlist Settings" group. A header, an always-visible length
+ * stepper, then word validation + dictionary choice side by side in one row, each with its own
+ * small label above (matching the Bunch size / Pace headers) and matched control heights. */
+.wordlist-settings-row {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
   justify-content: center;
 }
 
-.dictionary-summary-chip {
-  padding: 8px 16px;
+.wordlist-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.wordlist-control-label {
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  color: var(--color-text-primary);
+}
+
+.wordlist-control-box {
+  display: flex;
+  align-items: center;
+  height: 44px;
+}
+.wordlist-control-box .dictionary-open-btn {
+  height: 44px;
+  padding: 0 20px;
+}
+
+/* Pill-shaped on/off switch (word validation). The knob sits on one side; the ON/OFF word
+ * shows in the negative space on the other side, so the visible word always matches state. */
+.pill-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 74px;
+  height: 32px;
+  padding: 0;
   border-radius: var(--radius-pill);
   background: var(--color-surface-inner);
   border: 2px solid var(--color-border);
-  color: var(--color-text-muted);
+  box-shadow: none;
+  overflow: hidden;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.pill-switch.on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+/* Explicit hover overrides — without these, the global `button:hover` rule (which sets
+ * background to --color-accent-hover on ANY button) wins on specificity and paints an
+ * orange hover highlight even over the neutral off-state track. */
+.pill-switch:hover:not(:disabled) {
+  background: var(--color-surface-inner);
+}
+.pill-switch.on:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+.pill-switch-text {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: var(--font-body);
-  font-weight: 700;
-  font-size: var(--text-small);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
-
-.dictionary-summary-chip.pulse {
-  animation: dictionaryPulse 900ms ease-out;
+.pill-switch-text-on {
+  left: 10px;
+  color: var(--color-text-on-accent);
 }
-
-@keyframes dictionaryPulse {
-  0% {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 4px rgba(255, 159, 67, 0.35);
-  }
-  100% {
-    border-color: var(--color-border);
-    box-shadow: none;
+.pill-switch-text-off {
+  right: 10px;
+  color: var(--color-text-muted);
+}
+.pill-switch.on .pill-switch-text-on {
+  opacity: 1;
+}
+.pill-switch:not(.on) .pill-switch-text-off {
+  opacity: 1;
+}
+.pill-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+.pill-switch.on .pill-switch-knob {
+  background: var(--color-text-on-accent);
+  transform: translateX(42px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill-switch,
+  .pill-switch-knob,
+  .pill-switch-text {
+    transition: none;
   }
 }
 
@@ -1355,8 +1502,23 @@ button:disabled {
   border-color: var(--color-accent);
 }
 
+.dictionary-open-btn.pulse {
+  animation: dictionaryPulse 900ms ease-out;
+}
+
+@keyframes dictionaryPulse {
+  0% {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px rgba(255, 159, 67, 0.35);
+  }
+  100% {
+    border-color: var(--color-border);
+    box-shadow: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .dictionary-summary-chip.pulse {
+  .dictionary-open-btn.pulse {
     animation: none;
   }
 }
@@ -1720,8 +1882,16 @@ button:disabled {
 .achievement-tile.locked {
   opacity: 0.55;
 }
-.achievement-icon {
-  font-size: 2rem;
+.achievement-status {
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-secondary);
+}
+.achievement-tile.locked .achievement-status {
+  color: var(--color-text-faintest);
 }
 .achievement-title {
   font-family: var(--font-display);
@@ -1946,15 +2116,15 @@ button:disabled {
 }
 
 /* Solo mode setup modal */
-.solo-setup-card {
-  width: 480px;
-  max-height: 85vh;
-  overflow-y: auto;
-  gap: var(--space-4);
+/* A bit of extra breathing room above the primary action, on top of .centered's uniform gap. */
+.solo-start-btn {
+  margin-top: var(--space-4);
 }
+
 .solo-setup-section {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-2);
 }
 .solo-setup-section h3 {
@@ -1962,6 +2132,48 @@ button:disabled {
   font-family: var(--font-display);
   font-size: var(--text-body);
   color: var(--color-text-primary);
+}
+
+/* A true joined segmented control — buttons share one continuous border with no gaps between
+ * them, unlike .segmented's row of individually-rounded pill buttons. Used for Pace. */
+.toggle-group {
+  display: flex;
+  /* A fixed width, not a percentage: .solo-setup-section shrink-wraps its content (it isn't
+     stretched by its flex-column parent), so a percentage width here would resolve against
+     that auto size and visibly resize whenever a sibling (the pace hint text below, which
+     differs in length between Zen and Timed) changes the section's shrink-wrap width. */
+  width: 320px;
+  max-width: 100%;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface-inner);
+  overflow: hidden;
+}
+.toggle-group-option {
+  flex: 1;
+  padding: 12px 20px;
+  background: transparent;
+  color: var(--color-text-muted);
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-small);
+  border-right: 2px solid var(--color-border);
+}
+.toggle-group-option:last-child {
+  border-right: none;
+}
+.toggle-group-option:hover:not(:disabled):not(.selected) {
+  background: var(--color-surface-raised);
+}
+.toggle-group-option.selected {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.toggle-group-option.selected:hover:not(:disabled) {
+  background: var(--color-accent-hover);
 }
 
 /* Game topbar elapsed-time pill (Timed solo mode) */

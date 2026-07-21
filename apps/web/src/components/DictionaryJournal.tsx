@@ -7,7 +7,7 @@ import {
 } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
 import {
-  ENGLISH_BASE_LABEL,
+  STANDARD_DICTIONARY_LABEL,
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
   fetchCustomWordSetWords,
@@ -30,9 +30,8 @@ interface DictionaryJournalProps {
 }
 
 /**
- * Your dictionary shelf: write word lists, and save presets (named base + extras combos) to
- * reuse in future games. Word length is deliberately absent — it's a per-game setting the host
- * controls in-game, not a property of a dictionary.
+ * Your dictionary shelf: write word lists, and save presets (named dictionary + word-length
+ * combos) to reuse in future games.
  */
 export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
   const [tab, setTab] = useState<Tab>('dicts');
@@ -187,14 +186,13 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
                         <h3>Built in</h3>
                         <ul className="journal-set-list">
                           <li className="journal-set-row">
-                            <span className="journal-set-name">{ENGLISH_BASE_LABEL}</span>
-                            <span className="journal-set-count">ENABLE1 · ~172,000 words</span>
+                            <span className="journal-set-name">{STANDARD_DICTIONARY_LABEL}</span>
                           </li>
                         </ul>
 
                         <h3>Your dictionaries</h3>
                         {mySets.length === 0 && (
-                          <p className="hint">Nothing here yet — write your own word list below.</p>
+                          <p className="hint">Nothing here yet. Write your own word list below.</p>
                         )}
                         <ul className="journal-set-list">
                           {mySets.map((set) => (
@@ -304,7 +302,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
                     {presetValidity && !presetValidity.valid && (
                       <p className="error">
                         {presetValidity.reason === 'NO_WORD_SOURCE'
-                          ? 'Pick a base dictionary.'
+                          ? 'Pick at least one dictionary.'
                           : presetValidity.reason.replace(/_/g, ' ').toLowerCase()}
                       </p>
                     )}

@@ -41,71 +41,87 @@ export async function fetchCustomWordSetWords(setId: string): Promise<string[]> 
   return (data as { word: string }[]).map((row) => row.word);
 }
 
-/** The built-in ENABLE1 English list — always available as a base, owned by no one. */
-export const ENGLISH_BASE_LABEL = 'English';
+/** The built-in word list — always selectable, owned by no one. Deliberately generic (no
+ * mention of the underlying ENABLE1 source list) since players don't need to know or care
+ * which public-domain list backs it. */
+export const STANDARD_DICTIONARY_LABEL = 'Standard Dictionary';
 
-/** Which dictionary a wordlist is built on: the built-in list, or one of your own sets. */
-export type BaseSource = { kind: 'english' } | { kind: 'custom'; id: string };
-
-/**
- * The base a config is built on. Configs written before bases existed (and any where the base
- * was implicit) fall back sensibly: base = English if it's on, else the first custom set.
- */
-export function getBaseSource(config: DictionaryConfig): BaseSource | null {
-  if (config.baseSetId) return { kind: 'custom', id: config.baseSetId };
-  if (config.baseEnabled) return { kind: 'english' };
-  if (config.customSetIds.length > 0) return { kind: 'custom', id: config.customSetIds[0] };
-  return null;
-}
-
-/** The included custom sets that aren't the base — i.e. the "added on top" ones. */
-export function getAdditionalSetIds(config: DictionaryConfig): string[] {
-  const base = getBaseSource(config);
-  if (base?.kind === 'custom') return config.customSetIds.filter((id) => id !== base.id);
+/** Every dictionary currently included in a config: the built-in list (if enabled) plus every
+ * custom set, with no "base vs additional" distinction — a wordlist is just a set of one or
+ * more dictionaries chosen from a flat checklist. */
+export function getIncludedSetIds(config: DictionaryConfig): string[] {
   return config.customSetIds;
 }
 
-/** Swap the base, keeping the additional dictionaries. A custom base stays in customSetIds
- * so the word-validity union (which is all the SQL looks at) still contains it. */
-export function withBaseSource(config: DictionaryConfig, base: BaseSource): DictionaryConfig {
-  const additional = getAdditionalSetIds(config);
-  if (base.kind === 'english') {
-    return { ...config, baseEnabled: true, baseSetId: null, customSetIds: additional };
-  }
-  return {
-    ...config,
-    baseEnabled: false,
-    baseSetId: base.id,
-    customSetIds: [base.id, ...additional.filter((id) => id !== base.id)],
-  };
+/** Toggle a single custom set's inclusion. */
+export function withSetIncluded(config: DictionaryConfig, id: string, included: boolean): DictionaryConfig {
+  const customSetIds = included
+    ? [...config.customSetIds, id]
+    : config.customSetIds.filter((x) => x !== id);
+  // baseSetId is a legacy display-only field from when configs had a distinguished "base";
+  // clear it so it never points at something the union no longer contains.
+  return { ...config, customSetIds, baseSetId: null };
 }
 
-/** Replace the additional dictionaries, leaving the base untouched. */
-export function withAdditionalSetIds(config: DictionaryConfig, ids: string[]): DictionaryConfig {
-  const base = getBaseSource(config);
-  if (base?.kind === 'custom') {
-    return { ...config, customSetIds: [base.id, ...ids.filter((id) => id !== base.id)] };
-  }
-  return { ...config, customSetIds: ids };
+/** Toggle whether the built-in dictionary is included. */
+export function withStandardIncluded(config: DictionaryConfig, included: boolean): DictionaryConfig {
+  return { ...config, baseEnabled: included, baseSetId: null };
 }
 
-/** One-line human summary of a config, e.g. "English + 2 more · 3–8 letters". */
+/** One-line human summary of a config, e.g. "Standard Dictionary + 2 more · 3–8 letters". */
 export function summarizeDictionaryConfig(
   config: DictionaryConfig,
   nameFor?: (id: string) => string,
 ): string {
-  const base = getBaseSource(config);
-  const additional = getAdditionalSetIds(config);
-  let baseLabel: string;
-  if (!base) baseLabel = 'No dictionary!';
-  else if (base.kind === 'english') baseLabel = ENGLISH_BASE_LABEL;
-  else baseLabel = nameFor ? nameFor(base.id) : 'Custom';
+  const names: string[] = [];
+  if (config.baseEnabled) names.push(STANDARD_DICTIONARY_LABEL);
+  for (const id of config.customSetIds) names.push(nameFor ? nameFor(id) : 'Custom');
 
-  const sources = additional.length > 0 ? `${baseLabel} + ${additional.length} more` : baseLabel;
+  const sources =
+    names.length === 0
+      ? 'No dictionary selected!'
+      : names.length <= 2
+        ? names.join(' + ')
+        : `${names[0]} + ${names.length - 1} more`;
   const lengthPart = config.maxLength
     ? `${config.minLength}–${config.maxLength} letters`
     : `${config.minLength}+ letters`;
   return `${sources} · ${lengthPart}`;
+}
+
+/** Normalizes the fields that actually affect word validity/length for preset-equality checks —
+ * ignores customSetIds ordering and the legacy display-only baseSetId field. */
+function normalizeForCompare(config: DictionaryConfig): string {
+  return JSON.stringify({
+    minLength: config.minLength,
+    maxLength: config.maxLength,
+    baseEnabled: config.baseEnabled,
+    customSetIds: [...config.customSetIds].sort(),
+  });
+}
+
+/**
+ * The label for the "Dictionaries" button: the dictionary's own name if exactly one is
+ * selected, a count if two or more are, or a matching saved preset's name in place of either
+ * (so applying a preset shows the name you gave it, not a breakdown of what's in it).
+ */
+export function getDictionaryButtonLabel(
+  config: DictionaryConfig,
+  nameFor: (id: string) => string,
+  presets?: DictionaryPresetRow[],
+): string {
+  if (presets) {
+    const match = presets.find((p) => normalizeForCompare(p.config) === normalizeForCompare(config));
+    if (match) return match.name;
+  }
+
+  const names: string[] = [];
+  if (config.baseEnabled) names.push(STANDARD_DICTIONARY_LABEL);
+  for (const id of config.customSetIds) names.push(nameFor(id));
+
+  if (names.length === 0) return 'Choose Dictionaries';
+  if (names.length === 1) return names[0];
+  return `${names.length} Dictionaries`;
 }
 
 export async function fetchMyDictionaryPresets(): Promise<DictionaryPresetRow[]> {

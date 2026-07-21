@@ -85,7 +85,7 @@ export default function Tray({
             </button>
           );
         })}
-        {items.length === 0 && <p className="hint">All tiles placed — nice.</p>}
+        {items.length === 0 && <p className="hint">All tiles placed. Nice.</p>}
       </div>
     </div>
   );

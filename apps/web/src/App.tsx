@@ -5,6 +5,7 @@ import { useSessionStore } from './store/sessionStore.js';
 // Imported for its side effect: applies persisted accessibility settings to <html> at boot.
 import './store/settingsStore.js';
 import Home from './pages/Home.js';
+import SoloSetup from './pages/SoloSetup.js';
 import Lobby from './pages/Lobby.js';
 import Game from './pages/Game.js';
 import Results from './pages/Results.js';
@@ -33,6 +34,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/solo" element={<SoloSetup />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/room/:roomId" element={<Lobby />} />
         <Route path="/room/:roomId/game" element={<Game />} />

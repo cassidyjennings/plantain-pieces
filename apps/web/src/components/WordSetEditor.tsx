@@ -40,7 +40,7 @@ export default function WordSetEditor({
       </label>
 
       <label className="field">
-        Words <span className="hint">(paste a list — commas, spaces, or new lines all work)</span>
+        Words <span className="hint">(paste a list: commas, spaces, or new lines all work)</span>
         <textarea
           className="word-set-textarea"
           value={rawText}
@@ -52,7 +52,7 @@ export default function WordSetEditor({
 
       <div className={`word-set-count${overLimit ? ' over-limit' : ''}`}>
         {words.length} word{words.length === 1 ? '' : 's'}
-        {overLimit && ` — max ${MAX_WORDS_PER_SET}`}
+        {overLimit && ` (max ${MAX_WORDS_PER_SET})`}
       </div>
 
       {rejected.length > 0 && (

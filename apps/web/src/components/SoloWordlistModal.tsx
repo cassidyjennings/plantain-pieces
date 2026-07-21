@@ -10,31 +10,21 @@ import {
 } from '../lib/dictionaries.js';
 import DictionaryChecklist from './DictionaryChecklist.js';
 
-interface WordlistModalProps {
-  roomId: string;
-  isHost: boolean;
-  /** The room's currently active wordlist. */
-  activeConfig: DictionaryConfig;
+interface SoloWordlistModalProps {
+  config: DictionaryConfig;
+  onApply: (config: DictionaryConfig) => void;
   onClose: () => void;
-  onApplied?: (config: DictionaryConfig) => void;
 }
 
 /**
- * The room's wordlist: pick one or more dictionaries and a minimum word length. The host edits
- * and applies; everyone else sees what's in play read-only. Either way any player can save the
- * wordlist as their own preset — that's how you take a list you liked into your own games.
+ * The solo-setup equivalent of WordlistModal: there's no room yet to apply to, so "Apply" just
+ * hands the edited config back to the caller's local state. Every set/preset here is the
+ * player's own, so unlike the room version there's no read-only mode or room set-name lookup.
  */
-export default function WordlistModal({
-  roomId,
-  isHost,
-  activeConfig,
-  onClose,
-  onApplied,
-}: WordlistModalProps) {
-  const [draft, setDraft] = useState<DictionaryConfig>(activeConfig);
+export default function SoloWordlistModal({ config, onApply, onClose }: SoloWordlistModalProps) {
+  const [draft, setDraft] = useState<DictionaryConfig>(config);
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
   const [presets, setPresets] = useState<DictionaryPresetRow[]>([]);
-  const [roomSetNames, setRoomSetNames] = useState<Record<string, string>>({});
   const [presetName, setPresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,34 +36,11 @@ export default function WordlistModal({
     fetchMyDictionaryPresets().then(setPresets);
   }, []);
 
-  useEffect(() => {
-    api
-      .getRoomDictionarySetNames(roomId)
-      .then(({ sets }) => setRoomSetNames(Object.fromEntries(sets.map((s) => [s.id, s.name]))))
-      .catch(() => setRoomSetNames({}));
-  }, [roomId]);
-
   const ownedIds = useMemo(() => mySets.map((s) => s.id), [mySets]);
   const validity = useMemo(() => validateDictionaryConfig(draft, ownedIds), [draft, ownedIds]);
-  const isDirty = JSON.stringify(draft) !== JSON.stringify(activeConfig);
 
   function nameFor(id: string): string {
-    return mySets.find((s) => s.id === id)?.name ?? roomSetNames[id] ?? 'Unknown dictionary';
-  }
-
-  async function handleApply() {
-    if (!validity.valid) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.setDictionaryConfig(roomId, draft);
-      onApplied?.(result.config);
-      setNotice('Applied to the game.');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to apply the wordlist');
-    } finally {
-      setBusy(false);
-    }
+    return mySets.find((s) => s.id === id)?.name ?? 'Unknown dictionary';
   }
 
   async function handleSaveAsPreset() {
@@ -87,14 +54,7 @@ export default function WordlistModal({
       setShowSavePreset(false);
       setNotice('Saved to your presets.');
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to save preset';
-      // The wordlist can reference dictionaries owned by whoever set it up; you can't save a
-      // preset pointing at word lists that aren't yours.
-      setError(
-        message === 'INVALID_CUSTOM_SET'
-          ? "This wordlist uses dictionaries that aren't yours, so it can't be saved as your preset."
-          : message,
-      );
+      setError(err instanceof ApiError ? err.message : 'Failed to save preset');
     } finally {
       setBusy(false);
     }
@@ -114,13 +74,7 @@ export default function WordlistModal({
 
             <div className="journal-page">
               <div className="journal-sheet">
-                {!isHost && (
-                  <p className="hint journal-readonly-note">
-                    Only the host can change the wordlist. Here's what's in play.
-                  </p>
-                )}
-
-                {isHost && presets.length > 0 && (
+                {presets.length > 0 && (
                   <div className="journal-section">
                     <h3>Start from a preset</h3>
                     <div className="journal-chip-row">
@@ -139,13 +93,7 @@ export default function WordlistModal({
                   </div>
                 )}
 
-                <DictionaryChecklist
-                  config={draft}
-                  onChange={setDraft}
-                  mySets={mySets}
-                  readOnly={!isHost}
-                  nameFor={nameFor}
-                />
+                <DictionaryChecklist config={draft} onChange={setDraft} mySets={mySets} nameFor={nameFor} />
 
                 {showSavePreset && (
                   <div className="journal-section">
@@ -169,6 +117,13 @@ export default function WordlistModal({
                   </div>
                 )}
 
+                {validity && !validity.valid && (
+                  <p className="error">
+                    {validity.reason === 'NO_WORD_SOURCE'
+                      ? 'Pick at least one dictionary.'
+                      : validity.reason.replace(/_/g, ' ').toLowerCase()}
+                  </p>
+                )}
                 {error && <p className="error">{error}</p>}
                 {notice && !error && <p className="hint">{notice}</p>}
               </div>
@@ -183,15 +138,16 @@ export default function WordlistModal({
               >
                 Save as preset
               </button>
-              {isHost && (
-                <button
-                  type="button"
-                  disabled={busy || !validity.valid || !isDirty}
-                  onClick={handleApply}
-                >
-                  {isDirty ? 'Apply to Game' : 'Applied'}
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={busy || !validity.valid}
+                onClick={() => {
+                  onApply(draft);
+                  onClose();
+                }}
+              >
+                Use This Wordlist
+              </button>
             </div>
           </div>
         </div>

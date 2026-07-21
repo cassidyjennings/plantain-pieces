@@ -127,6 +127,28 @@
   }
 }
 
+/* Same entrance pop as bigCallout, but for a normal statically-positioned element (the Results
+   page's "PLANTAINS!" headline) — no translate(-50%,-50%), since that offset only exists to
+   self-center the *absolutely-positioned* in-game overlay and would otherwise permanently shift
+   a static-flow element up and to the left for the animation's duration. */
+@keyframes resultsCallout {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-6deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12) rotate(3deg);
+  }
+  75% {
+    transform: scale(0.97) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
 @keyframes bunchSway {
   0%,
   100% {
@@ -150,6 +172,13 @@
     100% {
       opacity: 1;
       transform: translate(-50%, -50%);
+    }
+  }
+  @keyframes resultsCallout {
+    0%,
+    100% {
+      opacity: 1;
+      transform: none;
     }
   }
   @keyframes bunchSway {

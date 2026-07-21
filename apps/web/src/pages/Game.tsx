@@ -11,6 +11,7 @@ import { fetchLastPeelActor, fetchPlayers, fetchRoom, type PublicPlayer, type Pu
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useMoveTracker } from '../hooks/useMoveTracker.js';
 import { useSessionStore } from '../store/sessionStore.js';
+import { useSettingsStore } from '../store/settingsStore.js';
 import {
   computeUnplaced,
   diffNewLetters,
@@ -72,6 +73,7 @@ export default function Game() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const profileId = useSessionStore((s) => s.profileId);
+  const wordValidationEnabled = useSettingsStore((s) => s.wordValidationEnabled);
 
   const [grid, setGrid] = useState<GridState>({});
   const [rack, setRack] = useState<RackTile[]>([]);
@@ -291,7 +293,7 @@ export default function Game() {
     if (event.type === 'plantains_rejected') {
       const payload = event.payload as { actor: string; reason: string };
       if (payload.actor !== profileId) {
-        setMessage(`Someone's Plantains! call was rejected (${payload.reason}) — keep playing.`);
+        setMessage(`Someone's Plantains! call was rejected (${payload.reason}). Keep playing.`);
       }
     }
   });
@@ -525,6 +527,13 @@ export default function Game() {
 
   useEffect(() => {
     if (!roomId) return;
+    // Word validation off: never fetch or tint — the auto-fire effect below bypasses the word
+    // gate entirely in this mode, so there's nothing for these to feed.
+    if (!wordValidationEnabled) {
+      setValidCells(new Set());
+      setWordsPending(false);
+      return;
+    }
     const words = extractWordsWithCells(grid);
     if (words.length === 0) {
       setValidCells(new Set());
@@ -552,7 +561,7 @@ export default function Game() {
       }
     }, 350);
     return () => clearTimeout(handle);
-  }, [grid, roomId]);
+  }, [grid, roomId, wordValidationEnabled]);
 
   // --- Auto-detect Peel / Plantains ------------------------------------------
 
@@ -602,6 +611,10 @@ export default function Game() {
   function reportActionError(err: unknown) {
     if (err instanceof ApiError) {
       const invalidWords = (err.body as { invalidWords?: string[] }).invalidWords;
+      const isWordRejection = err.message === 'INVALID_WORDS' || !!invalidWords?.length;
+      // With word validation off, players get no hint about which words are wrong — including
+      // no explanation when a complete-looking board gets rejected for bad words.
+      if (!wordValidationEnabled && isWordRejection) return;
       setMessage(
         invalidWords?.length
           ? `Rotten Plantains! Not real words: ${invalidWords.join(', ')}`
@@ -610,7 +623,7 @@ export default function Game() {
             : `That grid isn't complete yet (${err.message}).`,
       );
     } else {
-      setMessage('Action failed — try again.');
+      setMessage('Action failed. Try again.');
     }
   }
 
@@ -627,11 +640,18 @@ export default function Game() {
     // complete — often before that lookup had even started — so a board full of gibberish would
     // peel/attempt a win with zero word checking. Wait for the check to finish, and require every
     // placed tile to be part of a currently-valid word, before auto-firing.
-    if (wordsPending) return;
-    const allWordsValid = Object.keys(grid).every((k) => validCells.has(k));
-    if (!allWordsValid) {
-      autoSigRef.current = null;
-      return;
+    //
+    // With word validation off, there's no client-side word check to wait for at all — Peel and
+    // Plantains still auto-fire on structural completeness alone, and the server's own dictionary
+    // check at Plantains time is the only word validation that happens (silently, per
+    // reportActionError above).
+    if (wordValidationEnabled) {
+      if (wordsPending) return;
+      const allWordsValid = Object.keys(grid).every((k) => validCells.has(k));
+      if (!allWordsValid) {
+        autoSigRef.current = null;
+        return;
+      }
     }
     const sig = Object.keys(grid)
       .sort()
@@ -640,7 +660,7 @@ export default function Game() {
     if (autoSigRef.current === sig) return; // already attempted this exact complete grid
     autoSigRef.current = sig;
     runAutoAction();
-  }, [grid, rack, runAutoAction, wordsPending, validCells]);
+  }, [grid, rack, runAutoAction, wordsPending, validCells, wordValidationEnabled]);
 
   // --- Dump (still a deliberate action on a selected tray tile) ---------------
 
@@ -684,7 +704,11 @@ export default function Game() {
 
   const opponents = players.filter((p) => p.profile_id !== profileId && !p.is_spectator);
   const items = trayItems(rack, collapsed);
-  const invalidPlacedCount = Object.keys(grid).filter((k) => !validCells.has(k)).length;
+  // With word validation off, validCells is never populated (nothing is ever known-invalid),
+  // so don't let every placed tile read as "invalid" — there's no such distinction in this mode.
+  const invalidPlacedCount = wordValidationEnabled
+    ? Object.keys(grid).filter((k) => !validCells.has(k)).length
+    : 0;
 
   const isSolo = room?.mode === 'solo';
 
@@ -714,16 +738,16 @@ export default function Game() {
       <div className="game-topbar">
         <BunchGraphic ref={plantainCutRef} bunchCount={bunchCount} flashSignal={flashSignal} />
         <span className="last-peel-pill">
-          Last peel: <strong>{lastPeelName ?? '—'}</strong>
+          Last peel: <strong>{lastPeelName ?? '-'}</strong>
         </span>
         {isTimed && (
-          <span className="elapsed-time-pill">⏱ {formatElapsed(elapsedMs)}</span>
+          <span className="elapsed-time-pill">{formatElapsed(elapsedMs)}</span>
         )}
         {opponents.length > 0 && (
           <div className="opponent-pills">
             {opponents.map((p) => (
               <span key={p.profile_id} className="opponent-pill">
-                {p.display_name}: {p.tile_count} 🍃{!p.connected ? ' (disconnected)' : ''}
+                {p.display_name}: {p.tile_count}{!p.connected ? ' (disconnected)' : ''}
               </span>
             ))}
           </div>

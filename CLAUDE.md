@@ -140,7 +140,7 @@ npm run dev:web             # vite dev      (React; needs apps/web/.env.local �
 `VITE_API_URL` (the Worker's local URL, e.g. `http://127.0.0.1:8787`).
 Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
 
-## Current status (2026-07-20)
+## Current status (2026-07-21)
 
 - ✅ Monorepo scaffold, `packages/shared` complete and tested.
 - ✅ Supabase schema, RLS, views, realtime, and all game RPCs **written, applied, and
@@ -262,6 +262,44 @@ Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
   feature again (`start_game` allows 1 player, migration `20260720000002`; `Lobby.tsx` matches) so
   the old TEMP hack note is retired; the Home link says "My Profile"; and selected profile
   tabs/segmented/avatar options hover to the accent-hover orange.
+- ✅ **Solo mode (2026-07-21), browser-verified end-to-end.** A single player clears a Bunch alone.
+  Plan at `~/.claude/plans/implement-solo-mode-plantain-pieces.md`. Key finding that shaped the
+  design: the multiplayer engine was already player-count-agnostic and bunch-content-agnostic
+  (`runAutoAction`'s `bunchCount >= activePlayers.length` gate, the RPCs' "every player draws 1"
+  loops) — solo reuses the exact same board/peel/dump/Plantains code, not a fork.
+  - **Setup**: `SoloSetupModal.tsx` (dictionary via the existing `WordlistEditor`, Bunch-size
+    presets Quick/Standard/Full, Zen/Timed toggle) → `POST /rooms/solo` → **new dedicated
+    `create_solo_room` RPC** (not an overloaded `create_room` — appending params to an existing
+    RPC risks a second Postgres overload and an ambiguous "function is not unique" error on named-
+    parameter `.rpc()` calls; a dedicated function also matches this repo's one-RPC-per-action
+    convention). It creates the room, seeds a scaled Bunch, deals the fixed 21-tile hand, and
+    marks it `active` — all atomically, so the client skips the Lobby and lands straight in
+    `/game`.
+  - **Bunch scaling**: `scaledBunchDistribution()` (`packages/shared/src/tiles.ts`) + SQL twin
+    `_scaled_bunch` — largest-remainder proportional scaling of the 144-tile distribution, with a
+    min-1-per-letter guarantee once the bunch fits the alphabet (≥26). **Both implementations use
+    pure integer arithmetic (a remainder numerator over the common denominator 144), not a
+    float/`numeric` ratio** — a first version used `bunchSize/144` as a ratio and broke: Postgres
+    `numeric` division and JS IEEE-754 doubles round a non-terminating fraction like 96/144=2/3 to
+    different decimal tails, so "tied" remainders sorted in a different order in SQL vs TS. Worth
+    remembering for any future cross-runtime largest-remainder/apportionment logic in this repo.
+  - **Mode-aware stats**: `rooms`/`games`/`game_players` gained `mode`/`mode_config` columns;
+    `profile_stats` was **re-keyed from `profile_id` alone to composite `(profile_id, mode)`** so
+    solo and multiplayer lifetime stats don't blend. The daily play **streak is deliberately
+    account-wide, not per-mode** (user's explicit call) — it moved off `profile_stats` onto
+    `profiles` itself. `archive_game`/`submit_game_summary` updated in place (same signatures, no
+    overload risk) to key by mode; `century_club`/`peel_machine` (lifetime, mode-agnostic
+    milestones) now check the **sum across a profile's mode rows**, not a single mode's row.
+  - **Client**: `Game.tsx` gained a live elapsed-time ticker for Timed solo (gated on
+    `room.mode_config.timed`, itself free-standing — `duration_ms` is stored for every game
+    regardless of the toggle, only the *live display* is gated). `Results.tsx` branches solo
+    copy + an elapsed-time tile for Timed. The Stats tab's `fetchMyStats()` **had to change**
+    (not just "nice to have") since multiple `profile_stats` rows per profile now exist — it takes
+    an optional mode and client-aggregates across modes when omitted (the "All" pill).
+  - **Locked-in decisions** (asked via 4 clarifying questions): Dump is byte-identical to
+    multiplayer in solo (a genuine reroll, not a guaranteed escape — matches physical solo
+    Bananagrams); the initial deal stays fixed at 21 regardless of Bunch size; streak is
+    account-wide.
 - ➡️ **Next up: puzzle of the day, then bot opponent** (per build priority).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).

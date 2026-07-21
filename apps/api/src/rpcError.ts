@@ -32,6 +32,9 @@ const KNOWN_ERRORS: Record<string, number> = {
   INVALID_SUMMARY: 400,
   PROFILE_NOT_FOUND: 404,
   NOT_A_PARTICIPANT: 404,
+  // Solo mode
+  INVALID_BUNCH_SIZE: 400,
+  INVALID_TIMED_FLAG: 400,
 };
 
 export function statusForRpcError(message: string): 400 | 401 | 403 | 404 | 409 {

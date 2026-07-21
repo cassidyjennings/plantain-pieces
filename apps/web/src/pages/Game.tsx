@@ -7,7 +7,7 @@ import {
   type GridState,
 } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
-import { fetchLastPeelActor, fetchPlayers, fetchRoom, type PublicPlayer } from '../lib/rooms.js';
+import { fetchLastPeelActor, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useMoveTracker } from '../hooks/useMoveTracker.js';
 import { useSessionStore } from '../store/sessionStore.js';
@@ -30,6 +30,14 @@ import BigCallout from '../components/BigCallout.js';
 import InfoTooltip from '../components/InfoTooltip.js';
 import ZoomIcon from '../components/ZoomIcon.js';
 import SliceFlyLayer, { type SliceFlyHandle } from '../components/SliceFlyLayer.js';
+
+/** mm:ss for the Timed solo mode elapsed-time pill. */
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 const CALLOUT_MS = 900;
 const DRAG_THRESHOLD = 5;
@@ -72,6 +80,8 @@ export default function Game() {
   const [bunchCount, setBunchCount] = useState(144);
   const [lastPeelBy, setLastPeelBy] = useState<string | null>(null);
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
+  const [room, setRoom] = useState<PublicRoom | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [callout, setCallout] = useState<string | null>(null);
   const [validCells, setValidCells] = useState<Set<string>>(new Set());
@@ -203,7 +213,7 @@ export default function Game() {
 
   const loadState = useCallback(async () => {
     if (!roomId) return;
-    const [state, room, playerList, lastPeel] = await Promise.all([
+    const [state, roomData, playerList, lastPeel] = await Promise.all([
       api.getMyState(roomId),
       fetchRoom(roomId),
       fetchPlayers(roomId),
@@ -213,8 +223,23 @@ export default function Game() {
     setRack(computeUnplaced(state.rack, state.grid));
     setPlayers(playerList);
     setLastPeelBy(lastPeel);
-    if (room) setBunchCount(room.bunch_count);
+    if (roomData) {
+      setBunchCount(roomData.bunch_count);
+      setRoom(roomData);
+    }
   }, [roomId]);
+
+  // Timed solo mode: a live elapsed-time ticker from the room's started_at. Zen mode and
+  // multiplayer show nothing (mode_config.timed is only ever true for solo).
+  const isTimed = room?.mode === 'solo' && (room.mode_config as { timed?: boolean }).timed === true;
+  useEffect(() => {
+    if (!isTimed || !room?.started_at) return;
+    const startedAt = new Date(room.started_at).getTime();
+    const tick = () => setElapsedMs(Date.now() - startedAt);
+    tick();
+    const handle = setInterval(tick, 1000);
+    return () => clearInterval(handle);
+  }, [isTimed, room?.started_at]);
 
   useEffect(() => {
     loadState();
@@ -661,9 +686,14 @@ export default function Game() {
   const items = trayItems(rack, collapsed);
   const invalidPlacedCount = Object.keys(grid).filter((k) => !validCells.has(k)).length;
 
+  const isSolo = room?.mode === 'solo';
+
   async function handleLeave() {
     if (!roomId) return;
-    if (!window.confirm('Leave this game? Your tiles go back into the Bunch.')) return;
+    const confirmMsg = isSolo
+      ? "Leave this game? Your progress won't be saved."
+      : 'Leave this game? Your tiles go back into the Bunch.';
+    if (!window.confirm(confirmMsg)) return;
     try {
       await api.leaveRoom(roomId);
     } catch {
@@ -686,13 +716,18 @@ export default function Game() {
         <span className="last-peel-pill">
           Last peel: <strong>{lastPeelName ?? '—'}</strong>
         </span>
-        <div className="opponent-pills">
-          {opponents.map((p) => (
-            <span key={p.profile_id} className="opponent-pill">
-              {p.display_name}: {p.tile_count} 🍃{!p.connected ? ' (disconnected)' : ''}
-            </span>
-          ))}
-        </div>
+        {isTimed && (
+          <span className="elapsed-time-pill">⏱ {formatElapsed(elapsedMs)}</span>
+        )}
+        {opponents.length > 0 && (
+          <div className="opponent-pills">
+            {opponents.map((p) => (
+              <span key={p.profile_id} className="opponent-pill">
+                {p.display_name}: {p.tile_count} 🍃{!p.connected ? ' (disconnected)' : ''}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="game-actions">
           <span className="tray-tool-group">
             <button className="btn-tertiary" disabled={!selectedId} onClick={handleDump}>

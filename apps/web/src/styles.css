@@ -1944,3 +1944,34 @@ button:disabled {
   font-weight: 700;
   color: var(--color-text-primary);
 }
+
+/* Solo mode setup modal */
+.solo-setup-card {
+  width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  gap: var(--space-4);
+}
+.solo-setup-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.solo-setup-section h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-body);
+  color: var(--color-text-primary);
+}
+
+/* Game topbar elapsed-time pill (Timed solo mode) */
+.elapsed-time-pill {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-small);
+  background: var(--color-surface-inner);
+  border: 2px solid var(--color-secondary);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  color: var(--color-text-primary);
+}

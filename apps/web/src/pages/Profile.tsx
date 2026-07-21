@@ -15,9 +15,11 @@ import {
   fetchMyStats,
   fetchMyAchievements,
   fetchMyMatchHistory,
+  fetchMyProfile,
   type ProfileStatsRow,
   type AchievementRow,
   type MatchHistoryRow,
+  type GameMode,
 } from '../lib/profile.js';
 import { signOut, upgradeWith, getLinkedIdentities } from '../lib/auth.js';
 import Avatar from '../components/Avatar.js';
@@ -34,15 +36,25 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'settings', label: 'Settings' },
 ];
 
+type StatsFilter = 'all' | GameMode;
+
 export default function Profile() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('overview');
+  const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
   const [stats, setStats] = useState<ProfileStatsRow | null>(null);
+  const [streak, setStreak] = useState<{ current: number; longest: number } | null>(null);
   const [achievements, setAchievements] = useState<AchievementRow[]>([]);
   const [history, setHistory] = useState<MatchHistoryRow[]>([]);
 
   useEffect(() => {
-    fetchMyStats().then(setStats);
+    fetchMyStats(statsFilter === 'all' ? undefined : statsFilter).then(setStats);
+  }, [statsFilter]);
+
+  useEffect(() => {
+    fetchMyProfile().then((p) => {
+      if (p) setStreak({ current: p.current_streak, longest: p.longest_streak });
+    });
     fetchMyAchievements().then(setAchievements);
     fetchMyMatchHistory().then(setHistory);
   }, []);
@@ -73,7 +85,9 @@ export default function Profile() {
 
       <div className="profile-content">
         {tab === 'overview' && <Overview />}
-        {tab === 'stats' && <StatsBoard stats={stats} />}
+        {tab === 'stats' && (
+          <StatsBoard stats={stats} streak={streak} filter={statsFilter} onFilterChange={setStatsFilter} />
+        )}
         {tab === 'achievements' && <AchievementGrid achievements={achievements} />}
         {tab === 'history' && <MatchHistoryList history={history} />}
         {tab === 'settings' && <AccessibilitySettings />}
@@ -291,16 +305,48 @@ function AvatarEditor({ config, onChange }: { config: AvatarConfig; onChange: (c
 
 // --- Stats ------------------------------------------------------------------
 
-function StatsBoard({ stats }: { stats: ProfileStatsRow | null }) {
+interface StatsBoardProps {
+  stats: ProfileStatsRow | null;
+  streak: { current: number; longest: number } | null;
+  filter: StatsFilter;
+  onFilterChange: (f: StatsFilter) => void;
+}
+
+function StatsBoard({ stats, streak, filter, onFilterChange }: StatsBoardProps) {
+  const filterOptions: { id: StatsFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'multiplayer', label: 'Multiplayer' },
+    { id: 'solo', label: 'Solo' },
+  ];
+
+  const modeSelector = (
+    <div className="segmented">
+      {filterOptions.map((o) => (
+        <button
+          key={o.id}
+          className={`segmented-option${filter === o.id ? ' selected' : ''}`}
+          onClick={() => onFilterChange(o.id)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (!stats || stats.games_played === 0) {
     return (
       <div className="panel profile-panel">
+        {modeSelector}
         <p className="hint">Play a game to start building your stats!</p>
       </div>
     );
   }
   const avgLen = stats.total_words > 0 ? (stats.total_word_length / stats.total_words).toFixed(1) : '—';
   const winRate = stats.games_played > 0 ? Math.round((stats.games_won / stats.games_played) * 100) : 0;
+  // Solo games always end in a win (the only way not to finish is to leave, which isn't
+  // archived), so choke rate / win rate read as trivial there — the multiplayer-only stats
+  // below (win rate, choke rate) are hidden when filtered to solo.
+  const showCompetitiveStats = filter !== 'solo';
   const chokeRate =
     stats.games_played - stats.games_won > 0
       ? Math.round((stats.choke_count / (stats.games_played - stats.games_won)) * 100)
@@ -309,9 +355,8 @@ function StatsBoard({ stats }: { stats: ProfileStatsRow | null }) {
 
   const tiles: { label: string; value: string | number }[] = [
     { label: 'Games played', value: stats.games_played },
-    { label: 'Wins', value: `${stats.games_won} (${winRate}%)` },
-    { label: 'Current streak', value: `${stats.current_streak} 🔥` },
-    { label: 'Longest streak', value: stats.longest_streak },
+    ...(showCompetitiveStats ? [{ label: 'Wins', value: `${stats.games_won} (${winRate}%)` }] : []),
+    ...(streak ? [{ label: 'Current streak', value: `${streak.current} 🔥` }, { label: 'Longest streak', value: streak.longest }] : []),
     { label: 'Longest word', value: stats.longest_word ?? '—' },
     { label: 'Rarest word', value: stats.rarest_word ?? '—' },
     { label: 'Avg word length', value: avgLen },
@@ -319,11 +364,12 @@ function StatsBoard({ stats }: { stats: ProfileStatsRow | null }) {
     { label: 'Tiles peeled', value: stats.total_peels },
     { label: 'Tiles dumped', value: stats.total_dumps },
     { label: 'Alphabet letters', value: `${stats.first_letters.length}/26` },
-    { label: 'Choke rate', value: `${chokeRate}%` },
+    ...(showCompetitiveStats ? [{ label: 'Choke rate', value: `${chokeRate}%` }] : []),
   ];
 
   return (
     <div className="panel profile-panel">
+      {modeSelector}
       <div className="stats-grid">
         {tiles.map((t) => (
           <div key={t.label} className="stat-tile">
@@ -374,17 +420,19 @@ function MatchHistoryList({ history }: { history: MatchHistoryRow[] }) {
       <ul className="match-list">
         {history.map((m) => {
           const date = new Date(m.finished_at);
+          const isSolo = m.mode === 'solo';
           const opponents = m.opponents.map((o) => o.displayName).join(', ') || '—';
           const dur = m.duration_ms != null ? `${Math.round(m.duration_ms / 1000)}s` : '';
           return (
             <li key={m.id} className={`match-row${m.is_winner ? ' win' : ''}`}>
               <span className={`match-result ${m.is_winner ? 'win' : 'loss'}`}>
-                {m.is_winner ? 'Win' : 'Loss'}
+                {isSolo ? 'Cleared' : m.is_winner ? 'Win' : 'Loss'}
               </span>
               <div className="match-detail">
-                <span className="match-opponents">vs {opponents}</span>
+                <span className="match-opponents">{isSolo ? 'Solo' : `vs ${opponents}`}</span>
                 <span className="match-meta">
-                  {date.toLocaleDateString()} · {m.player_count}p · {m.final_tile_count} tiles{dur ? ` · ${dur}` : ''}
+                  {date.toLocaleDateString()} · {isSolo ? 'solo' : `${m.player_count}p`} · {m.final_tile_count} tiles
+                  {dur ? ` · ${dur}` : ''}
                 </span>
               </div>
             </li>

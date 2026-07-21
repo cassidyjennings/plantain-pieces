@@ -50,20 +50,25 @@ export default function Results() {
   if (!room) return <div className="centered">Loading results...</div>;
 
   const won = room.winner_id === profileId;
+  const isSolo = room.mode === 'solo';
+  const isTimed = isSolo && (room.mode_config as { timed?: boolean }).timed === true;
+  const headline = isSolo ? 'You cleared the Bunch! 🎉' : won ? 'You take the win!' : `${winnerName} takes the win!`;
 
   return (
     <div className="centered">
       <h1 className="results-callout">PLANTAINS!</h1>
-      <p className="winner-line">🏆 {won ? 'You take the win!' : `${winnerName} takes the win!`}</p>
+      <p className="winner-line">🏆 {headline}</p>
 
       {match && (
         <div className="panel results-earned">
           <h3>Your game</h3>
           <div className="results-stat-row">
-            <div className="stat-tile">
-              <span className="stat-value">{won ? 'Win' : 'Loss'}</span>
-              <span className="stat-label">Result</span>
-            </div>
+            {!isSolo && (
+              <div className="stat-tile">
+                <span className="stat-value">{won ? 'Win' : 'Loss'}</span>
+                <span className="stat-label">Result</span>
+              </div>
+            )}
             <div className="stat-tile">
               <span className="stat-value">{match.final_tile_count}</span>
               <span className="stat-label">Tiles</span>
@@ -72,6 +77,15 @@ export default function Results() {
               <span className="stat-value">{match.longest_word ?? '—'}</span>
               <span className="stat-label">Longest word</span>
             </div>
+            {isTimed && match.duration_ms != null && (
+              <div className="stat-tile">
+                <span className="stat-value">
+                  {Math.floor(match.duration_ms / 60000)}:
+                  {Math.floor((match.duration_ms % 60000) / 1000).toString().padStart(2, '0')}
+                </span>
+                <span className="stat-label">Time</span>
+              </div>
+            )}
           </div>
           {earned.length > 0 && (
             <div className="results-achievements">

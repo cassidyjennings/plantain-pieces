@@ -1,4 +1,4 @@
-import type { AvatarConfig, DictionaryConfig } from '@plantain/shared';
+import type { AvatarConfig, DictionaryConfig, SoloModeConfig } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 export interface PublicRoom {
@@ -9,6 +9,9 @@ export interface PublicRoom {
   dictionary_config: DictionaryConfig;
   bunch_count: number;
   winner_id: string | null;
+  mode: 'multiplayer' | 'solo';
+  mode_config: SoloModeConfig | Record<string, never>;
+  started_at: string | null;
 }
 
 export interface PublicPlayer {

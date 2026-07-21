@@ -6,10 +6,12 @@ import {
   validateDisplayName,
   validateAvatarConfig,
   validateGameSummary,
+  validateSoloModeConfig,
   type GridState,
   type DictionaryConfig,
   type AvatarConfig,
   type GameSummary,
+  type SoloModeConfig,
 } from '@plantain/shared';
 import type { Env } from './env.js';
 import { createAdminClient } from './supabase.js';
@@ -40,6 +42,32 @@ app.post('/rooms', async (c) => {
     p_host: profileId,
     p_display_name: body.displayName,
     p_config: body.dictionaryConfig ?? null,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
+// Solo mode: creates the room, seeds a scaled Bunch, deals the opening hand, and marks it
+// active — all in one RPC call. The client skips the Lobby entirely and navigates straight
+// into the game, since there's no one else to wait for.
+app.post('/rooms/solo', async (c) => {
+  const profileId = c.get('profileId');
+  const body = await c.req.json<{
+    displayName: string;
+    dictionaryConfig?: DictionaryConfig;
+    modeConfig: SoloModeConfig;
+  }>();
+
+  const modeCheck = validateSoloModeConfig(body.modeConfig);
+  if (!modeCheck.valid) return c.json({ error: modeCheck.reason }, statusForRpcError(modeCheck.reason));
+
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('create_solo_room', {
+    p_host: profileId,
+    p_display_name: body.displayName,
+    p_dictionary_config: body.dictionaryConfig ?? null,
+    p_bunch_size: body.modeConfig.bunchSize,
+    p_timed: body.modeConfig.timed,
   });
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
   return c.json(data);

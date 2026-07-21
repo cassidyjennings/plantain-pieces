@@ -1,8 +1,10 @@
-import type { AvatarConfig, AchievementType } from '@plantain/shared';
+import type { AvatarConfig, AchievementType, SoloModeConfig } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 /** Owner-scoped reads gated by RLS (no Worker round-trip) — mirrors lib/dictionaries.ts.
  * Writes (update/delete/summary) go through the Worker; see lib/api.ts. */
+
+export type GameMode = 'multiplayer' | 'solo';
 
 export interface ProfileRow {
   id: string;
@@ -10,10 +12,15 @@ export interface ProfileRow {
   is_guest: boolean;
   avatar_config: AvatarConfig;
   created_at: string;
+  /** Account-wide (not per-mode) daily play streak — playing either mode keeps it alive. */
+  current_streak: number;
+  longest_streak: number;
+  last_played_date: string | null;
 }
 
 export interface ProfileStatsRow {
   profile_id: string;
+  mode: GameMode;
   games_played: number;
   games_won: number;
   total_peels: number;
@@ -27,9 +34,6 @@ export interface ProfileStatsRow {
   rarest_word_score: number;
   first_letters: string;
   choke_count: number;
-  current_streak: number;
-  longest_streak: number;
-  last_played_date: string | null;
 }
 
 export interface AchievementRow {
@@ -54,6 +58,8 @@ export interface MatchHistoryRow {
   started_at: string | null;
   finished_at: string;
   duration_ms: number | null;
+  mode: GameMode;
+  mode_config: SoloModeConfig | Record<string, never>;
 }
 
 async function myId(): Promise<string | null> {
@@ -69,12 +75,71 @@ export async function fetchMyProfile(): Promise<ProfileRow | null> {
   return data as ProfileRow;
 }
 
-export async function fetchMyStats(): Promise<ProfileStatsRow | null> {
+/** Merges multiple per-mode rows into one aggregate: sums the additive counters, min/max the
+ * extremal ones, and unions first_letters. Used for the Stats tab's default "All modes" view. */
+function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
+  if (rows.length === 0) return null;
+  if (rows.length === 1) return rows[0];
+
+  const letterSet = new Set<string>();
+  for (const r of rows) for (const ch of r.first_letters) letterSet.add(ch);
+
+  let longest: ProfileStatsRow['longest_word'] = null;
+  let longestLen = 0;
+  let rarest: ProfileStatsRow['rarest_word'] = null;
+  let rarestScore = 0;
+  let fastestPeel: number | null = null;
+  for (const r of rows) {
+    if (r.longest_word_length > longestLen) {
+      longestLen = r.longest_word_length;
+      longest = r.longest_word;
+    }
+    if (r.rarest_word_score > rarestScore) {
+      rarestScore = r.rarest_word_score;
+      rarest = r.rarest_word;
+    }
+    if (r.fastest_peel_ms != null && (fastestPeel == null || r.fastest_peel_ms < fastestPeel)) {
+      fastestPeel = r.fastest_peel_ms;
+    }
+  }
+
+  return {
+    profile_id: rows[0].profile_id,
+    mode: 'multiplayer', // placeholder — callers requesting the aggregate ignore this field
+    games_played: rows.reduce((sum, r) => sum + r.games_played, 0),
+    games_won: rows.reduce((sum, r) => sum + r.games_won, 0),
+    total_peels: rows.reduce((sum, r) => sum + r.total_peels, 0),
+    total_dumps: rows.reduce((sum, r) => sum + r.total_dumps, 0),
+    total_words: rows.reduce((sum, r) => sum + r.total_words, 0),
+    total_word_length: rows.reduce((sum, r) => sum + r.total_word_length, 0),
+    longest_word: longest,
+    longest_word_length: longestLen,
+    fastest_peel_ms: fastestPeel,
+    rarest_word: rarest,
+    rarest_word_score: rarestScore,
+    first_letters: [...letterSet].sort().join(''),
+    choke_count: rows.reduce((sum, r) => sum + r.choke_count, 0),
+  };
+}
+
+/** Without a mode, returns the aggregate across all of the profile's mode rows ("All modes",
+ * the Stats tab default). With a mode, returns just that row (or null if never played). */
+export async function fetchMyStats(mode?: GameMode): Promise<ProfileStatsRow | null> {
   const id = await myId();
   if (!id) return null;
-  const { data, error } = await supabase.from('profile_stats').select('*').eq('profile_id', id).maybeSingle();
+  if (mode) {
+    const { data, error } = await supabase
+      .from('profile_stats')
+      .select('*')
+      .eq('profile_id', id)
+      .eq('mode', mode)
+      .maybeSingle();
+    if (error) return null;
+    return data as ProfileStatsRow | null;
+  }
+  const { data, error } = await supabase.from('profile_stats').select('*').eq('profile_id', id);
   if (error) return null;
-  return data as ProfileStatsRow | null;
+  return aggregateStats(data as ProfileStatsRow[]);
 }
 
 export async function fetchMyAchievements(): Promise<AchievementRow[]> {

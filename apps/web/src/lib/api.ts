@@ -1,4 +1,4 @@
-import type { AvatarConfig, DictionaryConfig, GameSummary, GridState } from '@plantain/shared';
+import type { AvatarConfig, DictionaryConfig, GameSummary, GridState, SoloModeConfig } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -37,6 +37,13 @@ export interface CreateRoomResult {
   roomId: string;
   code: string;
   seat: number;
+}
+
+export interface CreateSoloRoomResult {
+  roomId: string;
+  code: string;
+  seat: number;
+  status: 'active';
 }
 
 export interface JoinRoomResult {
@@ -88,6 +95,12 @@ export interface ProfileResult {
 export const api = {
   createRoom: (displayName: string) =>
     call<CreateRoomResult>('/rooms', { method: 'POST', body: JSON.stringify({ displayName }) }),
+
+  createSoloRoom: (displayName: string, dictionaryConfig: DictionaryConfig, modeConfig: SoloModeConfig) =>
+    call<CreateSoloRoomResult>('/rooms/solo', {
+      method: 'POST',
+      body: JSON.stringify({ displayName, dictionaryConfig, modeConfig }),
+    }),
 
   joinRoom: (code: string, displayName: string, spectator = false) =>
     call<JoinRoomResult>('/rooms/join', {

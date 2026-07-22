@@ -7,3 +7,10 @@ compatibility_flags = ["nodejs_compat"]
 # .dev.vars locally (gitignored) and `wrangler secret put` for deployed environments.
 [vars]
 SUPABASE_URL = "http://127.0.0.1:54321"
+
+# Deployed via `wrangler deploy --env production` (see .github/workflows/deploy-worker.yml).
+# Replace with the real Supabase Cloud project URL once it exists (Settings > API > Project
+# URL) -- SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY for this env are set once via
+# `wrangler secret put <name> --env production`, not here.
+[env.production.vars]
+SUPABASE_URL = "https://REPLACE-WITH-PROJECT-REF.supabase.co"

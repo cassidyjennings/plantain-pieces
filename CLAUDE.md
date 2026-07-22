@@ -140,6 +140,29 @@ npm run dev:web             # vite dev      (React; needs apps/web/.env.local �
 `VITE_API_URL` (the Worker's local URL, e.g. `http://127.0.0.1:8787`).
 Get Supabase keys from `npx supabase status -o json` after `npm run db:start`.
 
+## Deployment
+
+Three managed platforms, each auto-deploying from this GitHub repo on push to `main` (no
+server process to run or patch anywhere):
+
+- **`apps/web`** → **Vercel**. Root-level `vercel.json` gives it an explicit
+  `buildCommand`/`outputDirectory`/`installCommand` so it doesn't rely on Vercel's monorepo
+  auto-detection. Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`) are
+  set in the Vercel project's dashboard, not committed. Every push to `main` redeploys
+  automatically — native Vercel behavior, nothing in this repo triggers it.
+- **`apps/api`** → **Cloudflare Workers**, via `.github/workflows/deploy-worker.yml` (runs on
+  push to `main` touching `apps/api/**` or `packages/shared/**`; auth'd with
+  `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets). `wrangler.toml`'s default
+  `[vars]` block stays pointed at `127.0.0.1` for local `wrangler dev`; the deployed
+  `[env.production.vars]` block holds the real Supabase URL. `SUPABASE_ANON_KEY` /
+  `SUPABASE_SERVICE_ROLE_KEY` for that env are Worker secrets (`wrangler secret put <name>
+  --env production`), set once and untouched by future deploys.
+- **`supabase/`** → **Supabase Cloud** (free tier — auto-pauses after 7 days with zero API
+  traffic; a one-click "Restore" in the dashboard, not a re-deploy). **Not** auto-applied on
+  push: a new migration is deliberately a manual step (`supabase db push`, or ask Claude to
+  run the new file's SQL directly against the prod connection string) — auto-running
+  arbitrary schema SQL against production on every push is a foot-gun, not a convenience.
+
 ## Current status (2026-07-21)
 
 - ✅ Monorepo scaffold, `packages/shared` complete and tested.

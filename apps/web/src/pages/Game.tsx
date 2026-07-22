@@ -186,10 +186,11 @@ export default function Game() {
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // In expanded mode each fresh tile has its own chip we can hide until its slice lands. In
-    // collapsed mode duplicates share one chip (no per-tile slot), so we skip the hide/reveal and
-    // let the slice land as a flourish on the group chip instead.
-    if (!collapsed && !reduce) {
+    // In expanded mode each fresh tile has its own chip, hidden by id until its slice lands. In
+    // collapsed mode duplicates share one group chip instead — trayItems() uses this same
+    // pendingIds set to exclude in-flight tiles from that group's displayed count, so a
+    // duplicate letter's badge doesn't jump to the new total before the slice visually arrives.
+    if (!reduce) {
       setPendingReveal((prev) => {
         const next = new Set(prev);
         fresh.forEach((t) => next.add(t.id));
@@ -234,6 +235,11 @@ export default function Game() {
   // Timed solo mode: a live elapsed-time ticker from the room's started_at. Zen mode and
   // multiplayer show nothing (mode_config.timed is only ever true for solo).
   const isTimed = room?.mode === 'solo' && (room.mode_config as { timed?: boolean }).timed === true;
+  // The Bunch meter fills against the room's OWN starting size -- a solo player's smaller chosen
+  // Bunch (as low as 54) must still read as a whole, full plantain at the start, just one that
+  // empties faster, not a plantain that's already partly eaten before a single tile is drawn.
+  const startingBunchCount =
+    room?.mode === 'solo' ? ((room.mode_config as { bunchSize?: number }).bunchSize ?? bunchCount) : undefined;
   useEffect(() => {
     if (!isTimed || !room?.started_at) return;
     const startedAt = new Date(room.started_at).getTime();
@@ -720,7 +726,7 @@ export default function Game() {
   }
 
   const opponents = players.filter((p) => p.profile_id !== profileId && !p.is_spectator);
-  const items = trayItems(rack, collapsed);
+  const items = trayItems(rack, collapsed, pendingReveal);
   // With word validation off, validCells is never populated (nothing is ever known-invalid),
   // so don't let every placed tile read as "invalid" — there's no such distinction in this mode.
   const invalidPlacedCount = wordValidationEnabled
@@ -753,7 +759,12 @@ export default function Game() {
   return (
     <div className="game-layout">
       <div className="game-topbar">
-        <BunchGraphic ref={plantainCutRef} bunchCount={bunchCount} flashSignal={flashSignal} />
+        <BunchGraphic
+          ref={plantainCutRef}
+          bunchCount={bunchCount}
+          startingBunchCount={startingBunchCount}
+          flashSignal={flashSignal}
+        />
         <span className="last-peel-pill">
           Last peel: <strong>{lastPeelName ?? '-'}</strong>
         </span>

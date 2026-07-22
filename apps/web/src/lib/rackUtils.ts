@@ -76,8 +76,18 @@ export interface TrayItem {
   ids: string[];
 }
 
-/** Build the tray's display items. Collapsed groups duplicates by first-occurrence order. */
-export function trayItems(rack: RackTile[], collapsed: boolean): TrayItem[] {
+/** Build the tray's display items. Collapsed groups duplicates by first-occurrence order.
+ *
+ * `pendingIds`, if given, holds tile ids whose flying slice hasn't landed yet. In expanded
+ * mode a fresh tile gets its own chip, hidden by the caller until it lands. In collapsed
+ * mode a fresh tile instead merges into an existing letter's group — with no chip of its
+ * own to hide, its arrival was showing up as the group's count badge jumping to the new
+ * total the instant the rack updated, well before the slice visually reached the tray. Now
+ * a still-pending tile is excluded from the displayed count until it lands (falling back to
+ * counting it anyway only when the whole group is pending, e.g. a brand-new letter with no
+ * settled tiles yet — that chip still needs a real size/position for the slice to target,
+ * and is hidden as a whole by the caller instead). */
+export function trayItems(rack: RackTile[], collapsed: boolean, pendingIds: Set<string> = new Set()): TrayItem[] {
   if (!collapsed) {
     return rack.map((t) => ({ id: t.id, letter: t.letter, count: 1, justDrawn: !!t.justDrawn, ids: [t.id] }));
   }
@@ -92,12 +102,20 @@ export function trayItems(rack: RackTile[], collapsed: boolean): TrayItem[] {
   }
   return order.map((letter) => {
     const tiles = groups.get(letter)!;
+    const settled = tiles.filter((t) => !pendingIds.has(t.id));
+    // The item's `id` drives the caller's own whole-chip hide (matched against pendingIds by
+    // id) — it must be a SETTLED tile whenever one exists, or a mixed group (some tiles
+    // already in hand, one still mid-flight) would get its entire chip hidden, including the
+    // tiles that were already visible. Only fall back to a pending tile's id when the whole
+    // group is pending (a brand-new letter with nothing settled yet), which is exactly the
+    // one case that should still be hidden as a whole.
+    const display = settled.length > 0 ? settled : tiles;
     return {
-      id: tiles[0].id,
+      id: display[0].id,
       letter,
-      count: tiles.length,
+      count: display.length,
       justDrawn: tiles.some((t) => t.justDrawn),
-      ids: tiles.map((t) => t.id),
+      ids: display.map((t) => t.id),
     };
   });
 }

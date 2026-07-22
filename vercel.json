@@ -1,5 +1,8 @@
 {
   "installCommand": "npm install",
   "buildCommand": "npm run build:shared && npm run build --workspace @plantain/web",
-  "outputDirectory": "apps/web/dist"
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

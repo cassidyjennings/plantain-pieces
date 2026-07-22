@@ -35,7 +35,8 @@ export async function upgradeWith(provider: UpgradeProvider): Promise<void> {
     options: { redirectTo: `${window.location.origin}/profile` },
   });
   if (error) {
-    // Provider disabled / not configured, or manual linking off — surface plainly.
-    throw new Error(`Couldn't start Google sign-in. This deployment may not have it configured yet.`);
+    // Surface the real reason (e.g. provider disabled, manual linking off, or a stale/invalid
+    // local session referring to a deleted user) instead of a one-size-fits-all message.
+    throw new Error(`Couldn't start Google sign-in: ${error.message}`);
   }
 }

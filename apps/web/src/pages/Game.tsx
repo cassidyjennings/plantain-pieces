@@ -563,9 +563,19 @@ export default function Game() {
         const unique = [...new Set(words.map((w) => w.word))];
         const { invalidWords } = await api.validate(roomId, unique);
         const invalid = new Set(invalidWords);
+        // A cell at the intersection of two words (one across, one down) must only tint
+        // green/count as valid if BOTH words through it are valid. Adding a word's cells
+        // whenever that word alone was valid let an invalid word's cells slip through
+        // whenever every one of them happened to also belong to a separate valid word
+        // crossing it -- masking the bad word entirely and letting auto-Peel/Plantains fire
+        // on a grid that still had a real invalid word on it.
+        const badCells = new Set<string>();
+        for (const w of words) {
+          if (invalid.has(w.word)) for (const c of w.cells) badCells.add(c);
+        }
         const cells = new Set<string>();
         for (const w of words) {
-          if (!invalid.has(w.word)) for (const c of w.cells) cells.add(c);
+          if (!invalid.has(w.word)) for (const c of w.cells) if (!badCells.has(c)) cells.add(c);
         }
         setValidCells(cells);
       } catch {

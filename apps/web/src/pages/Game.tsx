@@ -609,20 +609,13 @@ export default function Game() {
   }, [roomId, navigate]);
 
   function reportActionError(err: unknown) {
-    if (err instanceof ApiError) {
-      const invalidWords = (err.body as { invalidWords?: string[] }).invalidWords;
-      const isWordRejection = err.message === 'INVALID_WORDS' || !!invalidWords?.length;
-      // With word validation off, players get no hint about which words are wrong — including
-      // no explanation when a complete-looking board gets rejected for bad words.
-      if (!wordValidationEnabled && isWordRejection) return;
-      setMessage(
-        invalidWords?.length
-          ? `Rotten Plantains! Not real words: ${invalidWords.join(', ')}`
-          : err.message === 'INVALID_WORDS'
-            ? 'Rotten Plantains! Some words are not valid.'
-            : `That grid isn't complete yet (${err.message}).`,
-      );
-    } else {
+    // Auto-fire (Peel/Plantains) rejections — bad words, an incomplete/disconnected grid —
+    // are a normal part of building a board and not a real error; the player just keeps
+    // adjusting tiles. Surfacing a banner for every rejected auto-attempt was noisy and
+    // read as a scary error message for what's actually silent, expected feedback (the
+    // tile-color validation already shows which words are wrong). Only a genuinely
+    // unexpected failure (e.g. a network error) gets a message.
+    if (!(err instanceof ApiError)) {
       setMessage('Action failed. Try again.');
     }
   }

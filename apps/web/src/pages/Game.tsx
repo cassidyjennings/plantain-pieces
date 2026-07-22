@@ -289,6 +289,20 @@ export default function Game() {
     if (event.type === 'peel') {
       const payload = event.payload as { actor?: string };
       if (payload.actor) setLastPeelBy(payload.actor);
+      if (payload.actor && payload.actor !== profileId && roomId) {
+        // Peel deals a new tile to EVERY player, not just whoever called it. The peeler's own
+        // client already applied its updated rack from the API response directly; everyone
+        // else only learns a peel happened via this broadcast (which is public-safe and
+        // carries no private rack data), so pull our own state to pick up the tile we were
+        // just dealt. Without this, a bystander's tray silently never got their new tile: no
+        // draw animation fired for them, and their now-stale rack went on to fail the
+        // server's authoritative rack check on their next Peel/Plantains attempt.
+        api.getMyState(roomId).then((state) => {
+          const priorRack = [...rackRef.current.map((t) => t.letter), ...Object.values(gridRef.current)];
+          const newLetters = diffNewLetters(priorRack, state.rack);
+          setRack(computeUnplaced(state.rack, gridRef.current, newLetters, rackRef.current));
+        });
+      }
     }
     if (event.type === 'plantains_rejected') {
       const payload = event.payload as { actor: string; reason: string };

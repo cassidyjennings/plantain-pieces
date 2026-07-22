@@ -21,7 +21,7 @@ import {
   type MatchHistoryRow,
   type GameMode,
 } from '../lib/profile.js';
-import { signOut, upgradeWith, getLinkedIdentities } from '../lib/auth.js';
+import { signOut, upgradeWith, signInWith, getLinkedIdentities, consumeOAuthRedirectError } from '../lib/auth.js';
 import Avatar from '../components/Avatar.js';
 import DictionaryJournal from '../components/DictionaryJournal.js';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal.js';
@@ -117,6 +117,23 @@ function Overview() {
 
   useEffect(() => {
     getLinkedIdentities().then((ids) => setProviders(ids.map((i) => i.provider)));
+  }, []);
+
+  useEffect(() => {
+    const redirectError = consumeOAuthRedirectError();
+    if (!redirectError) return;
+    const ALREADY_LINKED = 'identity_already_exists';
+    const FALLBACK_GUARD_KEY = 'plantain-oauth-fallback-attempted';
+    if (redirectError.code === ALREADY_LINKED && !sessionStorage.getItem(FALLBACK_GUARD_KEY)) {
+      // This Google account is already linked to a DIFFERENT Plantain Pieces account (e.g. a
+      // returning user on a fresh guest session) — linking it here is impossible, but signing
+      // in as that existing account is exactly what the user wants. Guarded to run once so a
+      // genuine, different failure can't loop redirects forever.
+      sessionStorage.setItem(FALLBACK_GUARD_KEY, '1');
+      signInWith('google').catch((err) => setOauthError(err instanceof Error ? err.message : 'Sign-in failed'));
+      return;
+    }
+    setOauthError(redirectError.message);
   }, []);
 
   const nameCheck = validateDisplayName(nameDraft);

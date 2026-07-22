@@ -40,3 +40,35 @@ export async function upgradeWith(provider: UpgradeProvider): Promise<void> {
     throw new Error(`Couldn't start Google sign-in: ${error.message}`);
   }
 }
+
+/** Sign in directly as whichever account this Google identity is already linked to (as
+ * opposed to `upgradeWith`, which attaches Google to the CURRENT guest — that fails when
+ * the identity already belongs to a different account, e.g. a returning user on a fresh
+ * guest session). */
+export async function signInWith(provider: UpgradeProvider): Promise<void> {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: `${window.location.origin}/profile` },
+  });
+  if (error) {
+    throw new Error(`Couldn't start Google sign-in: ${error.message}`);
+  }
+}
+
+/** Supabase's OAuth callback reports a server-side failure (wrong provider config, or —
+ * the common one here — trying to link a Google identity that's already attached to a
+ * DIFFERENT account) by appending `error`/`error_code`/`error_description` to the
+ * `redirectTo` URL instead of session tokens. supabase-js's own URL processing only looks
+ * for tokens, so it silently ignores these; without reading them ourselves, a failed
+ * link-attempt looks like nothing happened at all. Call once on app boot. */
+export function consumeOAuthRedirectError(): { code: string | null; message: string } | null {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const search = new URLSearchParams(window.location.search);
+  const code = hash.get('error_code') ?? search.get('error_code');
+  const description = hash.get('error_description') ?? search.get('error_description');
+  const error = hash.get('error') ?? search.get('error');
+  if (!error && !description) return null;
+  // Strip the error params so a reload doesn't re-surface a stale error.
+  window.history.replaceState(null, '', window.location.pathname);
+  return { code, message: (description ?? error ?? 'Sign-in failed').replace(/\+/g, ' ') };
+}

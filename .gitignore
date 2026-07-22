@@ -12,3 +12,6 @@ supabase/.branches/
 coverage/
 *.tsbuildinfo
 .vite/
+
+.vercel
+.env*

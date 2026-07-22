@@ -113,6 +113,7 @@ function Overview() {
   const [showJournal, setShowJournal] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   useEffect(() => {
     getLinkedIdentities().then((ids) => setProviders(ids.map((i) => i.provider)));
@@ -159,12 +160,12 @@ function Overview() {
   }
 
   async function handleUpgrade(provider: 'google') {
-    setError(null);
+    setOauthError(null);
     try {
       await upgradeWith(provider);
       // On success the browser redirects to the provider; nothing more to do here.
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upgrade failed');
+      setOauthError(err instanceof Error ? err.message : 'Upgrade failed');
     }
   }
 
@@ -237,16 +238,19 @@ function Overview() {
             <p className="hint">Link an account so your progress follows you across devices.</p>
             <div className="profile-oauth-row">
               <button className="btn-secondary" onClick={() => handleUpgrade('google')}>
-                Continue with Google
+                Sign in with Google
               </button>
             </div>
+            {oauthError && <p className="error">{oauthError}</p>}
           </>
         ) : (
-          <p className="hint">Your progress is saved to your linked account.</p>
+          <>
+            <p className="hint">Your progress is saved to your linked account.</p>
+            <button className="btn-tertiary" onClick={handleSignOut} disabled={busy}>
+              Sign out
+            </button>
+          </>
         )}
-        <button className="btn-tertiary" onClick={handleSignOut} disabled={busy}>
-          Sign out
-        </button>
       </div>
 
       <div className="profile-section">

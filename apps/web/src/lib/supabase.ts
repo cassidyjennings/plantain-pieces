@@ -25,10 +25,28 @@ if (import.meta.env.DEV) {
 /**
  * Guest-first bootstrap: reuse a persisted session if one exists, otherwise
  * sign in anonymously. Called once at app startup.
+ *
+ * Waits for the SDK's own `INITIAL_SESSION` event rather than calling `getSession()`
+ * directly. supabase-js processes an OAuth redirect's `#access_token=...` hash
+ * asynchronously in the background right after the client is created (via
+ * `detectSessionInUrl`); calling `getSession()` immediately can race ahead of that and
+ * see no session yet, right after a real one was just established (e.g. returning from
+ * "Sign in with Google") — which then mints a throwaway new guest and orphans the
+ * identity that was just linked. `INITIAL_SESSION` fires exactly once, only after that
+ * initial resolution (redirect-hash included) has completed.
  */
 export async function ensureSession(): Promise<Session> {
-  const { data } = await supabase.auth.getSession();
-  if (data.session) return data.session;
+  const session = await new Promise<Session | null>((resolve) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        subscription.unsubscribe();
+        resolve(session);
+      }
+    });
+  });
+  if (session) return session;
 
   const { data: signInData, error } = await supabase.auth.signInAnonymously();
   if (error || !signInData.session) {

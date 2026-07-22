@@ -1033,9 +1033,21 @@ button:disabled {
   background: linear-gradient(180deg, #c9f0ff 0, #a8e4ff 100%);
 }
 
-.journal-tab:hover:not(:disabled) {
+/* Explicit `button.` prefix + repeated backgrounds: without it, the global
+   `button:hover:not(:disabled)` rule (which sets a flat --color-accent-hover background) beats
+   these on specificity and briefly flashes solid orange over the gradient on every hover. */
+button.journal-tab:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fff3b0 0, #ffe985 100%);
   filter: brightness(1.05);
   color: #4a3a1c;
+}
+
+button.journal-tab:nth-of-type(2):hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffd6e8 0, #ffbfd9 100%);
+}
+
+button.journal-tab:nth-of-type(3):hover:not(:disabled) {
+  background: linear-gradient(180deg, #c9f0ff 0, #a8e4ff 100%);
 }
 
 /* Active tab: lifted a touch so it sits proud of its siblings and flows straight into the

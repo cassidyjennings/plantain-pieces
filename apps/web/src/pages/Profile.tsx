@@ -122,13 +122,15 @@ function Overview() {
   useEffect(() => {
     const redirectError = consumeOAuthRedirectError();
     if (!redirectError) return;
-    const ALREADY_LINKED = 'identity_already_exists';
     const FALLBACK_GUARD_KEY = 'plantain-oauth-fallback-attempted';
-    if (redirectError.code === ALREADY_LINKED && !sessionStorage.getItem(FALLBACK_GUARD_KEY)) {
-      // This Google account is already linked to a DIFFERENT Plantain Pieces account (e.g. a
-      // returning user on a fresh guest session) — linking it here is impossible, but signing
-      // in as that existing account is exactly what the user wants. Guarded to run once so a
-      // genuine, different failure can't loop redirects forever.
+    // A link attempt fails server-side whenever this Google identity is already tied to ANY
+    // account — including the user's own, from a previous session/browser. Whatever the exact
+    // reason, what the user wants by clicking "Sign in with Google" is to end up signed into
+    // that Google-linked account, not stuck on a fresh guest — so fall back to a normal sign-in
+    // rather than surfacing the link failure as an error. Guarded to run once per tab so a
+    // sign-in that ALSO genuinely fails (e.g. the provider itself is misconfigured) still
+    // surfaces a real message instead of looping redirects forever.
+    if (!sessionStorage.getItem(FALLBACK_GUARD_KEY)) {
       sessionStorage.setItem(FALLBACK_GUARD_KEY, '1');
       signInWith('google').catch((err) => setOauthError(err instanceof Error ? err.message : 'Sign-in failed'));
       return;

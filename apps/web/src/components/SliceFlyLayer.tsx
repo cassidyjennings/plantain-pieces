@@ -4,8 +4,11 @@ export interface LaunchOpts {
   /** Where each slice starts — the plantain's cut end. Measured lazily at spawn. */
   from: () => DOMRect | null;
   /** The target chip for slice `index` — measured at leg-B start so it reflects the real,
-   * post-layout tray slot (FLIP-style), robust to wrapping/scroll. */
-  to: (index: number) => DOMRect | null;
+   * post-layout tray slot (FLIP-style), robust to wrapping/scroll. Includes the chip's own
+   * computed font-size so the slice's letter can match it exactly (rather than a guessed ratio
+   * of the chip's box, which drifted from the real CSS font-size and made the letter visibly
+   * shrink/grow the instant the slice handed off to the actual tile chip). */
+  to: (index: number) => { rect: DOMRect; fontSize: string } | null;
   /** How many slices to fly (1 for a Peel draw, 3 for a Dump). */
   count: number;
   /** The letter each slice carries, shown on its face throughout the roll — so the slice already
@@ -103,9 +106,10 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     // distinct little plantain slice rolling by, not a preview of the tile. It only grows to the
     // real size (and swaps to the tile's look, and reveals its letter) once it's off-screen
     // between legs, so none of that change is ever visible mid-flight.
-    const sizeRect = opts.to(index);
-    const w = sizeRect?.width ?? FALLBACK_SIZE;
-    const h = sizeRect?.height ?? FALLBACK_SIZE;
+    const sizeInfo = opts.to(index);
+    const w = sizeInfo?.rect.width ?? FALLBACK_SIZE;
+    const h = sizeInfo?.rect.height ?? FALLBACK_SIZE;
+    const targetFontSize = sizeInfo?.fontSize ?? `${Math.round(Math.min(w, h) * 0.46)}px`;
     const sw = Math.round(w * SMALL_SIZE_RATIO);
     const sh = Math.round(h * SMALL_SIZE_RATIO);
 
@@ -125,7 +129,7 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
       letterEl = document.createElement('div');
       letterEl.className = 'slice-wedge-letter';
       letterEl.style.opacity = '0';
-      letterEl.style.fontSize = `${Math.round(Math.min(w, h) * 0.46)}px`;
+      letterEl.style.fontSize = targetFontSize;
       letterEl.textContent = letter;
       node.appendChild(letterEl);
     }
@@ -160,12 +164,13 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
         anims.current.delete(legA);
         // Re-measure the target position now — after the pending chip has taken its real tray
         // slot — in case of reflow since spawn. Size was already locked in above.
-        const toRect = opts.to(index);
-        if (!toRect) {
+        const toInfo = opts.to(index);
+        if (!toInfo) {
           reveal();
           removeNode();
           return;
         }
+        const toRect = toInfo.rect;
         const tx = toRect.left + toRect.width / 2 - w / 2;
         const ty = toRect.top + toRect.height / 2 - h / 2;
         const reenterX = window.innerWidth + w;

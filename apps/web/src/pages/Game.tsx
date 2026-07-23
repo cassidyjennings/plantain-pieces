@@ -220,7 +220,8 @@ export default function Game() {
         const t = fresh[i];
         const selector = collapsed ? `[data-letter="${t.letter}"]` : `[data-tile-id="${t.id}"]`;
         const el = document.querySelector(selector);
-        return el ? el.getBoundingClientRect() : null;
+        if (!el) return null;
+        return { rect: el.getBoundingClientRect(), fontSize: getComputedStyle(el).fontSize };
       },
       letters: fresh.map((t) => t.letter),
       count: fresh.length,

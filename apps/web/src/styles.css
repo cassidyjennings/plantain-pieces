@@ -390,6 +390,9 @@ button:disabled {
   z-index: 1200;
 }
 
+/* The flying tile already has its real tile-chip shape/look for the whole flight — no round
+   "slice" phase or shape swap partway, so there's no discontinuity between how it starts and how
+   it lands. */
 .slice-wedge {
   position: fixed;
   left: 0;
@@ -398,25 +401,13 @@ button:disabled {
      chip's size — these are just a fallback in case that ever fails. */
   width: 42px;
   height: 42px;
-  border-radius: 50%;
-  /* Leg A (rolling right across the top bar): a plantain slice cross-section — pale core, green
-     peel ring. Still reads as fruit while it's up near the Bunch meter. */
-  background: radial-gradient(circle at 50% 45%, #f4e79a 0 52%, #cdbf5a 53% 60%, #a8c94a 61% 100%);
-  border: 2px solid #0f2f1e;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-rack-tile);
+  background: var(--color-tile-bg);
+  border: 2px solid var(--color-tile-border);
+  box-shadow: var(--shadow-press-md) var(--color-tile-shadow);
 }
 
-/* Leg B (re-entering from the right to roll into the tray): swapped to look closer to the real
-   tile chip — pale cream face, tan edge, just a thin green rim as a nod to what it is — since the
-   slice is about to become that tile. SliceFlyLayer adds this class only once the slice is fully
-   off-screen between legs, so the switch itself is never visible. */
-.slice-wedge.tile-face {
-  background: radial-gradient(circle at 50% 45%, var(--color-tile-bg) 0 80%, var(--color-tile-border) 81% 88%, #a8c94a 89% 100%);
-  border-color: var(--color-tile-border);
-}
-
-/* The letter riding on a flying slice — a separate child with its own counter-rotation animation
-   (see SliceFlyLayer) so it stays upright and readable while the disc itself visually rolls. */
+/* The letter riding on the flying tile, visible for the whole flight. */
 .slice-wedge-letter {
   position: absolute;
   inset: 0;

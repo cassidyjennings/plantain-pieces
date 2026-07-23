@@ -39,6 +39,41 @@ function prefersReduced(): boolean {
   );
 }
 
+// Frames slower than this read as stutter/skipped-ahead rather than a smooth roll (60fps ≈ 16.7ms;
+// this allows a generous margin down to ~25fps before treating the device as unable to render the
+// flight smoothly).
+const SLOW_FRAME_MS = 40;
+const CALIBRATION_FRAMES = 6;
+
+/** Measures real frame delivery via a handful of requestAnimationFrame callbacks and resolves
+ * false if delivery is too slow/irregular to render a smooth multi-second flight — e.g. hardware
+ * acceleration disabled, forcing software compositing. Without this, a device that can't keep up
+ * doesn't get a stuttering slow-motion version of the animation; the WAAPI timeline still runs on
+ * wall-clock time regardless of how few frames actually paint, so a starved renderer instead skips
+ * straight to (or very near) the end state — reading exactly like "the tile arrived before it
+ * rolled there" and, for a collapsed letter group, its count jumping straight to the new total. */
+function measureFrameHealth(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || prefersReduced()) {
+      resolve(true); // irrelevant here — reduced motion already skips the flight on its own path
+      return;
+    }
+    const deltas: number[] = [];
+    let last = performance.now();
+    const step = (now: number) => {
+      deltas.push(now - last);
+      last = now;
+      if (deltas.length < CALIBRATION_FRAMES) {
+        requestAnimationFrame(step);
+      } else {
+        const avg = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+        resolve(avg <= SLOW_FRAME_MS);
+      }
+    };
+    requestAnimationFrame(step);
+  });
+}
+
 /** A fixed, non-interactive overlay that flies little plantain "slices" from the Bunch meter into
  * the end of the tray each time a tile is drawn. Slices are created imperatively and animated with
  * the Web Animations API (transform/opacity only — GPU-composited), so this never re-renders the
@@ -54,13 +89,22 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
   // auto-Peels firing in quick succession), is exactly what "the tile appeared before it rolled
   // in" looks like. Queueing guarantees every draw eventually gets a real flight, just delayed.
   const queue = useRef<Array<{ opts: LaunchOpts; index: number }>>([]);
+  // Whether this device renders frames smoothly enough for the flight to look right — null until
+  // the calibration in the mount effect below resolves; treated as smooth in the meantime so a
+  // draw fired before that resolves isn't blocked on it.
+  const frameHealthy = useRef<boolean | null>(null);
 
   useEffect(() => {
     const activeAnims = anims.current;
     const activeTimers = timers.current;
     const activeRafs = rafs.current;
     const activeQueue = queue.current;
+    let cancelled = false;
+    measureFrameHealth().then((healthy) => {
+      if (!cancelled) frameHealthy.current = healthy;
+    });
     return () => {
+      cancelled = true;
       activeAnims.forEach((a) => a.cancel());
       activeTimers.forEach((id) => clearTimeout(id));
       activeRafs.forEach((id) => cancelAnimationFrame(id));
@@ -83,9 +127,10 @@ const SliceFlyLayer = forwardRef<SliceFlyHandle>(function SliceFlyLayer(_props, 
     const fromRect = opts.from();
     const layer = layerRef.current;
 
-    // Reduced motion or nothing to launch from → skip the flight, reveal now. Being at/over
-    // capacity is *not* a skip condition — queue it instead so it still gets a real flight.
-    if (prefersReduced() || !fromRect || !layer) {
+    // Reduced motion, a device that can't render frames smoothly enough (frameHealthy === false
+    // — see measureFrameHealth), or nothing to launch from → skip the flight, reveal now. Being
+    // at/over capacity is *not* a skip condition — queue it instead so it still gets a real flight.
+    if (prefersReduced() || frameHealthy.current === false || !fromRect || !layer) {
       reveal();
       return;
     }

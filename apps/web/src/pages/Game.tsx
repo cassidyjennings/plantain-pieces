@@ -112,6 +112,12 @@ export default function Game() {
   const plantainCutRef = useRef<HTMLSpanElement>(null);
   const sliceRef = useRef<SliceFlyHandle>(null);
   const animatedIds = useRef<Set<string>>(new Set());
+  // Force-reveal fallback timers (see the slice-fly effect below) — cleared on unmount.
+  const revealTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    const timers = revealTimers.current;
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, []);
 
   // Mirror the latest values into refs so the window pointer handlers (attached once) read fresh.
   const gridRef = useRef(grid);
@@ -195,6 +201,15 @@ export default function Game() {
         const next = new Set(prev);
         fresh.forEach((t) => next.add(t.id));
         return next;
+      });
+      // Safety net: whatever the cause (a backgrounded tab pausing requestAnimationFrame, a
+      // dropped WAAPI animation, anything else that can stop a flight short of landing), a tile
+      // must never stay hidden/uncounted forever just because its slice never finished. Force
+      // the reveal well after the longest possible real flight (~1.86s: 650ms + 850ms + up to
+      // two 180ms Dump stagger steps) if it hasn't happened on its own by then.
+      fresh.forEach((t) => {
+        const timer = setTimeout(() => revealChip(t.id), 3000);
+        revealTimers.current.add(timer);
       });
     }
     setFlashSignal((s) => s + 1);
@@ -759,12 +774,14 @@ export default function Game() {
   return (
     <div className="game-layout">
       <div className="game-topbar">
-        <BunchGraphic
-          ref={plantainCutRef}
-          bunchCount={bunchCount}
-          startingBunchCount={startingBunchCount}
-          flashSignal={flashSignal}
-        />
+        {room && (
+          <BunchGraphic
+            ref={plantainCutRef}
+            bunchCount={bunchCount}
+            startingBunchCount={startingBunchCount}
+            flashSignal={flashSignal}
+          />
+        )}
         <span className="last-peel-pill">
           Last peel: <strong>{lastPeelName ?? '-'}</strong>
         </span>

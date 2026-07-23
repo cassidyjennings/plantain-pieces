@@ -390,25 +390,39 @@ button:disabled {
   z-index: 1200;
 }
 
-/* The flying tile already has its real tile-chip shape/look for the whole flight — no round
-   "slice" phase or shape swap partway, so there's no discontinuity between how it starts and how
-   it lands. */
-.slice-wedge {
+/* Leg A — the round plantain slice rolling right across the top bar and off the screen. A
+   plantain-slice cross-section: pale core, green peel ring. Its size is set inline per-instance by
+   SliceFlyLayer; these are just a fallback. */
+.fly-slice {
   position: fixed;
   left: 0;
   top: 0;
-  /* Width/height are set inline per-instance by SliceFlyLayer to match the real destination
-     chip's size — these are just a fallback in case that ever fails. */
   width: 42px;
   height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, #f4e79a 0 52%, #cdbf5a 53% 60%, #a8c94a 61% 100%);
+  border: 2px solid #0f2f1e;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Leg B — the real, full-size tile rolling in from the right along the tray. Matches the actual
+   .tile-chip look so the hand-off to the real chip is seamless. Size set inline per-instance. */
+.fly-tile {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 42px;
+  height: 46px;
   border-radius: var(--radius-rack-tile);
   background: var(--color-tile-bg);
   border: 2px solid var(--color-tile-border);
+  color: var(--color-text-on-accent);
   box-shadow: var(--shadow-press-md) var(--color-tile-shadow);
 }
 
-/* The letter riding on the flying tile, visible for the whole flight. */
-.slice-wedge-letter {
+/* The letter riding on the flying tile (leg B) — a child with its own counter-rotation (see
+   SliceFlyLayer) so it stays upright and readable while the tile rolls. */
+.fly-tile-letter {
   position: absolute;
   inset: 0;
   display: flex;
@@ -855,20 +869,13 @@ button:disabled {
   animation: tileDrop 500ms ease-out;
 }
 
-/* A tile revealed by a landed slice already had its letter carried in on the roll, so its reveal
-   is just a quiet fade at rest — no bounce, no scale, nothing "growing" — since a second motion
-   right after the slice's own arrival would read as a redundant, separate entrance. */
+/* A tile revealed by a landed flying tile needs NO entrance animation: the flying tile was already
+   sitting at exactly this spot and is removed a frame or two after the chip appears, so the chip
+   just takes over in place. Any fade/scale-in here (starting from opacity 0 or a smaller scale)
+   reads as a flash the instant the flying tile is removed — that was the "flashing when settling"
+   bug. Left as a no-op marker class for clarity. */
 .tile-chip.slice-landed {
-  animation: sliceLand 320ms ease-out;
-}
-
-@keyframes sliceLand {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
+  animation: none;
 }
 
 /* A freshly-drawn chip whose flying slice hasn't arrived yet: keep its layout slot (so the slice

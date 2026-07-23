@@ -205,10 +205,10 @@ export default function Game() {
       // Safety net: whatever the cause (a backgrounded tab pausing requestAnimationFrame, a
       // dropped WAAPI animation, anything else that can stop a flight short of landing), a tile
       // must never stay hidden/uncounted forever just because its slice never finished. Force
-      // the reveal well after the longest possible real flight (~1.86s: 650ms + 850ms + up to
-      // two 180ms Dump stagger steps) if it hasn't happened on its own by then.
+      // the reveal well after the longest possible real flight (~2.2s: 750ms leg A + 1050ms leg B
+      // + up to two 180ms Dump stagger steps) if it hasn't happened on its own by then.
       fresh.forEach((t) => {
-        const timer = setTimeout(() => revealChip(t.id), 3000);
+        const timer = setTimeout(() => revealChip(t.id), 3500);
         revealTimers.current.add(timer);
       });
     }

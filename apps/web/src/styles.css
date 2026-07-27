@@ -32,14 +32,19 @@ h3 {
 .panel {
   background: var(--color-surface);
   border-radius: var(--radius-xl);
-  padding: var(--space-8) 40px;
-  min-width: 320px;
+  padding: var(--space-6) var(--space-4);
   width: 420px;
   max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   box-shadow: var(--shadow-panel);
+}
+
+@media (min-width: 480px) {
+  .panel {
+    padding: var(--space-8) 40px;
+  }
 }
 
 .field {
@@ -145,6 +150,7 @@ button:disabled {
 
 .join-row input {
   flex: 1;
+  min-width: 0;
 }
 
 .error {
@@ -161,13 +167,20 @@ button:disabled {
 .home-header {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-4);
+}
+
+/* Scales the SVG logo mark down alongside .wordmark on narrow viewports (overrides the
+   inline width/height attrs Logo.tsx sets — CSS wins over presentation attributes). */
+.home-header svg {
+  width: clamp(64px, 22vw, 120px);
+  height: clamp(64px, 22vw, 120px);
 }
 
 .wordmark {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 56px;
+  font-size: clamp(34px, 11vw, 56px);
   line-height: 1.05;
   color: var(--color-text-primary);
   text-shadow: 0 5px 0 #0a1e12;
@@ -178,7 +191,7 @@ button:disabled {
 .page-title {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 52px;
+  font-size: clamp(32px, 10vw, 52px);
   color: var(--color-text-primary);
   text-shadow: 0 4px 0 #0a1e12;
   -webkit-text-stroke: 2px #0f2f1e;
@@ -296,7 +309,15 @@ button:disabled {
 .game-layout {
   display: flex;
   flex-direction: column;
+  /* 100vh on mobile is pinned to the *largest* possible viewport (address bar collapsed), not
+     the currently-visible one — while the address bar is showing, the box is actually taller
+     than what's on screen. A Peel's DOM update (new tile drawn, tray reflows) is exactly the
+     kind of activity that nudges the browser to show/hide that bar, which then snaps the visible
+     viewport to match this oversized box — seen as the whole layout shifting at the bottom.
+     100dvh tracks the real visible viewport continuously instead. Keep the 100vh fallback first
+     for browsers that don't understand dvh (an unsupported value is dropped, not applied as 0). */
   height: 100vh;
+  height: 100dvh;
   /* Hard clip at the viewport edge. Without this, anything that pokes even 1px past the
      viewport (a hidden tooltip bubble, a wrapped row of tiles) makes the whole page scrollable
      in that direction, which defeats the point of a single-screen game layout. */
@@ -1317,6 +1338,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
 .journal-save-preset-row input {
   flex: 1;
+  min-width: 0;
 }
 
 .journal-footer-note {
@@ -1396,6 +1418,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
  * small label above (matching the Bunch size / Pace headers) and matched control heights. */
 .wordlist-settings-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-4);
   justify-content: center;
 }

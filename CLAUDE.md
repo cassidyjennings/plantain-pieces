@@ -323,6 +323,42 @@ server process to run or patch anywhere):
     multiplayer in solo (a genuine reroll, not a guaranteed escape — matches physical solo
     Bananagrams); the initial deal stays fixed at 21 regardless of Bunch size; streak is
     account-wide.
+- ✅ **Mobile layout fixes (2026-07-27), CSS-verified via a static DOM harness (no live device
+  test yet).** User reported the Join button overflowing off-screen next to the room-code field
+  on their phone. Root cause was two-layered: (1) `.panel` had a hardcoded `min-width: 320px`
+  that refused to shrink even when `.centered`'s own padding left less room than that on real
+  phone widths; (2) even after `.panel` could shrink, the `.join-row` `<input>` still wouldn't —
+  **a plain `flex: 1` on a form control doesn't let it shrink below its browser-default intrinsic
+  content width (`size=20`) unless you also set `min-width: 0`**; this is a general flexbox trap,
+  not specific to this input, so watch for it on any new `flex` row containing an `<input>`
+  (`.journal-save-preset-row input` had the identical bug, fixed alongside it). Also fixed:
+  `.wordmark`/`.page-title`/the home-header logo were fixed-px and could overflow narrow phones
+  with longer headline text ("PLANTAIN", "Play Solo!") — switched to `clamp()`-based fluid sizing;
+  `.wordlist-settings-row` (Lobby's 3-column settings row) was missing `flex-wrap`. Verified by
+  loading `styles.css` into a throwaway static HTML harness pinned to fixed-width frames (320px,
+  280px) and measuring `getBoundingClientRect()` — the Claude Browser pane's `resize_window` does
+  not reliably produce a fixed, clippable viewport (it seems to auto-grow to content), so don't
+  trust it alone for overflow testing; a hard-width wrapper `div` with `overflow-x` is the
+  reliable way to detect true horizontal overflow in that tool. Not yet tested on a real device.
+- ✅ **Game-screen mobile viewport shift on Peel (2026-07-27), fixed.** User reported the bottom
+  of the screen shifting slightly on their phone whenever a Peel happened. Ruled out a pure-CSS
+  flex bug first: swept `.rack-dock`'s tray from 5–25 tiles (crossing several row-wrap points) in
+  a static harness and confirmed `.board-area`'s `flex: 1; min-height: 0` always absorbs the
+  tray's growth — `.rack-dock`'s bottom edge stayed pinned to the container's exact bottom at
+  every hand size, so the flex math itself was never the bug. The actual cause: `.game-layout`
+  used `height: 100vh`, and mobile browsers size `100vh` to the *largest* possible viewport
+  (address bar collapsed) — while the bar is showing, the box is genuinely taller than what's
+  visible. A Peel's DOM update (new tile drawn, tray reflows) is exactly the kind of activity
+  that nudges the browser to show/hide that bar, snapping the visible viewport to match the
+  oversized box — that snap *is* the reported shift. Fixed by adding `height: 100dvh` after the
+  `100vh` fallback (unsupported values are dropped, not applied as 0, so old browsers keep the
+  vh value) — dvh tracks the real visible viewport continuously instead of a stale fixed value.
+  Same category of bug as the join-button fix above; **if another "something shifts/jumps on
+  mobile" report comes in, check for a bare `100vh` on the affected container before assuming a
+  flex/layout math bug** — grep this file for `100vh` first (`.centered`'s `min-height: 100vh` on
+  Home/Lobby/Profile/etc. wasn't touched this round since no bug was reported there, but is the
+  same latent pattern). Not yet confirmed fixed on a real device — dvh support couldn't be
+  exercised against real mobile browser-chrome show/hide behavior in this environment.
 - ➡️ **Next up: puzzle of the day, then bot opponent** (per build priority).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).

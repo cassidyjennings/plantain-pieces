@@ -170,6 +170,35 @@ server process to run or patch anywhere):
   push: a new migration is deliberately a manual step (`supabase db push`, or ask Claude to
   run the new file's SQL directly against the prod connection string) — auto-running
   arbitrary schema SQL against production on every push is a foot-gun, not a convenience.
+  The CLI is **not** logged in on this machine (`supabase login` needs an interactive browser
+  flow), so in practice the reliable route is **pasting the migration SQL into the dashboard
+  SQL editor**. Beware: pasting SQL through a *chat* UI can mangle it — a `$$ ... $$`
+  dollar-quoted body may be eaten as LaTeX display-math (turning `'` into `′`), which then
+  fails in confusing ways. Copy from the file, not from a conversation.
+
+### Seeding the dictionaries against prod (separate manual step)
+Migrations create the schema; the ~2M dictionary rows are loaded separately by
+`scripts/seed-dictionary.mjs`. Run from the **repo root**, in the **same shell** where the
+connection string is set:
+
+```powershell
+$env:DATABASE_URL = '<prod session-pooler URL>'   # PowerShell: NO inline `VAR=x cmd` prefix
+npm run db:seed -- --reset
+```
+
+- **The bash-style `DATABASE_URL='...' npm run db:seed` silently seeds LOCAL instead of prod** —
+  PowerShell has no inline env-var prefix, so the variable never gets set and the script falls
+  back to its `DEFAULT_LOCAL_DB_URL`. The tell is a run that finishes fast reporting `0 new` for
+  every language. Use `$env:VAR = '...'` on its own line first.
+- Use the **Session Pooler** connection string (direct connection fails on IPv6 DNS) and
+  percent-encode the password.
+- `--reset` matters on prod: it clears the old base words first, so English is *replaced* by
+  SOWPODS rather than unioned with the previous ENABLE1 rows.
+- **`VACUUM FULL` cannot run inside a migration** (Postgres rejects it in a transaction block), so
+  a migration that drops columns won't reclaim the space on prod the way a local `db:reset`
+  does. Usually moot when `--reset` reinserts everything, but if
+  `pg_total_relation_size('public.words')` reads well above ~214 MB afterwards, run a one-off
+  `VACUUM FULL public.words;` in the SQL editor.
 
 ## Current status (2026-07-28)
 

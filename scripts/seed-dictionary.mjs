@@ -115,6 +115,22 @@ async function insertWords(client, words, setId, label) {
 }
 
 async function main() {
+  // Announce the target BEFORE anything else, including argument validation. A silent localhost
+  // fallback is the one way this script can appear to succeed while doing nothing useful:
+  // PowerShell has no inline `VAR=value cmd` prefix, so the bash-style
+  // `DATABASE_URL=... npm run db:seed` leaves the variable unset and we quietly seed the local dev
+  // DB instead of the intended remote one — printing identical-looking success output.
+  const host = DATABASE_URL.replace(/^[^:]+:\/\/[^@]*@/, '').replace(/[/?].*$/, '');
+  const usingDefault = process.env.DATABASE_URL === undefined;
+  console.log(`Target: ${host}${usingDefault ? '   <-- DATABASE_URL not set, using LOCAL default' : ''}`);
+  if (usingDefault) {
+    console.log(
+      'If you meant to seed a remote database, stop now (Ctrl+C) and set it first:\n' +
+        "  PowerShell:  $env:DATABASE_URL = '<connection string>'\n" +
+        "  bash:        export DATABASE_URL='<connection string>'\n",
+    );
+  }
+
   const targets = ONLY ? DICTIONARIES.filter((d) => ONLY.includes(d.slug)) : DICTIONARIES;
   if (targets.length === 0) {
     throw new Error(`--only matched no dictionaries. Known slugs: ${DICTIONARIES.map((d) => d.slug).join(', ')}`);

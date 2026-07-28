@@ -135,6 +135,13 @@ npm run dev:api             # wrangler dev  (Worker; needs apps/api/.dev.vars �
 npm run dev:web             # vite dev      (React; needs apps/web/.env.local — see below)
 ```
 
+`dev:api`/`dev:web` each have a `predev:*` npm hook that runs `db:start` automatically before the dev
+server starts — Docker/Supabase self-heal and come up on their own, so you no longer need to
+remember to run `npm run db:start` first. It's a no-op (near-instant) if already running. If you
+ever see a page rendering with the dark theme/fonts but none of its actual content/panels — e.g. just
+a bare "Failed to start session: Failed to fetch" — that's this: the app *is* styled, it just
+couldn't reach Supabase to open a session, so almost nothing else ever mounts.
+
 `apps/api/.dev.vars` (gitignored) needs `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
 `apps/web/.env.local` (gitignored) needs `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
 `VITE_API_URL` (the Worker's local URL, e.g. `http://127.0.0.1:8787`).

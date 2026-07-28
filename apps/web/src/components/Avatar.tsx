@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { type AvatarConfig, normalizeAvatarConfig } from '@plantain/shared';
 
 /** A customizable plantain avatar rendered as inline SVG. Layers accessories (hat, glasses,
@@ -28,6 +29,9 @@ export default function Avatar({ config, size = 52, ring = false }: AvatarProps)
   const c = normalizeAvatarConfig(config ?? {});
   const fill = BODY_FILL[c.base] ?? BODY_FILL.ripe;
   const stroke = BODY_STROKE[c.base] ?? BODY_STROKE.ripe;
+  // Several avatars render on one page, so the trucker hat's mesh pattern needs an id unique per
+  // instance — duplicate ids would make every hat reuse whichever pattern resolved first.
+  const meshId = `mesh-${useId()}`;
 
   return (
     <svg
@@ -66,13 +70,59 @@ export default function Avatar({ config, size = 52, ring = false }: AvatarProps)
 
       <Hair kind={c.hair ?? 'none'} />
       <Glasses kind={c.glasses ?? 'none'} />
-      <Hat kind={c.hat ?? 'none'} />
+      <Hat kind={c.hat ?? 'none'} meshId={meshId} />
     </svg>
   );
 }
 
-function Hat({ kind }: { kind: string }) {
+/** Trucker cap: orange bill, mesh side panels, white foam front. Drawn head-on to match the
+ * avatar's straight-on face. Deliberately carries no lettering — an earlier version stamped
+ * "HOST" across the front panel, but at the lobby's avatar sizes (34–60px) the word was a smudge,
+ * so host status moved to the card stamp and this became a plain cosmetic hat. */
+function TruckerHat({ meshId }: { meshId: string }) {
+  return (
+    <g>
+      <defs>
+        {/* Actual little holes rather than a flat tint, so the side panels still read as mesh
+            when the avatar is drawn large on the profile screen. */}
+        <pattern id={meshId} width="2.6" height="2.6" patternUnits="userSpaceOnUse">
+          <rect width="2.6" height="2.6" fill="#ffb066" />
+          <circle cx="1.3" cy="1.3" r="0.62" fill="#c46f1f" opacity="0.9" />
+        </pattern>
+      </defs>
+
+      {/* Crown — mesh panels wrapping the sides. */}
+      <path
+        d="M19 16.5 Q 19 4.5 32 4.5 Q 45 4.5 45 16.5 Z"
+        fill={`url(#${meshId})`}
+        stroke="#b25f14"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      {/* White foam front panel. */}
+      <path
+        d="M24.2 16.5 Q 24.2 5.9 32 5.9 Q 39.8 5.9 39.8 16.5 Z"
+        fill="#fbf4e2"
+        stroke="#b25f14"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      {/* Bill, curving out over the brow. */}
+      <path
+        d="M17.2 16.5 Q 32 14.8 46.8 16.5 Q 46.8 21.2 32 21.6 Q 17.2 21.2 17.2 16.5 Z"
+        fill="#ff9f43"
+        stroke="#b25f14"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </g>
+  );
+}
+
+function Hat({ kind, meshId }: { kind: string; meshId: string }) {
   switch (kind) {
+    case 'trucker':
+      return <TruckerHat meshId={meshId} />;
     case 'straw':
       return (
         <g>

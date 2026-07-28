@@ -15,7 +15,7 @@ export interface AvatarConfig {
  * they're persisted in profiles.avatar_config. */
 export const ACCESSORY_SETS = {
   base: ['ripe', 'green', 'golden', 'speckled'],
-  hat: ['none', 'straw', 'party', 'crown', 'beanie'],
+  hat: ['none', 'straw', 'party', 'crown', 'beanie', 'trucker'],
   glasses: ['none', 'round', 'shades', 'star'],
   hair: ['none', 'swoop', 'curls', 'mohawk'],
 } as const;

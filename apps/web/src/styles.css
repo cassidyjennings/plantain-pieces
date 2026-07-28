@@ -20,6 +20,7 @@ h3 {
 }
 
 .centered {
+  position: relative;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -213,21 +214,46 @@ button:disabled {
 }
 
 /* Lobby */
+/* Room code + Leave Room share one row at the top of the screen instead of the code being a
+   separate centered block and Leave floating in the corner — align-self: stretch so this row
+   actually spans .centered's full width (its default align-items: center would otherwise let
+   the row shrink-wrap), which is what makes justify-content: space-between push Leave to the
+   right edge. */
+/* A 3-column grid (not flex space-between) so the room-code pill can sit at the row's true
+   center — the empty 1fr on the left counterbalances Leave Room's width on the right, which a
+   plain space-between can't do since it only has 2 items to place at the ends. */
+.lobby-topbar {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.lobby-topbar .room-code-pill {
+  grid-column: 2;
+}
+
+.lobby-topbar .btn-leave {
+  grid-column: 3;
+  justify-self: end;
+}
+
 .room-code-pill {
-  align-self: center;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   border: 2px dashed var(--color-secondary);
   background: var(--color-surface-inner);
   border-radius: var(--radius-pill);
-  padding: 10px 24px;
+  padding: 0 14px 0 20px;
 }
 
 .room-code-pill .label {
   font-family: var(--font-body);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-faint);
   letter-spacing: 0.1em;
 }
@@ -235,33 +261,140 @@ button:disabled {
 .room-code-pill .code {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 22px;
+  font-size: 18px;
   letter-spacing: 0.15em;
   color: var(--color-secondary);
 }
 
+.room-code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-faint);
+  box-shadow: none;
+}
+
+/* Matches .room-code-pill's explicit height so the two sit flush in .lobby-topbar. */
+.lobby-topbar .btn-leave {
+  height: 40px;
+}
+
+.room-code-copy-btn:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  color: var(--color-secondary);
+}
+
+.room-code-copy-btn:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.room-code-copy-btn.copied {
+  color: var(--color-success);
+}
+
+/* The player grid sizes itself from the player count. Every dimension a card uses is a custom
+   property declared here, so switching to `.compact` (5+ players, i.e. it will wrap to a second
+   row) rescales the cards AND their contents together from one place, rather than needing a
+   parallel set of overrides per element. The media query near the bottom of this file redeclares
+   the same properties for phones, so count-scaling and width-scaling compose instead of fighting.
+   `--pcard-cols` is the one value React supplies inline (players can't be counted in CSS): it
+   caps the row so 5-8 players split into balanced rows (3+2, 3+3, 4+3, 4+4) instead of filling
+   the first row and orphaning the remainder. */
 .player-grid {
+  --pcard-max: 190px;
+  --pcard-min: 96px;
+  --pcard-gap: var(--space-4);
+  --pcard-pad-y: 28px;
+  --pcard-gap-inner: var(--space-2);
+  --pcard-avatar: 60px;
+  --pcard-name: 1rem;
+  --pcard-stamp: 18px;
+
+  /* React supplies --pcard-cols-req (the ideal column count for this player count); the
+     breakpoints below cap it, so a phone asks for fewer columns instead of letting cards bottom
+     out at --pcard-min and wrap anyway — which left them far narrower than the row could
+     actually afford. */
+  --pcard-cols: var(--pcard-cols-req, 4);
+
+  /* The widest a card can be while `--pcard-cols` of them still share one row at this viewport
+     (72px = .centered's 32px side padding ×2, plus 8px of slack for a scrollbar). Flex line
+     breaking uses each item's flex-basis, NOT its shrunk width, so flex-shrink alone can't keep
+     4 cards on one row — the basis itself has to come down, which is what this does. */
+  --pcard-fit: calc(
+    (100vw - 72px - (var(--pcard-cols, 4) - 1) * var(--pcard-gap)) / var(--pcard-cols, 4)
+  );
+  /* Cap at the design size on a wide screen, shrink to fit in between, and stop at a legible
+     floor — past which flex-wrap takes over and reflows to fewer per row (the phone case). */
+  --pcard-w: clamp(var(--pcard-min), var(--pcard-fit), var(--pcard-max));
+
   display: flex;
-  gap: var(--space-4);
+  gap: var(--pcard-gap);
   flex-wrap: wrap;
   justify-content: center;
+  /* width + max-width, not max-width alone: the cap is what forces the balanced wrap on a wide
+     screen, while width:100% keeps it from exceeding the available space on a narrow one (where
+     flex-wrap then reflows to however many actually fit). */
+  width: 100%;
+  max-width: calc(
+    var(--pcard-cols, 4) * var(--pcard-w) + (var(--pcard-cols, 4) - 1) * var(--pcard-gap)
+  );
+}
+
+/* 5+ players — a second row is coming, so pull the cards back to roughly their old height (and
+   narrower) to buy that row's vertical space back. */
+.player-grid.compact {
+  --pcard-max: 155px;
+  --pcard-pad-y: 20px;
+  --pcard-gap-inner: 6px;
+  --pcard-avatar: 48px;
+  --pcard-name: 0.95rem;
+  --pcard-stamp: 15px;
 }
 
 .player-card {
-  width: 200px;
+  position: relative;
+  width: var(--pcard-w);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  padding: var(--space-6) var(--space-4);
+  /* 3px, and set on the base rule (not per state) — the outline is now the *only* thing
+     carrying ready/not-ready, so it needs the weight to read at a glance, and keeping the width
+     identical across states means switching state never nudges the layout. */
+  border: 3px solid var(--color-border);
+  padding: var(--pcard-pad-y) var(--space-3);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--pcard-gap-inner);
   box-shadow: var(--shadow-card);
+  /* Readiness is shown by the card's outline easing from a neutral border to a colored one
+     (red = not ready yet, green = ready) instead of a separate text label. */
+  transition: border-color var(--transition-base);
 }
 
-.player-card.host {
-  border-color: var(--color-secondary);
+/* Overrides the width/height attributes Avatar.tsx renders inline (CSS beats presentation
+   attributes), so the avatar rescales with the rest of the card. */
+.player-card .avatar-svg {
+  width: var(--pcard-avatar);
+  height: var(--pcard-avatar);
+}
+
+/* Red (not the brand yellow) for not-ready: yellow reads as just another accent on this palette
+   — half the UI is already yellow/orange — so it didn't register as a state at all. Red vs green
+   is unambiguous. Border only, no background tint: red mixed into the dark green surface came
+   out muddy brown rather than reading as red. The colorblind modes retint --color-danger /
+   --color-success, so this stays legible there too. */
+.player-card.not-ready {
+  border-color: var(--color-danger);
+}
+
+.player-card.ready {
+  border-color: var(--color-success);
 }
 
 .player-avatar {
@@ -281,28 +414,71 @@ button:disabled {
 .player-name {
   font-family: var(--font-body);
   font-weight: 800;
+  font-size: var(--pcard-name, 1rem);
   color: var(--color-text-primary);
+  transition: color var(--transition-base);
+  /* Cards get genuinely narrow at 8 players on a phone — a long display name has to truncate
+     rather than wrap the card taller than its siblings or push past its own edge. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.player-host-tag {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--color-secondary);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.player-card.not-ready .player-name {
+  color: var(--color-danger);
 }
 
-.player-ready {
-  font-size: var(--text-small);
-  font-weight: 700;
-}
-
-.player-ready.ready {
+.player-card.ready .player-name {
   color: var(--color-success);
 }
 
-.player-ready.waiting {
-  color: var(--color-waiting);
+/* Angled rubber-stamp "HOST" struck across the card's top-right corner, overhanging the edge a
+   little so it reads as stamped ON the card rather than laid out inside it. A single border
+   (the double-ring "frame" look didn't read as a stamp) plus the ink-gap mask below is what
+   sells it as a stamp instead of a plain rotated label. */
+.host-stamp {
+  position: absolute;
+  top: -5px;
+  right: -10px;
+  z-index: 1;
+  /* Runs down-to-the-right across the top-right corner, but shallow enough to stay easy to
+     read — a true 45° corner diagonal tipped the word close to vertical. */
+  transform: rotate(20deg);
+  /* Opaque, so the card's ready/not-ready outline doesn't show through the stamp where the two
+     overlap at the corner. */
+  background: var(--color-surface);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--pcard-stamp, 18px);
+  line-height: 1.05;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  /* The game's yellow. Also keeps the stamp clear of the card's ready/not-ready border, which
+     owns red and green. */
+  color: var(--color-secondary);
+  /* em padding + px border: the box scales with --pcard-stamp as cards shrink, while the border
+     stays a constant weight so the stamp doesn't turn hairline on the smallest cards. */
+  padding: 0.18em 0.45em 0.22em;
+  border: 2.5px solid var(--color-secondary);
+  border-radius: 3px;
+  /* Doesn't intercept clicks/hover meant for the card underneath. */
+  pointer-events: none;
+  /* Eroded ink: a fractal-noise alpha mask punches sparse holes through the glyphs and rules,
+     the way a real stamp misses the paper. Applied to the element, so the ::before ring gets
+     the same erosion and the two read as one impression. */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -0.3 1.6'/%3E%3C/filter%3E%3Crect width='120' height='60' filter='url(%23n)'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -0.3 1.6'/%3E%3C/filter%3E%3Crect width='120' height='60' filter='url(%23n)'/%3E%3C/svg%3E");
+  -webkit-mask-size: cover;
+  mask-size: cover;
+}
+
+/* Now only used for the "Spectator" label — ready/not-ready is shown by the card + name color
+   instead of a text badge. */
+.player-ready {
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--color-text-faint);
 }
 
 /* Game */
@@ -1418,9 +1594,16 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
  * small label above (matching the Bunch size / Pace headers) and matched control heights. */
 .wordlist-settings-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
+  flex-wrap: nowrap;
+  gap: var(--space-6);
   justify-content: center;
+  /* Slightly lighter than .centered's background surface, with the same soft elevation used
+     elsewhere (.player-card, .stat-tile) — turns the three controls into one linked bar instead
+     of three loose items. */
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-pill);
+  padding: var(--space-6) 44px;
+  box-shadow: var(--shadow-card);
 }
 
 .wordlist-control {
@@ -1428,6 +1611,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .wordlist-control-label {
@@ -1443,7 +1627,94 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 .wordlist-control-box .dictionary-open-btn {
   height: 44px;
-  padding: 0 20px;
+  padding: 0 26px;
+  font-size: 13px;
+  /* Orange instead of the inherited surface-raised fill, which is the same color as
+     .wordlist-settings-row's own background — without this the button visually disappeared
+     into the pill it sits in. No border, matching the solid pressed-shadow look the rest of
+     the app's buttons use (Home's Create Room / Play Solo) instead of a thin outline. */
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border: none;
+  box-shadow: var(--shadow-press-md) var(--color-accent-shadow);
+  /* A hard px cap, not a percentage: .wordlist-settings-row's ancestors shrink-wrap rather than
+     having a real width, so a percentage max-width has nothing meaningful to resolve against
+     and a long custom dictionary name would otherwise force the whole bar wider than the
+     viewport instead of truncating. */
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The min./max. word-length +/- buttons, orange to match the dictionary button beside them —
+   scoped to this bar specifically (not the base .length-stepper-btn) since the Dictionary
+   Journal's tan-paper theme reuses the same component with its own colors and must stay
+   untouched. :not(:disabled) keeps the min/max-reached disabled look intact too. */
+.wordlist-control-box .length-stepper-btn:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border: none;
+  box-shadow: var(--shadow-press-sm) var(--color-accent-shadow);
+}
+.wordlist-control-box .length-stepper-btn:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+.wordlist-control-box .length-stepper-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 var(--color-accent-shadow);
+}
+
+/* Everything here shrinks together on a narrow phone so the bar stays one row instead of
+   wrapping — .wordlist-control's min-width: 0 (above) is what actually lets a flex column
+   shrink below its label's natural text width to make room. */
+@media (max-width: 640px) {
+  .wordlist-settings-row {
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-3);
+    /* A full stadium radius reads as a bulging blob at this much shorter width-to-height
+       ratio, so fall back to a plain rounded rect. */
+    border-radius: var(--radius-xl);
+  }
+
+  .wordlist-control-label {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .wordlist-control-box {
+    height: 30px;
+  }
+  .wordlist-control-box .dictionary-open-btn {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+    max-width: 70px;
+  }
+
+  .length-stepper-btn {
+    width: 18px;
+    height: 18px;
+    font-size: 0.75rem;
+  }
+  .length-stepper-value {
+    font-size: 0.75rem;
+  }
+
+  .pill-switch {
+    width: 46px;
+    height: 22px;
+  }
+  .pill-switch-knob {
+    width: 16px;
+    height: 16px;
+  }
+  .pill-switch.on .pill-switch-knob {
+    transform: translateX(24px);
+  }
+  .pill-switch-text {
+    font-size: 8px;
+  }
 }
 
 /* Pill-shaped on/off switch (word validation). The knob sits on one side; the ON/OFF word
@@ -1456,24 +1727,33 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   padding: 0;
   border-radius: var(--radius-pill);
   background: var(--color-surface-inner);
-  border: 2px solid var(--color-border);
-  box-shadow: none;
+  border: none;
+  /* Same pressed-shadow elevation family as the dictionary button beside it, instead of a flat
+     border — the shadow color follows the track's own color (neutral off, accent on). */
+  box-shadow: var(--shadow-press-sm) var(--color-border);
   overflow: hidden;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
 }
 .pill-switch.on {
   background: var(--color-accent);
-  border-color: var(--color-accent);
+  box-shadow: var(--shadow-press-sm) var(--color-accent-shadow);
 }
-/* Explicit hover overrides — without these, the global `button:hover` rule (which sets
- * background to --color-accent-hover on ANY button) wins on specificity and paints an
- * orange hover highlight even over the neutral off-state track. */
+/* Explicit hover/active overrides — without these, the global `button:hover`/`:active` rules
+ * (which paint an orange highlight + press animation on ANY button) win on specificity and
+ * clash with this toggle's own on/off coloring. */
 .pill-switch:hover:not(:disabled) {
   background: var(--color-surface-inner);
 }
 .pill-switch.on:hover:not(:disabled) {
   background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  box-shadow: var(--shadow-press-sm) var(--color-accent-shadow);
+}
+.pill-switch:active:not(:disabled) {
+  transform: none;
+  box-shadow: var(--shadow-press-sm) var(--color-border);
+}
+.pill-switch.on:active:not(:disabled) {
+  box-shadow: var(--shadow-press-sm) var(--color-accent-shadow);
 }
 .pill-switch-text {
   position: absolute;
@@ -1558,12 +1838,260 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
 /* Quiet exit affordance — visible but never competing with the primary actions. */
 .btn-leave {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: 8px 16px;
   font-size: var(--text-small);
   background: transparent;
   color: var(--color-text-faint);
   box-shadow: none;
   border: 2px solid var(--color-border);
+}
+
+/* Lobby's room code + Leave Room share .lobby-topbar as one row pinned near the top of the
+   screen (flex-start, overriding .centered's own justify-content: center — this page has a
+   fixed "header" now, unlike every other .centered screen). Everything below it lives in
+   .lobby-body, a second flex column that grows to fill the rest of the vertical space
+   (flex: 1) and spreads its own children evenly across that space (justify-content:
+   space-evenly) — a deliberately different rhythm from .centered's uniform small gap, so the
+   page reads as using its full height instead of one small clustered block. */
+.lobby-screen {
+  justify-content: flex-start;
+  /* Tighter than .centered's var(--space-8): this is the topbar-to-body gap specifically, and
+     shrinking it is what actually raises the settings bar (the first thing in .lobby-body). */
+  gap: var(--space-4);
+}
+
+/* Three stacked bands: the settings bar (fixed height, pinned under the topbar), the player
+   area (absorbs ALL the slack), and the actions (fixed height, therefore pinned at a constant
+   distance from the bottom). Distributing the slack with space-around instead meant every extra
+   player pushed Ready/Split! down the screen; parking it all in one flexible middle band is what
+   keeps those two buttons put no matter how many people join. */
+.lobby-body {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding-bottom: var(--space-8);
+}
+
+/* The flexible band. Cards centre themselves in whatever height is left over, growing upward and
+   downward from the middle rather than pushing the layout around them. */
+.player-grid-area {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  /* Deliberately NOT overflow:auto — the host stamp overhangs its card's corner by design, and
+     any scroll container here would clip that overhang (setting overflow-y alone also computes
+     overflow-x to auto, so it clips sideways too). Cards already shrink hard enough by count and
+     breakpoint that a full 8-player roster fits this band without needing to scroll. */
+}
+
+/* Ready and Split! stay a tight pair — they're one "what do I do next" unit. */
+.lobby-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  /* The topbar and the settings bar are given the SAME width here (100% of the available column,
+     capped identically) rather than each shrink-wrapping to its own content — that shared width
+     is what makes their outer edges line up. The topbar then pushes the room code to the left
+     edge and Leave Room to the right, so those two land exactly on the settings bar's edges. */
+  .lobby-topbar,
+  .solo-setup-section {
+    align-self: center;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .lobby-topbar {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 0;
+  }
+
+  .wordlist-settings-row {
+    width: 100%;
+    /* Spread the three controls across the now-wider bar instead of clustering them mid-bar. */
+    justify-content: space-around;
+  }
+
+  /* The "ROOM CODE" label is the one thing here safe to drop — the code itself, in its
+     distinctive dashed pill, is self-explanatory, and dropping it buys back enough width to
+     keep the code and Leave Room both comfortably on one line. */
+  .room-code-pill .label {
+    display: none;
+  }
+
+  .room-code-pill {
+    padding: 0 16px 0 20px;
+  }
+
+  .room-code-pill .code {
+    font-size: 15px;
+  }
+
+  /* Scoped to the topbar instance specifically — .btn-leave is shared with the in-game top
+     bar's Leave button, which shouldn't shrink along with this one. white-space/flex-shrink:
+     without them the flex row can squeeze this button below its content width and "Leave Room"
+     wraps to two lines instead of the row just using the space it needs. */
+  .lobby-topbar .btn-leave {
+    padding: 10px 18px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Phone sizing redeclares the same custom properties the base rules use, so the count-based
+     .compact step still applies on top of it — a phone with 8 players gets the small-card
+     treatment for BOTH reasons, rather than one overriding the other. */
+  .player-grid {
+    /* ≤4 players on a phone: 2 across (so 3→2+1, 4→2+2). Three full-size cards across a phone
+       would each be squeezed to ~93px — two readable ones per row beats three cramped. */
+    --pcard-cols: min(var(--pcard-cols-req, 2), 2);
+    --pcard-max: 140px;
+    --pcard-min: 84px;
+    --pcard-gap: var(--space-3);
+    --pcard-pad-y: 16px;
+    --pcard-gap-inner: 6px;
+    --pcard-avatar: 44px;
+    --pcard-name: var(--text-small);
+    --pcard-stamp: 15px;
+  }
+
+  /* 5+ players: the cards are already small, so 3 across is comfortable and keeps a full roster
+     from running the page long (8 → 3+3+2 instead of four rows of two). */
+  .player-grid.compact {
+    --pcard-cols: min(var(--pcard-cols-req, 3), 3);
+    --pcard-max: 108px;
+    --pcard-pad-y: 12px;
+    --pcard-gap-inner: 4px;
+    --pcard-avatar: 34px;
+    --pcard-name: 0.75rem;
+    --pcard-stamp: 11px;
+  }
+
+  .btn-split {
+    padding: 16px 30px;
+    font-size: 18px;
+  }
+
+  /* .lobby-body's space-around (base rule) is tuned for a tall desktop viewport — on a short
+     phone screen it still leaves a visible gap before the settings bar that reads as too far
+     from the topbar above it. Anchor to the top instead, with its own explicit gap standing in
+     for the space-around distribution. */
+  .lobby-body {
+    justify-content: flex-start;
+    gap: var(--space-4);
+  }
+}
+
+/* Smallest phones only (340px, not 380px — 375px is an extremely common width and still fits 3
+   compact cards across). Caps even the compact grid at 2, so cards keep a readable width rather
+   than being squeezed to --pcard-min and wrapping anyway with line width left unused. */
+@media (max-width: 340px) {
+  .player-grid,
+  .player-grid.compact {
+    --pcard-cols: min(var(--pcard-cols-req, 2), 2);
+  }
+}
+
+/* The Split! call-to-action — a step up from the default button size since it's the single
+   action that actually starts the game. */
+.btn-split {
+  padding: 18px 36px;
+  font-size: 20px;
+}
+
+/* Split! stays clickable (not the native `disabled` attribute) even when the room isn't ready,
+   so clicking it can explain why via .split-not-ready-popup instead of just doing nothing — but
+   it still needs to *look* inert, mirroring the real button:disabled treatment by hand since a
+   click handler is the whole point. */
+.btn-split.not-ready {
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.btn-split.not-ready:hover:not(:disabled) {
+  background: var(--color-disabled-bg);
+}
+.btn-split.not-ready:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Positions .split-not-ready-popup / .copied-popup relative to their trigger without either
+   participating in .centered's flex flow, so they can never push anything else on the screen
+   up or down. */
+.split-btn-wrap,
+.copy-btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.split-not-ready-popup,
+.copied-popup {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  text-align: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
+  animation: popIn 150ms ease-out;
+}
+
+.split-not-ready-popup {
+  top: 100%;
+  margin-top: var(--space-2);
+  max-width: 260px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}
+
+/* Above the button, like a standard copy tooltip, rather than below where it would sit right
+   on top of the "Share this code..." hint line. */
+.copied-popup {
+  bottom: 100%;
+  margin-bottom: var(--space-1);
+  padding: 4px 10px;
+  color: var(--color-success);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-not-ready-popup,
+  .copied-popup {
+    animation: none;
+  }
 }
 
 .btn-leave:hover:not(:disabled) {

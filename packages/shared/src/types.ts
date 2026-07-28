@@ -30,16 +30,21 @@ export type RoomStatus = 'lobby' | 'active' | 'finished';
  * A wordlist is one **base** dictionary plus any number of **additional** ones. The accepted
  * words are the union of all of them — base vs additional is a modelling/UI distinction, not a
  * filtering one, which is why `customSetIds` alone still drives `find_invalid_words`.
- * The base is either the built-in ENABLE1 list (`baseEnabled`, `baseSetId: null`) or one of the
+ * The base is either the built-in English list (`baseEnabled`, `baseSetId: null`) or one of the
  * player's own custom sets (`baseSetId`, which is ALSO listed in `customSetIds` so the union
  * stays correct without the SQL needing to know about bases at all).
+ *
+ * The other built-in languages (Español/Français/Deutsch) are *official* word sets — rows in
+ * `custom_word_sets` with `owner_id IS NULL` — so they ride in `customSetIds` alongside a user's
+ * own sets and need no special case here. English is the odd one out only because it occupies the
+ * `custom_set_id IS NULL` partition of `words`; the UI presents all four identically.
  */
 export interface DictionaryConfig {
   /** Minimum word length allowed (inclusive). Bananagrams default is 2. */
   minLength: number;
   /** Maximum word length allowed (inclusive), or null for no upper bound. */
   maxLength: number | null;
-  /** Whether the built-in ENABLE1 list is included (and, when baseSetId is null, is the base). */
+  /** Whether the built-in English list is included (and, when baseSetId is null, is the base). */
   baseEnabled: boolean;
   /** Topic tags to exclude (no-op until words are topic-tagged). */
   excludedTopics: string[];

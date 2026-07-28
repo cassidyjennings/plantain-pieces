@@ -1491,6 +1491,23 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   flex-shrink: 0;
 }
 
+/* Sub-heading inside a journal section, splitting the picker into "Languages" (built-ins) and
+   "Your dictionaries". Quieter than the section's own h3 so it groups without competing. */
+.journal-set-group {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: var(--text-caption);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(74, 52, 22, 0.62);
+}
+/* The list above it already carries bottom spacing; this restores breathing room before the
+   second group without doubling the gap after the first. */
+.journal-set-list + .journal-set-group {
+  margin-top: var(--space-2);
+}
+
 .journal-icon-btn {
   padding: 4px 10px;
   min-width: 0;

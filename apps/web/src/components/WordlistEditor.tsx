@@ -1,13 +1,15 @@
 import { WORD_LENGTH_MAX, type DictionaryConfig } from '@plantain/shared';
-import type { CustomWordSetSummary } from '../lib/dictionaries.js';
+import type { CustomWordSetSummary, OfficialWordSet } from '../lib/dictionaries.js';
 import WordLengthStepper from './WordLengthStepper.js';
 import DictionaryChecklist from './DictionaryChecklist.js';
 
 interface WordlistEditorProps {
   config: DictionaryConfig;
   onChange: (config: DictionaryConfig) => void;
-  /** The viewer's own dictionaries — the only ones they can pick. */
+  /** The viewer's own dictionaries. */
   mySets: CustomWordSetSummary[];
+  /** The built-in language dictionaries, selectable by everyone. */
+  officialSets?: OfficialWordSet[];
   /** Read-only viewers (non-host players) see the wordlist as a summary they can't edit. */
   readOnly?: boolean;
   /** Resolves a set id to a name, including sets the viewer doesn't own (e.g. the host's). */
@@ -24,6 +26,7 @@ export default function WordlistEditor({
   config,
   onChange,
   mySets,
+  officialSets = [],
   readOnly = false,
   nameFor,
 }: WordlistEditorProps) {
@@ -36,7 +39,14 @@ export default function WordlistEditor({
           <h3>Minimum word length</h3>
           <p className="wordlist-readonly-value">{config.minLength}+ letters</p>
         </div>
-        <DictionaryChecklist config={config} onChange={onChange} mySets={mySets} readOnly nameFor={nameFor} />
+        <DictionaryChecklist
+          config={config}
+          onChange={onChange}
+          mySets={mySets}
+          officialSets={officialSets}
+          readOnly
+          nameFor={nameFor}
+        />
       </>
     );
   }
@@ -51,7 +61,13 @@ export default function WordlistEditor({
           onChange={(minLength) => onChange({ ...config, minLength })}
         />
       </div>
-      <DictionaryChecklist config={config} onChange={onChange} mySets={mySets} nameFor={nameFor} />
+      <DictionaryChecklist
+        config={config}
+        onChange={onChange}
+        mySets={mySets}
+        officialSets={officialSets}
+        nameFor={nameFor}
+      />
     </>
   );
 }

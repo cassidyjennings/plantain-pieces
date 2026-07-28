@@ -18,7 +18,7 @@ import { createAdminClient } from './supabase.js';
 import { requireAuth } from './auth.js';
 import { statusForRpcError } from './rpcError.js';
 import { fetchRack } from './gridValidation.js';
-import { fetchOwnedCustomSetIds, resolveCustomSetNames } from './dictionaries.js';
+import { fetchSelectableCustomSetIds, resolveCustomSetNames } from './dictionaries.js';
 import { assembleExport } from './profile.js';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -325,8 +325,8 @@ app.post('/dictionaries/presets', async (c) => {
   const body = await c.req.json<{ name: string; config: DictionaryConfig }>();
   const admin = createAdminClient(c.env);
 
-  const owned = await fetchOwnedCustomSetIds(admin, profileId);
-  const validity = validateDictionaryConfig(body.config, owned);
+  const selectable = await fetchSelectableCustomSetIds(admin, profileId);
+  const validity = validateDictionaryConfig(body.config, selectable);
   if (!validity.valid) return c.json({ error: validity.reason }, statusForRpcError(validity.reason));
 
   const { data, error } = await admin.rpc('save_dictionary_preset', {
@@ -357,8 +357,8 @@ app.patch('/rooms/:roomId/dictionary', async (c) => {
   const body = await c.req.json<{ config: DictionaryConfig }>();
   const admin = createAdminClient(c.env);
 
-  const owned = await fetchOwnedCustomSetIds(admin, profileId);
-  const validity = validateDictionaryConfig(body.config, owned);
+  const selectable = await fetchSelectableCustomSetIds(admin, profileId);
+  const validity = validateDictionaryConfig(body.config, selectable);
   if (!validity.valid) return c.json({ error: validity.reason }, statusForRpcError(validity.reason));
 
   const { data, error } = await admin.rpc('set_dictionary_config', {

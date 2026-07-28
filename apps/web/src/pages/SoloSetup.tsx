@@ -5,9 +5,11 @@ import { api, ApiError } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
+  fetchOfficialWordSets,
   getDictionaryButtonLabel,
   type CustomWordSetSummary,
   type DictionaryPresetRow,
+  type OfficialWordSet,
 } from '../lib/dictionaries.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
@@ -28,6 +30,7 @@ export default function SoloSetup() {
 
   const [dictConfig, setDictConfig] = useState<DictionaryConfig>(DEFAULT_DICTIONARY_CONFIG);
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
+  const [officialSets, setOfficialSets] = useState<OfficialWordSet[]>([]);
   const [presets, setPresets] = useState<DictionaryPresetRow[]>([]);
   const [showWordlist, setShowWordlist] = useState(false);
   const [bunchSize, setBunchSize] = useState<number>(BUNCH_SIZE_PRESETS[1].size);
@@ -37,11 +40,16 @@ export default function SoloSetup() {
 
   useEffect(() => {
     fetchMyCustomWordSets().then(setMySets);
+    fetchOfficialWordSets().then(setOfficialSets);
     fetchMyDictionaryPresets().then(setPresets);
   }, []);
 
   function nameFor(id: string): string {
-    return mySets.find((s) => s.id === id)?.name ?? 'Custom';
+    return (
+      officialSets.find((s) => s.id === id)?.name ??
+      mySets.find((s) => s.id === id)?.name ??
+      'Custom'
+    );
   }
 
   const maxMinLength = dictConfig.maxLength ?? WORD_LENGTH_MAX;

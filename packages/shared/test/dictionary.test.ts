@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  foldDiacritics,
   normalizeWord,
   normalizeWordList,
   splitWordInput,
@@ -30,6 +31,37 @@ describe('normalizeWord', () => {
   it('accepts a word at exactly the boundary lengths', () => {
     expect(normalizeWord('ab')).toBe('AB');
     expect(normalizeWord('a'.repeat(20))).toBe('A'.repeat(20));
+  });
+
+  it('folds accents onto the base letter instead of rejecting the word', () => {
+    expect(normalizeWord('café')).toBe('CAFE');
+    expect(normalizeWord('NIÑO')).toBe('NINO');
+    expect(normalizeWord('schön')).toBe('SCHON');
+  });
+});
+
+describe('foldDiacritics', () => {
+  it('strips combining accents exposed by NFD decomposition', () => {
+    expect(foldDiacritics('ÉLÈVE')).toBe('ELEVE');
+    expect(foldDiacritics('Ça')).toBe('Ca');
+  });
+
+  it('maps letters that NFD leaves intact', () => {
+    // These carry no combining mark to strip, so they need the explicit table.
+    expect(foldDiacritics('Łódź')).toBe('Lodz');
+    expect(foldDiacritics('groß')).toBe('groSS');
+    expect(foldDiacritics('Æon')).toBe('AEon');
+    expect(foldDiacritics('Øre')).toBe('Ore');
+  });
+
+  it('leaves plain ASCII untouched', () => {
+    expect(foldDiacritics('BANANA')).toBe('BANANA');
+  });
+
+  it('does not transliterate non-Latin scripts (they get rejected downstream)', () => {
+    // A game played with A-Z tiles can't render these, so passing them through unchanged —
+    // and letting WORD_PATTERN reject them — is the intended outcome.
+    expect(normalizeWord('كتاب')).toBeNull();
   });
 });
 

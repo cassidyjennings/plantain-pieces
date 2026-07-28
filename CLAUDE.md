@@ -63,8 +63,9 @@ server validates that the grid's letter multiset exactly equals the player's `ra
   also HTML-native).
 - **Backend:** Cloudflare Worker (Hono). → game-action gateway.
 - **DB/Auth/Realtime:** Supabase (Postgres + Auth + Realtime).
-- **Dictionary:** ENABLE1 (public domain) in the `words` table. Length + custom-set filtering
-  works; `topics[]` filtering is **stubbed** (no public topic-tagged list exists yet).
+- **Dictionary:** four built-in languages in the `words` table (~1.97M rows) — English (Collins/
+  SOWPODS), Español, Français, Deutsch. Length + set filtering works; `topics[]` filtering is
+  **gone** (the column was dropped — it was never populated and cost ~48MB at this row count).
 
 ## Repo layout
 
@@ -96,10 +97,10 @@ plantain-pieces/
     migrations/
       *_schema.sql       # tables, views, RLS, realtime — DONE, applied + smoke-tested locally
       *_rpcs.sql         # SECURITY DEFINER game RPCs        — DONE, applied + smoke-tested locally
-    seed/enable1.txt     # vendored ENABLE1 word list (172,823 words)
+    seed/*.txt.gz        # vendored gzipped word lists (en/es/fr/de, ~4.6MB total)
     config.toml          # local stack config (anonymous sign-ins enabled, analytics disabled)
   scripts/
-    seed-dictionary.mjs  # loads enable1.txt into public.words — DONE, idempotent
+    seed-dictionary.mjs  # loads all 4 language lists into public.words — DONE, idempotent
 ```
 
 **Uses npm workspaces, NOT pnpm** (Corepack couldn't write into `Program Files` without admin on
@@ -129,7 +130,7 @@ npm run build:shared        # tsc build of shared
 npm run db:start            # npx supabase start   (needs Docker Desktop running)
 npm run db:reset            # npx supabase db reset (re-applies migrations + seed)
 npm run db:stop
-npm run db:seed             # load ENABLE1 into words (idempotent; --reset to wipe base words first)
+npm run db:seed             # load all 4 built-in dictionaries (idempotent; --reset wipes built-ins first)
 
 npm run dev:api             # wrangler dev  (Worker; needs apps/api/.dev.vars — see below)
 npm run dev:web             # vite dev      (React; needs apps/web/.env.local — see below)
@@ -170,7 +171,7 @@ server process to run or patch anywhere):
   run the new file's SQL directly against the prod connection string) — auto-running
   arbitrary schema SQL against production on every push is a foot-gun, not a convenience.
 
-## Current status (2026-07-21)
+## Current status (2026-07-28)
 
 - ✅ Monorepo scaffold, `packages/shared` complete and tested.
 - ✅ Supabase schema, RLS, views, realtime, and all game RPCs **written, applied, and
@@ -178,9 +179,9 @@ server process to run or patch anywhere):
   start_game (Split deals correctly) → peel (atomic per-player draw + stale-peel guard verified)
   → dump → find_invalid_words → get_my_state → finish_game (Plantains, bunch-low gate verified)
   all pass, and `room_events` payloads are confirmed public-safe.
-- ✅ ENABLE1 dictionary seed loader (`scripts/seed-dictionary.mjs`, word list vendored at
-  `supabase/seed/enable1.txt`, 172,823 words). Idempotent, run via `npm run db:seed`.
-  `find_invalid_words` verified against real seeded words.
+- ✅ Dictionary seed loader (`scripts/seed-dictionary.mjs`, lists vendored gzipped under
+  `supabase/seed/`). Idempotent, run via `npm run db:seed`. `find_invalid_words` verified against
+  real seeded words. (Originally ENABLE1-only; see the 2026-07-28 multi-language entry below.)
 - ✅ Worker gateway (`apps/api`, Hono) — auth middleware, all room lifecycle + in-game routes,
   structural validation before Peel/Plantains reach the RPC layer. Verified end-to-end over real
   HTTP with genuine anonymous auth sessions (see git log for the full test list).
@@ -217,7 +218,7 @@ server process to run or patch anywhere):
   `prefers-reduced-motion` (skips flight, reveals immediately) and caps concurrent flights.
   `PlantainMascot.tsx` was removed (fully superseded).
 - ✅ **Custom Dictionaries feature (2026-07-15), browser-verified end-to-end.** Players build named
-  custom word lists, toggle word sources (base ENABLE1 + their own sets) and length bounds per game,
+  custom word lists, toggle word sources (the built-in languages + their own sets) and length bounds per game,
   and save named **presets** (dictionary + settings combos) to reuse. The room host sets the active
   config pre-Split; it broadcasts live to the lobby via a `dictionary_config_changed` `room_event`.
   - **DB** (`supabase/migrations/20260715000001..3`): new `dictionary_presets` table; split the old
@@ -366,6 +367,44 @@ server process to run or patch anywhere):
   Home/Lobby/Profile/etc. wasn't touched this round since no bug was reported there, but is the
   same latent pattern). Not yet confirmed fixed on a real device — dvh support couldn't be
   exercised against real mobile browser-chrome show/hide behavior in this environment.
+- ✅ **Built-in language dictionaries (2026-07-28), browser-verified end-to-end.** English, Español,
+  Français and Deutsch are selectable by every player, sourced from
+  [kamilmielnik/scrabble-dictionaries](https://github.com/kamilmielnik/scrabble-dictionaries)
+  (migration `20260727000003`). English was **upgraded from ENABLE1 (172,823) to Collins/SOWPODS
+  (267,752)**. Totals: en 267,752 · es 637,962 · fr 411,408 · de 650,565 = **1,967,687 rows**.
+  - **Model**: an *official* dictionary is a `custom_word_sets` row with `owner_id IS NULL` (the
+    column was already nullable), so it rides in `customSetIds` exactly like a user's own set —
+    **no config-shape change and no rewrite of any stored `dictionary_config`**. English stays the
+    `custom_set_id IS NULL` base toggled by `baseEnabled`, so existing configs silently upgraded.
+    The UI hides that asymmetry by rendering all four in one "Languages" group.
+  - **Accents fold to their base letter** (Ñ→N, Ä→A, ß→SS) via shared `foldDiacritics()`, now
+    called inside `normalizeWord()` — the board only has A–Z tiles, so an accented letter is
+    literally unplayable. Folding is worth +22% of the German list. Non-Latin scripts are
+    deliberately NOT transliterated (they fail `WORD_PATTERN`, which is correct here). This also
+    means user-typed custom words now accept "café" as CAFE instead of rejecting it.
+  - ⚠️ **`find_invalid_words` had to be rewritten or the game would have broken.** The original
+    OR'd both word partitions inside one `EXISTS`; two **partial** indexes cover the table, and an
+    OR spanning both means the planner can use neither. At 173k rows that was an unnoticed cheap
+    seq scan — at 1.97M it measured a **2.3-SECOND** full seq scan per call, on a debounce while
+    the player types. Splitting into one `EXISTS` per partition made it index-driven:
+    **2282ms → 6.6ms**. If you ever add another word partition, keep them as separate EXISTS.
+    Also note the length bounds must stay INSIDE the negation — hoisting them into the outer
+    WHERE inverts their meaning and lets too-short words through.
+  - **Storage matters now.** The table went 341 MB → **214 MB** (whole DB 227 MB, on a 500 MB free
+    tier) by dropping genuinely dead weight the 11× row growth made expensive: the `topics` column
+    (a stubbed feature, ~24 bytes of empty-array header per row), the surrogate `id` PK (42 MB,
+    nothing ever looked a word up by it — required redefining `custom_word_sets_with_count`'s
+    `count(w.id)` first), and the `words_length_idx` (`words.length` is written but read by
+    nothing; `find_invalid_words` uses `char_length()` on its *input* array). **Run the migration
+    BEFORE seeding** — dropping columns is metadata-only, but reclaiming needs a `VACUUM FULL`
+    that's instant on 173k rows and minutes on 2M.
+  - Lists are vendored **gzipped** under `supabase/seed/` (~4.6 MB vs ~22 MB raw), read with
+    `zlib.gunzipSync`. Seeder is table-driven (`DICTIONARIES` array), upserts official sets by a
+    stable `slug`, and supports `--only=es,fr`. Note these are third-party competition word lists
+    (Collins, ODS8, FILE), not public-domain like ENABLE1 was.
+  - Gotcha: the `slug` unique index is **partial** (`where slug is not null`, so user sets can all
+    leave it NULL) and Postgres only infers a partial index for `ON CONFLICT` if you repeat the
+    predicate — otherwise it fails with `42P10`.
 - ➡️ **Next up: puzzle of the day, then bot opponent** (per build priority).
 - ℹ️ Local analytics is disabled in `config.toml` (Windows would require exposing the Docker
   daemon over TCP for it — not worth it for a side service we don't use).

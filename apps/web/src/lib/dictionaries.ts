@@ -17,6 +17,15 @@ export interface DictionaryPresetRow {
   created_at: string;
 }
 
+/** A built-in language dictionary, selectable by every player. Backed by a custom_word_sets row
+ * with owner_id IS NULL, so it travels through customSetIds exactly like a user's own set. */
+export interface OfficialWordSet {
+  id: string;
+  slug: string;
+  name: string;
+  word_count: number;
+}
+
 /** Pure owner-scoped reads, gated by RLS — no Worker round-trip needed (writes still
  * go through the Worker; see lib/api.ts). Mirrors the direct-read pattern in rooms.ts. */
 
@@ -41,10 +50,22 @@ export async function fetchCustomWordSetWords(setId: string): Promise<string[]> 
   return (data as { word: string }[]).map((row) => row.word);
 }
 
-/** The built-in word list — always selectable, owned by no one. Deliberately generic (no
- * mention of the underlying ENABLE1 source list) since players don't need to know or care
- * which public-domain list backs it. */
-export const STANDARD_DICTIONARY_LABEL = 'Standard Dictionary';
+/** The English dictionary. Unlike the other languages it isn't a row in custom_word_sets — it's
+ * the custom_set_id IS NULL partition of `words`, toggled by the `baseEnabled` boolean. That
+ * split is a storage detail; the picker renders English alongside the other languages so players
+ * never see the asymmetry. */
+export const STANDARD_DICTIONARY_LABEL = 'English';
+
+/** The built-in language dictionaries, readable by everyone via RLS. Ordered by word_count
+ * descending so the biggest lists lead, with English rendered separately by the picker. */
+export async function fetchOfficialWordSets(): Promise<OfficialWordSet[]> {
+  const { data, error } = await supabase
+    .from('official_word_sets')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) return [];
+  return data as OfficialWordSet[];
+}
 
 /** Every dictionary currently included in a config: the built-in list (if enabled) plus every
  * custom set, with no "base vs additional" distinction — a wordlist is just a set of one or

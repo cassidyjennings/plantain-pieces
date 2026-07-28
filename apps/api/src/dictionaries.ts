@@ -1,13 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * A caller's own custom-set ids, read directly via the service-role client. Used to give
- * an early, cheap 400 (via shared's validateDictionaryConfig) before the round-trip to the
- * RPC, which remains the authoritative check regardless — this is defense-in-depth, not a
- * replacement for it.
+ * Every set id a caller may reference: their own custom sets PLUS the official (owner-less)
+ * language dictionaries, which are selectable by everyone. Read directly via the service-role
+ * client. Used to give an early, cheap 400 (via shared's validateDictionaryConfig) before the
+ * round-trip to the RPC, which remains the authoritative check regardless — this is
+ * defense-in-depth, not a replacement for it.
+ *
+ * The `owner_id is null` half is what keeps this in step with `_validate_dictionary_config`;
+ * omitting it would 400 every config referencing a built-in language before the RPC ever ran.
  */
-export async function fetchOwnedCustomSetIds(admin: SupabaseClient, ownerId: string): Promise<string[]> {
-  const { data, error } = await admin.from('custom_word_sets').select('id').eq('owner_id', ownerId);
+export async function fetchSelectableCustomSetIds(
+  admin: SupabaseClient,
+  ownerId: string,
+): Promise<string[]> {
+  const { data, error } = await admin
+    .from('custom_word_sets')
+    .select('id')
+    .or(`owner_id.eq.${ownerId},owner_id.is.null`);
   if (error) throw new Error('FAILED_TO_LOAD_OWNED_SETS');
   return (data ?? []).map((row) => row.id as string);
 }

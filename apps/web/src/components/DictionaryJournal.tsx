@@ -11,9 +11,11 @@ import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
   fetchCustomWordSetWords,
+  fetchOfficialWordSets,
   summarizeDictionaryConfig,
   type CustomWordSetSummary,
   type DictionaryPresetRow,
+  type OfficialWordSet,
 } from '../lib/dictionaries.js';
 import WordSetEditor from './WordSetEditor.js';
 import WordlistEditor from './WordlistEditor.js';
@@ -36,6 +38,7 @@ interface DictionaryJournalProps {
 export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
   const [tab, setTab] = useState<Tab>('dicts');
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
+  const [officialSets, setOfficialSets] = useState<OfficialWordSet[]>([]);
   const [presets, setPresets] = useState<DictionaryPresetRow[]>([]);
   const [editingSet, setEditingSet] = useState<{ id: string | null; name: string; words: string[] } | null>(
     null,
@@ -48,13 +51,23 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
 
   useEffect(() => {
     fetchMyCustomWordSets().then(setMySets);
+    fetchOfficialWordSets().then(setOfficialSets);
     fetchMyDictionaryPresets().then(setPresets);
   }, []);
 
-  const ownedIds = useMemo(() => mySets.map((s) => s.id), [mySets]);
+  // Presets may reference the official language dictionaries, so they count as selectable here
+  // too — otherwise editing such a preset would report it invalid.
+  const selectableIds = useMemo(
+    () => [...mySets.map((s) => s.id), ...officialSets.map((s) => s.id)],
+    [mySets, officialSets],
+  );
 
   function nameFor(id: string): string {
-    return mySets.find((s) => s.id === id)?.name ?? 'Unknown dictionary';
+    return (
+      officialSets.find((s) => s.id === id)?.name ??
+      mySets.find((s) => s.id === id)?.name ??
+      'Unknown dictionary'
+    );
   }
 
   async function refreshMySets() {
@@ -132,7 +145,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
   }
 
   const presetValidity = editingPreset
-    ? validateDictionaryConfig(editingPreset.config, ownedIds)
+    ? validateDictionaryConfig(editingPreset.config, selectableIds)
     : null;
   const title = editingPreset ? 'Preset' : TABS.find((t) => t.id === tab)!.label;
 
@@ -183,11 +196,21 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
                       />
                     ) : (
                       <>
-                        <h3>Built in</h3>
+                        <h3>Languages</h3>
                         <ul className="journal-set-list">
+                          {/* English has no set row of its own — it's the base partition — so it's
+                              listed by hand ahead of the ones that do. */}
                           <li className="journal-set-row">
                             <span className="journal-set-name">{STANDARD_DICTIONARY_LABEL}</span>
                           </li>
+                          {officialSets.map((set) => (
+                            <li key={set.id} className="journal-set-row">
+                              <span className="journal-set-name">{set.name}</span>
+                              <span className="journal-set-count">
+                                {set.word_count.toLocaleString()} words
+                              </span>
+                            </li>
+                          ))}
                         </ul>
 
                         <h3>Your dictionaries</h3>
@@ -293,6 +316,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
                     </label>
 
                     <WordlistEditor
+                      officialSets={officialSets}
                       config={editingPreset.config}
                       onChange={(config) => setEditingPreset({ ...editingPreset, config })}
                       mySets={mySets}

@@ -4,9 +4,11 @@ import { api, ApiError } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
+  fetchOfficialWordSets,
   summarizeDictionaryConfig,
   type CustomWordSetSummary,
   type DictionaryPresetRow,
+  type OfficialWordSet,
 } from '../lib/dictionaries.js';
 import DictionaryChecklist from './DictionaryChecklist.js';
 
@@ -33,6 +35,7 @@ export default function WordlistModal({
 }: WordlistModalProps) {
   const [draft, setDraft] = useState<DictionaryConfig>(activeConfig);
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
+  const [officialSets, setOfficialSets] = useState<OfficialWordSet[]>([]);
   const [presets, setPresets] = useState<DictionaryPresetRow[]>([]);
   const [roomSetNames, setRoomSetNames] = useState<Record<string, string>>({});
   const [presetName, setPresetName] = useState('');
@@ -43,6 +46,7 @@ export default function WordlistModal({
 
   useEffect(() => {
     fetchMyCustomWordSets().then(setMySets);
+    fetchOfficialWordSets().then(setOfficialSets);
     fetchMyDictionaryPresets().then(setPresets);
   }, []);
 
@@ -53,12 +57,25 @@ export default function WordlistModal({
       .catch(() => setRoomSetNames({}));
   }, [roomId]);
 
-  const ownedIds = useMemo(() => mySets.map((s) => s.id), [mySets]);
-  const validity = useMemo(() => validateDictionaryConfig(draft, ownedIds), [draft, ownedIds]);
+  // Official language dictionaries count as selectable for everyone, so they must be in here or
+  // picking one would fail client-side validation and disable Apply.
+  const selectableIds = useMemo(
+    () => [...mySets.map((s) => s.id), ...officialSets.map((s) => s.id)],
+    [mySets, officialSets],
+  );
+  const validity = useMemo(
+    () => validateDictionaryConfig(draft, selectableIds),
+    [draft, selectableIds],
+  );
   const isDirty = JSON.stringify(draft) !== JSON.stringify(activeConfig);
 
   function nameFor(id: string): string {
-    return mySets.find((s) => s.id === id)?.name ?? roomSetNames[id] ?? 'Unknown dictionary';
+    return (
+      officialSets.find((s) => s.id === id)?.name ??
+      mySets.find((s) => s.id === id)?.name ??
+      roomSetNames[id] ??
+      'Unknown dictionary'
+    );
   }
 
   async function handleApply() {
@@ -143,6 +160,7 @@ export default function WordlistModal({
                   config={draft}
                   onChange={setDraft}
                   mySets={mySets}
+                  officialSets={officialSets}
                   readOnly={!isHost}
                   nameFor={nameFor}
                 />

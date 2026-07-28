@@ -4,9 +4,11 @@ import { api, ApiError } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
+  fetchOfficialWordSets,
   summarizeDictionaryConfig,
   type CustomWordSetSummary,
   type DictionaryPresetRow,
+  type OfficialWordSet,
 } from '../lib/dictionaries.js';
 import DictionaryChecklist from './DictionaryChecklist.js';
 
@@ -24,6 +26,7 @@ interface SoloWordlistModalProps {
 export default function SoloWordlistModal({ config, onApply, onClose }: SoloWordlistModalProps) {
   const [draft, setDraft] = useState<DictionaryConfig>(config);
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
+  const [officialSets, setOfficialSets] = useState<OfficialWordSet[]>([]);
   const [presets, setPresets] = useState<DictionaryPresetRow[]>([]);
   const [presetName, setPresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
@@ -33,14 +36,27 @@ export default function SoloWordlistModal({ config, onApply, onClose }: SoloWord
 
   useEffect(() => {
     fetchMyCustomWordSets().then(setMySets);
+    fetchOfficialWordSets().then(setOfficialSets);
     fetchMyDictionaryPresets().then(setPresets);
   }, []);
 
-  const ownedIds = useMemo(() => mySets.map((s) => s.id), [mySets]);
-  const validity = useMemo(() => validateDictionaryConfig(draft, ownedIds), [draft, ownedIds]);
+  // Includes the official language dictionaries — they're selectable by everyone, so leaving
+  // them out would make picking one fail validation and block Apply.
+  const selectableIds = useMemo(
+    () => [...mySets.map((s) => s.id), ...officialSets.map((s) => s.id)],
+    [mySets, officialSets],
+  );
+  const validity = useMemo(
+    () => validateDictionaryConfig(draft, selectableIds),
+    [draft, selectableIds],
+  );
 
   function nameFor(id: string): string {
-    return mySets.find((s) => s.id === id)?.name ?? 'Unknown dictionary';
+    return (
+      officialSets.find((s) => s.id === id)?.name ??
+      mySets.find((s) => s.id === id)?.name ??
+      'Unknown dictionary'
+    );
   }
 
   async function handleSaveAsPreset() {
@@ -93,7 +109,13 @@ export default function SoloWordlistModal({ config, onApply, onClose }: SoloWord
                   </div>
                 )}
 
-                <DictionaryChecklist config={draft} onChange={setDraft} mySets={mySets} nameFor={nameFor} />
+                <DictionaryChecklist
+                  config={draft}
+                  onChange={setDraft}
+                  mySets={mySets}
+                  officialSets={officialSets}
+                  nameFor={nameFor}
+                />
 
                 {showSavePreset && (
                   <div className="journal-section">

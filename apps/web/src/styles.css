@@ -101,6 +101,23 @@ button:active:not(:disabled) {
   box-shadow: 0 2px 0 var(--color-accent-shadow);
 }
 
+/* Flat buttons — the ones that deliberately clear the raised press-shadow at rest — must clear it
+   on :active too. Without this, pressing one *gains* an orange bar under it for the duration of
+   the click, which reads as the button lighting up in the wrong color a beat before its real
+   selected/hover state arrives. The translateY press above is left in place as the feedback. */
+.tray-tool:active:not(:disabled),
+.journal-chip:active:not(:disabled),
+.journal-icon-btn:active:not(:disabled),
+.journal-close:active:not(:disabled),
+.home-profile-btn:active:not(:disabled),
+.btn-leave:active:not(:disabled),
+.profile-tab:active:not(:disabled),
+.avatar-option:active:not(:disabled),
+.segmented-option:active:not(:disabled),
+.toggle-group-option:active:not(:disabled) {
+  box-shadow: none;
+}
+
 button:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -2231,17 +2248,30 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   justify-content: space-between;
   width: 100%;
   max-width: 640px;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
 .profile-topbar .btn-tertiary {
   padding: 10px 18px;
   font-size: var(--text-small);
+  /* Fixed so it never eats into the title's room — the balancing spacer mirrors this width. */
+  flex-shrink: 0;
 }
 .profile-title {
   font-family: var(--font-display);
-  font-size: var(--text-heading);
   color: var(--color-text-primary);
   margin: 0;
+  /* Shrinks continuously with viewport width (vw-based, not a breakpoint jump) so "Your Profile"
+     always fits the shrinking gap between the Home button and the spacer without wrapping. Caps
+     at --text-heading, so nothing changes from the original size until room actually gets tight. */
+  font-size: clamp(1rem, 0.55rem + 4.2vw, var(--text-heading));
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.profile-topbar-spacer {
+  width: 72px;
+  flex-shrink: 0;
 }
 .profile-tabs {
   display: flex;
@@ -2287,18 +2317,27 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  /* Lets "Edit avatar" drop to its own line on narrow screens instead of forcing the whole row
+     (and the page itself) wider than the panel. */
+  flex-wrap: wrap;
 }
 .profile-identity-text {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   flex: 1;
+  /* Without this a flex item's automatic min-width is its content's intrinsic width, so a long
+     display name (one unbroken word especially) refuses to shrink and pushes the row past the
+     panel edge instead of wrapping — same trap as the join-code input, see CLAUDE.md. */
+  min-width: 0;
 }
 .profile-name-display {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.3rem;
   color: var(--color-text-primary);
+  /* Breaks a single very long unbroken name rather than letting it force the row wider. */
+  overflow-wrap: anywhere;
 }
 .profile-status {
   font-size: var(--text-caption);
@@ -2311,6 +2350,16 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 .profile-status.linked {
   color: var(--color-success);
+}
+
+@media (max-width: 640px) {
+  /* Avatar + name share the first row; "Edit avatar" always drops to its own full-width row
+     right above the Display name field, rather than only wrapping down when a long name happens
+     to force it there. */
+  .edit-avatar-btn {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }
 .profile-section {
   border-top: 1px solid var(--color-border);
@@ -2336,10 +2385,53 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   font-size: var(--text-small);
   padding: 12px 16px;
 }
-.danger-zone h3 {
-  color: var(--color-danger);
+/* "Sign in with Google" is the longest label in the row — give it a bigger flex share so the
+   shorter Export/Delete buttons don't force it to wrap its own text at typical widths. Its
+   min-width is still low enough to let its own text wrap once the screen gets too narrow to fit
+   on one line — that's the one label allowed to wrap. */
+.profile-oauth-row .account-btn-wide {
+  flex: 1.5;
+  min-width: 160px;
+}
+.profile-oauth-row .account-btn-narrow {
+  flex: 0.85;
+  /* "Delete account" (the longer label) needs ~137px to stay on one line at this font size —
+     100px let flex-grow settle a few px short of that at some in-between widths, wrapping when it
+     didn't actually need to. No white-space: nowrap here though: at the narrowest phone widths
+     (post-breakpoint, split 50/50 with Export data) even 145px isn't available, and forcing
+     nowrap there made the text spill outside the button instead of the button growing to two
+     lines. Default wrapping only kicks in when a line genuinely doesn't fit. */
+  min-width: 145px;
+}
+/* Below 640px the Google/Sign-out button (see the media query) moves to its own full-width row,
+   so at the default/wider layout this wrapper needs to disappear from the flex box entirely —
+   `display: contents` lets Export/Delete sit directly in .profile-oauth-row next to the wide
+   button, preserving the original "three buttons, one row" layout above the breakpoint. */
+.account-btn-narrow-row {
+  display: contents;
 }
 
+@media (max-width: 640px) {
+  /* Google/Sign-out gets its own full-width row; Export data + Delete account pair up on the row
+     below it. Three equal-ish buttons crammed into one row was the thing forcing "Delete
+     account" to wrap on phones — splitting 1-and-2 gives each of those two roughly half the
+     screen instead of a third. */
+  .profile-oauth-row {
+    flex-direction: column;
+  }
+  .profile-oauth-row .account-btn-wide {
+    width: 100%;
+  }
+  .account-btn-narrow-row {
+    display: flex;
+    gap: var(--space-2);
+    width: 100%;
+  }
+  .profile-oauth-row .account-btn-narrow {
+    flex: 1;
+    min-width: 0;
+  }
+}
 /* Avatar editor */
 .avatar-editor {
   display: flex;

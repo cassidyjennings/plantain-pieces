@@ -16,8 +16,12 @@ export interface AvatarConfig {
 export const ACCESSORY_SETS = {
   base: ['ripe', 'green', 'golden', 'speckled'],
   hat: ['none', 'straw', 'party', 'crown', 'beanie', 'trucker'],
-  glasses: ['none', 'round', 'shades', 'star'],
-  hair: ['none', 'swoop', 'curls', 'mohawk'],
+  glasses: ['none', 'round', 'shades', 'star', 'monocle'],
+  // Facial hair shares the `hair` slot rather than getting one of its own — one head decoration
+  // at a time keeps the tiny 64px avatar readable, and the slot's options are self-describing.
+  // (No plain 'beard' — with mustache/goatee already covering that ground it pushed the editor's
+  // hair row onto a second line; goatee's chin coverage plus mustache is enough range.)
+  hair: ['none', 'swoop', 'curls', 'mohawk', 'mustache', 'goatee'],
 } as const;
 
 export type AccessorySlot = keyof typeof ACCESSORY_SETS;

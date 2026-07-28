@@ -66,7 +66,7 @@ export default function Profile() {
           ← Home
         </button>
         <h1 className="profile-title">Your Profile</h1>
-        <span style={{ width: 72 }} />
+        <span className="profile-topbar-spacer" />
       </div>
 
       <div className="profile-tabs" role="tablist">
@@ -226,7 +226,7 @@ function Overview() {
             {isGuest ? 'Guest account' : `Linked · ${providers.join(', ') || 'account'}`}
           </span>
         </div>
-        <button className="btn-secondary" onClick={() => setEditingAvatar((v) => !v)}>
+        <button className="btn-secondary edit-avatar-btn" onClick={() => setEditingAvatar((v) => !v)}>
           {editingAvatar ? 'Done' : 'Edit avatar'}
         </button>
       </div>
@@ -251,44 +251,35 @@ function Overview() {
       </button>
 
       <div className="profile-section">
-        <h3>Account</h3>
-        {isGuest ? (
-          <>
-            <p className="hint">Link an account so your progress follows you across devices.</p>
-            <div className="profile-oauth-row">
-              <button className="btn-secondary" onClick={() => handleUpgrade('google')}>
-                Sign in with Google
-              </button>
-            </div>
-            {oauthError && <p className="error">{oauthError}</p>}
-          </>
-        ) : (
-          <>
-            <p className="hint">Your progress is saved to your linked account.</p>
-            <button className="btn-tertiary" onClick={handleSignOut} disabled={busy}>
-              Sign out
-            </button>
-          </>
-        )}
-      </div>
-
-      <div className="profile-section">
         <h3>Dictionaries</h3>
         <button className="btn-secondary" onClick={() => setShowJournal(true)}>
           My Dictionaries
         </button>
       </div>
 
-      <div className="profile-section danger-zone">
-        <h3>Data &amp; danger zone</h3>
+      <div className="profile-section">
+        <h3>Account</h3>
+        {!isGuest && <p className="hint">Your progress is saved to your linked account.</p>}
         <div className="profile-oauth-row">
-          <button className="btn-secondary" onClick={handleExport}>
-            Export my data
-          </button>
-          <button className="btn-danger" onClick={() => setShowDelete(true)}>
-            Delete account
-          </button>
+          {isGuest ? (
+            <button className="btn-secondary account-btn-wide" onClick={() => handleUpgrade('google')}>
+              Sign in with Google
+            </button>
+          ) : (
+            <button className="btn-tertiary account-btn-wide" onClick={handleSignOut} disabled={busy}>
+              Sign out
+            </button>
+          )}
+          <div className="account-btn-narrow-row">
+            <button className="btn-secondary account-btn-narrow" onClick={handleExport}>
+              Export data
+            </button>
+            <button className="btn-danger account-btn-narrow" onClick={() => setShowDelete(true)}>
+              Delete account
+            </button>
+          </div>
         </div>
+        {oauthError && <p className="error">{oauthError}</p>}
       </div>
 
       {error && <p className="error">{error}</p>}

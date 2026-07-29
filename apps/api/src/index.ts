@@ -29,7 +29,6 @@ app.use('/rooms/*', requireAuth);
 app.use('/dictionaries/*', requireAuth);
 app.use('/profile', requireAuth);
 app.use('/profile/*', requireAuth);
-app.use('/games/*', requireAuth);
 
 app.get('/', (c) => c.json({ ok: true, service: 'plantain-pieces-api' }));
 
@@ -305,30 +304,27 @@ app.post('/rooms/:roomId/plantains', async (c) => {
 
   await admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid });
 
-  // Durably archive the finished game (Phase 1: server-authoritative stats + achievements)
-  // while room_players/room_events still exist, before anyone leaves and tears the room down.
-  // Archival failures must not fail the win. finish_game no longer emits game_over itself —
-  // we emit it here so it can carry the gameId (every client learns where to POST its
-  // end-of-game summary), and it still fires even if archival failed.
-  let gameId: string | undefined;
+  // Phase 1: roll the server-authoritative half of the game (peels, dumps, wins, streaks,
+  // achievements) straight into profile_stats while room_players/room_events still exist.
+  // Nothing per-game is stored — see migration 20260728000006. A rollup failure must not fail
+  // the win, and game_over still fires either way so nobody is stranded on the game screen.
   try {
-    const { data: archived, error: archiveError } = await admin.rpc('archive_game', {
+    const { error: rollupError } = await admin.rpc('archive_game', {
       p_room_id: roomId,
       p_winner: profileId,
     });
-    if (archiveError) console.error('archive_game failed', archiveError.message);
-    else gameId = (archived as { gameId?: string })?.gameId;
+    if (rollupError) console.error('stat rollup failed', rollupError.message);
   } catch (err) {
-    console.error('archive_game threw', (err as Error).message);
+    console.error('stat rollup threw', (err as Error).message);
   }
 
   await admin.rpc('append_room_event', {
     p_room_id: roomId,
     p_type: 'game_over',
-    p_payload: { winner: profileId, gameId: gameId ?? null },
+    p_payload: { winner: profileId },
   });
 
-  return c.json({ ...(data as object), gameId });
+  return c.json(data as object);
 });
 
 // --- Dictionary management ---------------------------------------------------
@@ -489,10 +485,12 @@ app.delete('/profile', async (c) => {
   return c.json({ ok: true });
 });
 
-// Client end-of-game summary (Phase 2). Loosely validated, then merged per-player.
-app.post('/games/:gameId/summary', async (c) => {
+// Client end-of-game summary (Phase 2): the words a player made and their move stats, which
+// only the client knows. Rolled straight into profile_stats — keyed by ROOM, since nothing
+// per-game is stored. Idempotent server-side via room_players.summary_applied.
+app.post('/rooms/:roomId/summary', async (c) => {
   const profileId = c.get('profileId');
-  const gameId = c.req.param('gameId');
+  const roomId = c.req.param('roomId');
   const body = await c.req.json<GameSummary>();
 
   const check = validateGameSummary(body);
@@ -500,7 +498,7 @@ app.post('/games/:gameId/summary', async (c) => {
 
   const admin = createAdminClient(c.env);
   const { data, error } = await admin.rpc('submit_game_summary', {
-    p_game_id: gameId,
+    p_room_id: roomId,
     p_profile: profileId,
     p_summary: body,
   });

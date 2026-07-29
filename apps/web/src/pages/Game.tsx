@@ -306,23 +306,23 @@ export default function Game() {
     centeredRef.current = true;
   }, [grid]);
 
-  // Submit this player's end-of-game summary exactly once — the winner submits from the
-  // plantains response (complete grid), losers from the game_over event. gameId comes from
-  // whichever path fires first; the guard prevents a double submit.
-  function submitSummaryOnce(gameId: string | null | undefined) {
-    if (!gameId || summarySubmittedRef.current) return;
+  // Submit this player's end-of-game summary exactly once — the winner submits from its own
+  // plantains response, losers from the game_over event, whichever fires first. Both are keyed
+  // by room now (nothing per-game is stored), so the only guard needed is against a double
+  // submit; the server is idempotent regardless.
+  function submitSummaryOnce() {
+    if (!roomId || summarySubmittedRef.current) return;
     summarySubmittedRef.current = true;
-    api.submitGameSummary(gameId, moveTracker.buildSummary(gridRef.current)).catch(() => {});
-    // Separate call, and deliberately so: the summary is durable per-game stats, while the
-    // board is ephemeral and belongs to the ROOM (it's deleted with it). Sending the board as
-    // part of the summary would archive it forever, which is data no one can ever reach once
-    // the room is gone.
-    if (roomId) api.persistFinalGrid(roomId, gridRef.current).catch(() => {});
+    // Words and move stats roll into lifetime profile stats and are then forgotten.
+    api.submitGameSummary(roomId, moveTracker.buildSummary(gridRef.current)).catch(() => {});
+    // The board is a separate call because it has a different lifetime: it's persisted to the
+    // room for the post-game viewer and deleted along with it, never rolled into anything.
+    api.persistFinalGrid(roomId, gridRef.current).catch(() => {});
   }
 
   useRoomEvents(roomId, (event) => {
     if (event.type === 'game_over') {
-      submitSummaryOnce((event.payload as { gameId?: string | null }).gameId);
+      submitSummaryOnce();
       navigate(`/room/${roomId}/results`, { replace: true });
       return;
     }
@@ -793,8 +793,8 @@ export default function Game() {
         setBunchCount(result.bunchCount);
         fireCallout('PEEL!');
       } else {
-        const res = await api.plantains(roomId, submittedGrid);
-        submitSummaryOnce(res.gameId);
+        await api.plantains(roomId, submittedGrid);
+        submitSummaryOnce();
         fireCallout('PLANTAINS!');
         setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
       }
@@ -802,8 +802,8 @@ export default function Game() {
       if (err instanceof ApiError && err.message === 'BUNCH_TOO_LOW') {
         // Someone peeled the Bunch dry between our check and call — go for the win instead.
         try {
-          const res = await api.plantains(roomId, submittedGrid);
-          submitSummaryOnce(res.gameId);
+          await api.plantains(roomId, submittedGrid);
+          submitSummaryOnce();
           fireCallout('PLANTAINS!');
           setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
         } catch (err2) {

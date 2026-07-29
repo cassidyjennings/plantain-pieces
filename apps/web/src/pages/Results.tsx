@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
-import { fetchDisplayName, fetchRoom, type PublicRoom } from '../lib/rooms.js';
-import { fetchMyMatchHistory, fetchMyAchievements, type MatchHistoryRow } from '../lib/profile.js';
-import { fetchRoomBoards, type RoomBoardRow } from '../lib/boards.js';
+import { fetchDisplayName, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
+import { fetchMyAchievements } from '../lib/profile.js';
+import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/boards.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError } from '../lib/api.js';
@@ -16,7 +16,8 @@ export default function Results() {
   const displayName = useSessionStore((s) => s.displayName);
   const [room, setRoom] = useState<PublicRoom | null>(null);
   const [winnerName, setWinnerName] = useState<string>('');
-  const [match, setMatch] = useState<MatchHistoryRow | null>(null);
+  const [me, setMe] = useState<PublicPlayer | null>(null);
+  const [longestWord, setLongestWord] = useState<string | null>(null);
   const [earned, setEarned] = useState<AchievementType[]>([]);
   const [rematching, setRematching] = useState(false);
   const [rematchError, setRematchError] = useState<string | null>(null);
@@ -31,22 +32,22 @@ export default function Results() {
     });
   }, [roomId]);
 
-  // Load the freshly-archived match + any achievements earned in it. The client summary is
-  // submitted asynchronously as the game ends, so refetch shortly after to catch word stats
-  // and word-based achievements that land a beat later.
+  // This game's numbers come from the ROOM, not from a stored per-game record — nothing
+  // per-game is kept (migration 20260728000006). Achievements are matched on the roomId their
+  // meta carries. Refetched once shortly after because achievements unlocked by the client's
+  // own word summary land a beat after the game ends.
   useEffect(() => {
+    if (!roomId) return;
     let cancelled = false;
     async function load() {
-      const [history, achievements] = await Promise.all([fetchMyMatchHistory(), fetchMyAchievements()]);
+      const [players, achievements] = await Promise.all([fetchPlayers(roomId!), fetchMyAchievements()]);
       if (cancelled) return;
-      const latest = history[0] ?? null;
-      setMatch(latest);
-      if (latest) {
-        const here = achievements
-          .filter((a) => (a.meta as { gameId?: string })?.gameId === latest.game_id)
-          .map((a) => a.type);
-        setEarned(here);
-      }
+      setMe(players.find((p) => p.profile_id === profileId) ?? null);
+      setEarned(
+        achievements
+          .filter((a) => (a.meta as { roomId?: string })?.roomId === roomId)
+          .map((a) => a.type),
+      );
     }
     load();
     const t = setTimeout(load, 1500);
@@ -54,7 +55,7 @@ export default function Results() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, []);
+  }, [roomId, profileId]);
 
   // Your own final board, for the preview window. Refetched on the same delay as the stats
   // above because every client persists its board asynchronously right as the game ends —
@@ -66,7 +67,16 @@ export default function Results() {
       const rows = await fetchRoomBoards(roomId!);
       if (cancelled) return;
       setBoardCount(rows.length);
-      setMyBoard(rows.find((r) => r.profile_id === profileId) ?? null);
+      const mine = rows.find((r) => r.profile_id === profileId) ?? null;
+      setMyBoard(mine);
+      // Longest word is derived from the board rather than read back from a stored record.
+      if (mine) {
+        const { words } = await resolveBoardWords(roomId!, mine.grid_state);
+        if (cancelled) return;
+        setLongestWord(
+          words.reduce<string | null>((best, w) => (!best || w.length > best.length ? w : best), null),
+        );
+      }
     }
     load();
     const t = setTimeout(load, 1500);
@@ -88,6 +98,11 @@ export default function Results() {
   const won = room.winner_id === profileId;
   const isSolo = room.mode === 'solo';
   const isTimed = isSolo && (room.mode_config as { timed?: boolean }).timed === true;
+  // Derived from the room's own timestamps rather than a stored duration_ms.
+  const durationMs =
+    room.started_at && room.finished_at
+      ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
+      : null;
   const headline = isSolo ? 'You cleared the Bunch!' : won ? 'You take the win!' : `${winnerName} takes the win!`;
   const name = displayName.trim() || 'Guest';
 
@@ -129,7 +144,7 @@ export default function Results() {
       <h1 className="results-callout">PLANTAINS!</h1>
       <p className="winner-line">{headline}</p>
 
-      {match && (
+      {me && (
         <div className="panel results-earned">
           <h3>Your game</h3>
           <div className="results-stat-row">
@@ -140,18 +155,18 @@ export default function Results() {
               </div>
             )}
             <div className="stat-tile">
-              <span className="stat-value">{match.final_tile_count}</span>
+              <span className="stat-value">{me.tile_count}</span>
               <span className="stat-label">Tiles</span>
             </div>
             <div className="stat-tile">
-              <span className="stat-value">{match.longest_word ?? '-'}</span>
+              <span className="stat-value">{longestWord ?? '-'}</span>
               <span className="stat-label">Longest word</span>
             </div>
-            {isTimed && match.duration_ms != null && (
+            {isTimed && durationMs != null && (
               <div className="stat-tile">
                 <span className="stat-value">
-                  {Math.floor(match.duration_ms / 60000)}:
-                  {Math.floor((match.duration_ms % 60000) / 1000).toString().padStart(2, '0')}
+                  {Math.floor(durationMs / 60000)}:
+                  {Math.floor((durationMs % 60000) / 1000).toString().padStart(2, '0')}
                 </span>
                 <span className="stat-label">Time</span>
               </div>

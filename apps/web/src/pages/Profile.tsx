@@ -14,11 +14,9 @@ import { useSessionStore } from '../store/sessionStore.js';
 import {
   fetchMyStats,
   fetchMyAchievements,
-  fetchMyMatchHistory,
   fetchMyProfile,
   type ProfileStatsRow,
   type AchievementRow,
-  type MatchHistoryRow,
   type GameMode,
 } from '../lib/profile.js';
 import { signOut, upgradeWith, signInWith, getLinkedIdentities, consumeOAuthRedirectError } from '../lib/auth.js';
@@ -27,12 +25,11 @@ import DictionaryJournal from '../components/DictionaryJournal.js';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal.js';
 import { AccessibilitySettings } from '../components/AccessibilitySettings.js';
 
-type Tab = 'overview' | 'stats' | 'achievements' | 'history' | 'accessibility';
+type Tab = 'overview' | 'stats' | 'achievements' | 'accessibility';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'stats', label: 'Stats' },
   { id: 'achievements', label: 'Achievements' },
-  { id: 'history', label: 'History' },
   { id: 'accessibility', label: 'Accessibility' },
 ];
 
@@ -45,7 +42,6 @@ export default function Profile() {
   const [stats, setStats] = useState<ProfileStatsRow | null>(null);
   const [streak, setStreak] = useState<{ current: number; longest: number } | null>(null);
   const [achievements, setAchievements] = useState<AchievementRow[]>([]);
-  const [history, setHistory] = useState<MatchHistoryRow[]>([]);
 
   useEffect(() => {
     fetchMyStats(statsFilter === 'all' ? undefined : statsFilter).then(setStats);
@@ -56,7 +52,6 @@ export default function Profile() {
       if (p) setStreak({ current: p.current_streak, longest: p.longest_streak });
     });
     fetchMyAchievements().then(setAchievements);
-    fetchMyMatchHistory().then(setHistory);
   }, []);
 
   return (
@@ -89,7 +84,6 @@ export default function Profile() {
           <StatsBoard stats={stats} streak={streak} filter={statsFilter} onFilterChange={setStatsFilter} />
         )}
         {tab === 'achievements' && <AchievementGrid achievements={achievements} />}
-        {tab === 'history' && <MatchHistoryList history={history} />}
         {tab === 'accessibility' && <AccessibilitySettings />}
       </div>
     </div>
@@ -419,40 +413,3 @@ function AchievementGrid({ achievements }: { achievements: AchievementRow[] }) {
   );
 }
 
-// --- Match history ----------------------------------------------------------
-
-function MatchHistoryList({ history }: { history: MatchHistoryRow[] }) {
-  if (history.length === 0) {
-    return (
-      <div className="panel profile-panel">
-        <p className="hint">No games yet. Your recent matches will show up here.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="panel profile-panel">
-      <ul className="match-list">
-        {history.map((m) => {
-          const date = new Date(m.finished_at);
-          const isSolo = m.mode === 'solo';
-          const opponents = m.opponents.map((o) => o.displayName).join(', ') || '-';
-          const dur = m.duration_ms != null ? `${Math.round(m.duration_ms / 1000)}s` : '';
-          return (
-            <li key={m.id} className={`match-row${m.is_winner ? ' win' : ''}`}>
-              <span className={`match-result ${m.is_winner ? 'win' : 'loss'}`}>
-                {isSolo ? 'Cleared' : m.is_winner ? 'Win' : 'Loss'}
-              </span>
-              <div className="match-detail">
-                <span className="match-opponents">{isSolo ? 'Solo' : `vs ${opponents}`}</span>
-                <span className="match-meta">
-                  {date.toLocaleDateString()} · {isSolo ? 'solo' : `${m.player_count}p`} · {m.final_tile_count} tiles
-                  {dur ? ` · ${dur}` : ''}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}

@@ -1,4 +1,4 @@
-import type { AvatarConfig, AchievementType, SoloModeConfig } from '@plantain/shared';
+import type { AvatarConfig, AchievementType } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
 /** Owner-scoped reads gated by RLS (no Worker round-trip) — mirrors lib/dictionaries.ts.
@@ -40,26 +40,6 @@ export interface AchievementRow {
   type: AchievementType;
   earned_at: string;
   meta: Record<string, unknown>;
-}
-
-export interface MatchHistoryRow {
-  id: string;
-  game_id: string;
-  is_winner: boolean;
-  seat: number;
-  final_tile_count: number;
-  final_placed_count: number | null;
-  peels: number;
-  dumps: number;
-  longest_word: string | null;
-  opponents: { profileId: string; displayName: string; seat: number; isWinner: boolean }[];
-  player_count: number;
-  spectator_count: number;
-  started_at: string | null;
-  finished_at: string;
-  duration_ms: number | null;
-  mode: GameMode;
-  mode_config: SoloModeConfig | Record<string, never>;
 }
 
 async function myId(): Promise<string | null> {
@@ -148,11 +128,3 @@ export async function fetchMyAchievements(): Promise<AchievementRow[]> {
   return data as AchievementRow[];
 }
 
-export async function fetchMyMatchHistory(): Promise<MatchHistoryRow[]> {
-  const { data, error } = await supabase
-    .from('my_match_history')
-    .select('*')
-    .order('finished_at', { ascending: false });
-  if (error) return [];
-  return data as MatchHistoryRow[];
-}

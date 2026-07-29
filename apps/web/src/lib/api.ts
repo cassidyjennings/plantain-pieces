@@ -160,7 +160,7 @@ export const api = {
     }),
 
   plantains: (roomId: string, grid: GridState) =>
-    call<{ ok: true; gameId?: string }>(`/rooms/${roomId}/plantains`, {
+    call<{ ok: true }>(`/rooms/${roomId}/plantains`, {
       method: 'POST',
       body: JSON.stringify({ grid }),
     }),
@@ -202,9 +202,12 @@ export const api = {
 
   deleteAccount: () => call<{ ok: true }>('/profile', { method: 'DELETE' }),
 
-  submitGameSummary: (gameId: string, summary: GameSummary) =>
-    call<{ ok: true; longestWord: string | null; rarestWord: string | null }>(
-      `/games/${gameId}/summary`,
+  /** Roll this player's words/move stats into their lifetime profile stats. Keyed by room —
+   * nothing per-game is stored, so the room is the only handle that exists. Returns this
+   * game's derived numbers so Results can show them without any per-game row to read back. */
+  submitGameSummary: (roomId: string, summary: GameSummary) =>
+    call<{ ok: true; longestWord: string | null; rarestWord: string | null; wordCount: number }>(
+      `/rooms/${roomId}/summary`,
       { method: 'POST', body: JSON.stringify(summary) },
     ),
 };

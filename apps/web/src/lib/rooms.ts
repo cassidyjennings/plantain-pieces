@@ -12,6 +12,7 @@ export interface PublicRoom {
   mode: 'multiplayer' | 'solo';
   mode_config: SoloModeConfig | Record<string, never>;
   started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface PublicPlayer {

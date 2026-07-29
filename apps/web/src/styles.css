@@ -901,6 +901,10 @@ button:disabled {
   gap: 6px;
   padding: 6px 14px;
   font-size: 13px;
+  /* Pinned so the two tools are always the SAME height. Their leading glyphs (▤ / ↩) have
+     different line-box metrics, so with the default line-height the buttons came out 25px vs
+     27px — a visible mismatch on a row of two adjacent pills. */
+  line-height: 1.45;
   border-radius: var(--radius-pill);
   background: var(--color-surface-raised);
   color: var(--color-text-muted);
@@ -2266,19 +2270,24 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     gap: var(--space-1);
   }
 
+  /* nowrap + shrink-proof buttons: the two tools must stay on ONE row. Letting them wrap costs a
+     whole extra row of vertical space in the dock, which is the space this whole block exists to
+     give back to the board. */
   .tray-toolbar {
-    padding: 4px var(--space-2);
-    gap: var(--space-1);
+    padding: 4px 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
   }
 
+  /* Labels stay (they're what makes the buttons legible — an unlabelled ▤ is a guess); they just
+     get small. Sized so the longest state, "▤ Collapse duplicates" + "↩ Recall invalid", still
+     fits one row at 320px, the narrowest phone worth supporting. */
   .tray-tool {
-    padding: 5px 9px;
+    padding: 4px 8px;
     font-size: 12px;
-    gap: 0;
-  }
-
-  .tray-tool-label {
-    display: none;
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   /* Scoped to the TRAY toolbar specifically, not `.tray-tool-group` in general -- that class is

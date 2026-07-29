@@ -52,6 +52,14 @@ $$;
 
 drop view if exists public.my_match_history;
 
+-- 20260728000005 already dropped this one, but repeat it here so 0006 stands on its own: if 0005
+-- is skipped, the DROP TABLE below fails outright with "cannot drop table game_players because
+-- other objects depend on it". Deliberately an explicit drop of the one view we know about
+-- rather than DROP ... CASCADE, which would silently take anything else along with it.
+-- (Running 0005 is still required — it's what creates room_boards_public, which the board
+-- viewer reads. This only stops a skipped 0005 from turning into a confusing error here.)
+drop view if exists public.game_boards_public;
+
 -- game_players FKs games, so this order matters. RLS policies, indexes and grants go with them.
 drop table if exists public.game_players;
 drop table if exists public.games;

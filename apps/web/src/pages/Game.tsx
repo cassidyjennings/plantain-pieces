@@ -312,6 +312,12 @@ export default function Game() {
       const payload = event.payload as { actor?: string };
       if (payload.actor) setLastPeelBy(payload.actor);
       if (payload.actor && payload.actor !== profileId && roomId) {
+        // A Peel deals a tile to EVERYONE, so everyone gets the callout — it's the signal that
+        // your own rack just changed, not a notification about who did it. Deliberately no actor
+        // name: the "Last peel" pill already answers that, and a name would make the string long
+        // enough to overflow a phone. Guarded on actor !== self because the peeler already fired
+        // this locally from runAutoAction; without the guard they'd get two.
+        fireCallout('PEEL!');
         // Peel deals a new tile to EVERY player, not just whoever called it. The peeler's own
         // client already applied its updated rack from the API response directly; everyone
         // else only learns a peel happened via this broadcast (which is public-safe and

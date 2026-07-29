@@ -8,6 +8,11 @@ export type ColorblindMode = 'off' | 'deuteranopia' | 'protanopia' | 'tritanopia
 export type FontScale = 'normal' | 'large' | 'xlarge';
 export type Contrast = 'normal' | 'high';
 
+/** What a click-and-drag on the board does. 'navigate' is the historical behaviour (drag empty
+ * space to pan); 'select' turns that same gesture into a marquee for selecting and moving
+ * several tiles at once. Persisted like the other client-only preferences. */
+export type BoardMode = 'navigate' | 'select';
+
 interface SettingsState {
   colorblindMode: ColorblindMode;
   fontScale: FontScale;
@@ -19,10 +24,14 @@ interface SettingsState {
    * in DictionaryConfig. Peel/Plantains still fire automatically either way, and the server still
    * authoritatively checks real words at Plantains time regardless of this setting. */
   wordValidationEnabled: boolean;
+  /** Board drag behaviour — see BoardMode. Not a data-attribute like the a11y settings; the
+   * board reads it directly. */
+  boardMode: BoardMode;
   setColorblindMode: (m: ColorblindMode) => void;
   setFontScale: (s: FontScale) => void;
   setContrast: (c: Contrast) => void;
   setWordValidationEnabled: (enabled: boolean) => void;
+  setBoardMode: (m: BoardMode) => void;
 }
 
 const KEYS = {
@@ -30,6 +39,7 @@ const KEYS = {
   fontScale: 'plantain-a11y-font-scale',
   contrast: 'plantain-a11y-contrast',
   wordValidation: 'plantain-word-validation-enabled',
+  boardMode: 'plantain-board-mode',
 } as const;
 
 function read<T extends string>(key: string, fallback: T): T {
@@ -54,6 +64,8 @@ const initial = {
   fontScale: read<FontScale>(KEYS.fontScale, 'normal'),
   contrast: read<Contrast>(KEYS.contrast, 'normal'),
   wordValidationEnabled: readBool(KEYS.wordValidation, true),
+  // Defaults to the historical behaviour, so an existing player's board feels unchanged.
+  boardMode: read<BoardMode>(KEYS.boardMode, 'navigate'),
 };
 
 // Apply persisted settings immediately at module load, before first paint of any screen.
@@ -79,5 +91,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setWordValidationEnabled: (wordValidationEnabled) => {
     localStorage.setItem(KEYS.wordValidation, String(wordValidationEnabled));
     set({ wordValidationEnabled });
+  },
+  setBoardMode: (boardMode) => {
+    localStorage.setItem(KEYS.boardMode, boardMode);
+    set({ boardMode });
   },
 }));

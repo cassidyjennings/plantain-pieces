@@ -772,6 +772,48 @@ button:disabled {
   cursor: grabbing;
 }
 
+/* Box-selected (select mode). Deliberately an outline + lift rather than a background change:
+   the background already encodes valid-word tinting, and overriding it would make a selected
+   valid word look invalid. Outline doesn't affect layout, so it can't nudge the grid. */
+.board-tile.selected {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 1px;
+  z-index: 2;
+  box-shadow: 0 4px 0 var(--color-accent-shadow);
+}
+
+/* The drag rectangle. pointer-events:none so it never swallows the pointermove/up that's
+   driving it. */
+.board-marquee {
+  position: absolute;
+  border: 2px dashed var(--color-accent);
+  background: rgba(255, 159, 67, 0.14);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* In select mode the drag gesture draws a box, so the grab cursor would be a lie. */
+.board-viewport[data-mode='select'] {
+  cursor: crosshair;
+}
+
+.board-viewport[data-mode='select']:active {
+  cursor: crosshair;
+}
+
+.board-viewport[data-mode='select'] .board-tile,
+.board-viewport[data-mode='select'] .board-tile:active {
+  cursor: move;
+}
+
+/* The active mode reads as "on" rather than as another zoom button. */
+.zoom-btn.mode-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
 /* Part of a valid dictionary word — slightly but noticeably green (retinted by
    colorblind modes via the tokens). A dotted underline gives a non-color cue too. */
 .board-tile.valid {

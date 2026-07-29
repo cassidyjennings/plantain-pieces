@@ -3,7 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   extractWordsWithCells,
   makeKey,
+  parseKey,
   validateStructure,
+  GRID_SIZE,
   type GridState,
 } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
@@ -30,6 +32,7 @@ import BunchGraphic from '../components/BunchGraphic.js';
 import BigCallout from '../components/BigCallout.js';
 import InfoTooltip from '../components/InfoTooltip.js';
 import ZoomIcon from '../components/ZoomIcon.js';
+import BoardModeIcon from '../components/BoardModeIcon.js';
 import SliceFlyLayer, { type SliceFlyHandle } from '../components/SliceFlyLayer.js';
 
 /** mm:ss for the Timed solo mode elapsed-time pill. */
@@ -81,6 +84,23 @@ type DragData =
        * one formula. */
       anchorWorldX: number;
       anchorWorldY: number;
+    }
+  // --- Select mode only ---------------------------------------------------------------
+  | {
+      /** Dragging a selection rectangle over empty board space. */
+      kind: 'marquee';
+      startX: number;
+      startY: number;
+      moved: boolean;
+    }
+  | {
+      /** Dragging an existing multi-tile selection around. Movement is tracked as a whole-cell
+       * (dx, dy) so the preview always lands on the grid the same way the commit will. */
+      kind: 'move-selection';
+      startX: number;
+      startY: number;
+      keys: string[];
+      moved: boolean;
     };
 
 export default function Game() {
@@ -88,6 +108,8 @@ export default function Game() {
   const navigate = useNavigate();
   const profileId = useSessionStore((s) => s.profileId);
   const wordValidationEnabled = useSettingsStore((s) => s.wordValidationEnabled);
+  const boardMode = useSettingsStore((s) => s.boardMode);
+  const setBoardMode = useSettingsStore((s) => s.setBoardMode);
 
   const [grid, setGrid] = useState<GridState>({});
   const [rack, setRack] = useState<RackTile[]>([]);
@@ -109,6 +131,13 @@ export default function Game() {
   const [pendingReveal, setPendingReveal] = useState<Set<string>>(new Set());
   const [sliceRevealed, setSliceRevealed] = useState<Set<string>>(new Set());
   const [flashSignal, setFlashSignal] = useState(0);
+
+  // Select-mode state. `selectedKeys` are committed selections; `marquee` is the live rectangle
+  // being dragged (screen coords); `selectionOffset` is the in-flight whole-cell shift of a
+  // selection being moved, rendered as a preview until it commits.
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [selectionOffset, setSelectionOffset] = useState<{ dx: number; dy: number } | null>(null);
 
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -150,6 +179,9 @@ export default function Game() {
   const collapsedRef = useRef(collapsed);
   const playersRef = useRef(players);
   const bunchRef = useRef(bunchCount);
+  const boardModeRef = useRef(boardMode);
+  const selectedKeysRef = useRef(selectedKeys);
+  const selectionOffsetRef = useRef(selectionOffset);
   gridRef.current = grid;
   rackRef.current = rack;
   panRef.current = pan;
@@ -157,6 +189,9 @@ export default function Game() {
   collapsedRef.current = collapsed;
   playersRef.current = players;
   bunchRef.current = bunchCount;
+  boardModeRef.current = boardMode;
+  selectedKeysRef.current = selectedKeys;
+  selectionOffsetRef.current = selectionOffset;
 
   // Per-game move tracking → the client end-of-game summary (words, placed count, move stats).
   const moveTracker = useMoveTracker(grid, rack);
@@ -389,6 +424,39 @@ export default function Game() {
     return { x: cx, y: cy };
   }, []);
 
+  /** Screen point -> world coordinates, unclamped (no viewport-bounds or negative rejection).
+   * screenToCell deliberately returns null outside the board; a marquee needs the raw value so a
+   * drag that strays past the edge still produces a sane rectangle. */
+  const screenToWorld = useCallback((clientX: number, clientY: number) => {
+    const vp = viewportRef.current;
+    if (!vp) return { x: 0, y: 0 };
+    const rect = vp.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - panRef.current.x) / zoomRef.current,
+      y: (clientY - rect.top - panRef.current.y) / zoomRef.current,
+    };
+  }, []);
+
+  /** Grid keys whose cell intersects the screen-space rectangle between two points. */
+  const keysInRect = useCallback(
+    (ax: number, ay: number, bx: number, by: number) => {
+      const p1 = screenToWorld(ax, ay);
+      const p2 = screenToWorld(bx, by);
+      const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
+      const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
+      const hits = new Set<string>();
+      for (const key of Object.keys(gridRef.current)) {
+        const { x, y } = parseKey(key);
+        // A cell counts as hit when the rectangle overlaps it at all, not just its centre —
+        // brushing across a row should pick up every tile the box visibly touches.
+        const left = x * CELL, top = y * CELL;
+        if (left + CELL > minX && left < maxX && top + CELL > minY && top < maxY) hits.add(key);
+      }
+      return hits;
+    },
+    [screenToWorld],
+  );
+
   /** Insertion index within the tray for a drop at clientX, ignoring the dragged tile itself. */
   function trayIndexAt(clientX: number, draggedId?: string): number {
     const tiles = Array.from(document.querySelectorAll<HTMLElement>('.tile-rack[data-tray] .tile-chip'));
@@ -418,6 +486,10 @@ export default function Game() {
     if (d?.kind === 'tile' && d.moved && d.source === 'board' && d.originKey) {
       setGrid((g) => ({ ...g, [d.originKey!]: d.letter }));
     }
+    // A marquee or selection-move interrupted by a second finger is abandoned, not committed —
+    // the gesture became a pinch, so the player never released on a chosen result.
+    setMarquee(null);
+    setSelectionOffset(null);
     setGhost(null);
     setDraggingId(null);
   }, []);
@@ -473,6 +545,37 @@ export default function Game() {
       });
       return;
     }
+    if (d.kind === 'marquee') {
+      const vp = viewportRef.current;
+      if (!vp) return;
+      d.moved = true;
+      const rect = vp.getBoundingClientRect();
+      // Stored relative to the viewport so the overlay can be positioned without re-reading
+      // the rect on every render.
+      setMarquee({
+        x: Math.min(d.startX, e.clientX) - rect.left,
+        y: Math.min(d.startY, e.clientY) - rect.top,
+        w: Math.abs(e.clientX - d.startX),
+        h: Math.abs(e.clientY - d.startY),
+      });
+      // Live preview of what would be selected on release.
+      setSelectedKeys(keysInRect(d.startX, d.startY, e.clientX, e.clientY));
+      return;
+    }
+    if (d.kind === 'move-selection') {
+      if (!d.moved) {
+        const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+        if (dist <= DRAG_THRESHOLD) return;
+        d.moved = true;
+      }
+      // Whole-cell steps only: the preview must land exactly where the commit will, so it's
+      // rounded here rather than following the pointer continuously and snapping at the end.
+      setSelectionOffset({
+        dx: Math.round((e.clientX - d.startX) / (CELL * zoomRef.current)),
+        dy: Math.round((e.clientY - d.startY) / (CELL * zoomRef.current)),
+      });
+      return;
+    }
     if (!d.moved) {
       const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
       if (dist <= DRAG_THRESHOLD) return;
@@ -489,7 +592,7 @@ export default function Game() {
       }
     }
     setPointer({ x: e.clientX, y: e.clientY });
-  }, []);
+  }, [keysInRect]);
 
   const handleUp = useCallback(
     (e: globalThis.PointerEvent) => {
@@ -508,6 +611,55 @@ export default function Game() {
       setGhost(null);
       setDraggingId(null);
       if (!d || d.kind === 'pan') return;
+
+      if (d.kind === 'marquee') {
+        setMarquee(null);
+        // A drag already replaced the selection live in handleMove. A press with no movement is
+        // a tap on empty space, which means "deselect". Clearing on pointerDOWN instead would
+        // wipe the selection every time someone starts a two-finger pinch, since the first
+        // finger inevitably lands before the second.
+        if (!d.moved) setSelectedKeys(new Set());
+        return;
+      }
+
+      if (d.kind === 'move-selection') {
+        const offset = selectionOffsetRef.current;
+        setSelectionOffset(null);
+        // A click on a selected tile without dragging clears the selection — the natural
+        // "put it down / never mind" gesture.
+        if (!d.moved || !offset || (offset.dx === 0 && offset.dy === 0)) {
+          setSelectedKeys(new Set());
+          return;
+        }
+        const { dx, dy } = offset;
+        const moving = new Set(d.keys);
+        const g = gridRef.current;
+
+        // All-or-nothing: every target cell must be in bounds and either empty or vacated by
+        // another tile in this same selection. A partial move would silently shred a word.
+        const targets = d.keys.map((key) => {
+          const { x, y } = parseKey(key);
+          return { from: key, x: x + dx, y: y + dy };
+        });
+        const ok = targets.every(({ x, y }) => {
+          if (x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE) return false;
+          const destKey = makeKey(x, y);
+          return !g[destKey] || moving.has(destKey);
+        });
+        if (!ok) {
+          // Bounced — keep the selection so the player can just try a different spot.
+          return;
+        }
+
+        setGrid((prev) => {
+          const next = { ...prev };
+          for (const key of d.keys) delete next[key];
+          for (const t of targets) next[makeKey(t.x, t.y)] = prev[t.from];
+          return next;
+        });
+        setSelectedKeys(new Set(targets.map((t) => makeKey(t.x, t.y))));
+        return;
+      }
 
       if (!d.moved) {
         // A click, not a drag.
@@ -620,6 +772,24 @@ export default function Game() {
     if (pointersRef.current.size >= 2) return; // onViewportPointerDownCapture already started a pinch
     const letter = grid[key];
     if (!letter) return;
+
+    if (boardMode === 'select') {
+      // Grabbing a tile that's part of the selection moves the whole set. Grabbing one outside
+      // it means the player is after that tile specifically, so drop the old selection and fall
+      // through to the ordinary single-tile drag.
+      if (selectedKeys.has(key)) {
+        dragRef.current = {
+          kind: 'move-selection',
+          startX: e.clientX,
+          startY: e.clientY,
+          keys: [...selectedKeys],
+          moved: false,
+        };
+        return;
+      }
+      setSelectedKeys(new Set());
+    }
+
     dragRef.current = {
       kind: 'tile',
       source: 'board',
@@ -633,6 +803,13 @@ export default function Game() {
 
   function onBackgroundPointerDown(e: PointerEvent) {
     if (pointersRef.current.size >= 2) return; // onViewportPointerDownCapture already started a pinch
+    if (boardMode === 'select') {
+      // In select mode this gesture draws a box instead of panning. The view stays put —
+      // zoom buttons, wheel and pinch still work, only drag-to-pan is taken over.
+      // The existing selection is deliberately NOT cleared here; see handleUp.
+      dragRef.current = { kind: 'marquee', startX: e.clientX, startY: e.clientY, moved: false };
+      return;
+    }
     dragRef.current = { kind: 'pan', startX: e.clientX, startY: e.clientY, startPan: pan };
   }
 
@@ -741,6 +918,17 @@ export default function Game() {
     }, 350);
     return () => clearTimeout(handle);
   }, [grid, roomId, wordValidationEnabled]);
+
+  // Drop selected cells that no longer hold a tile — recalling invalid tiles, or dragging one
+  // out of the group individually, can empty a cell that's still selected. A stale key would
+  // otherwise survive into a selection move and write `undefined` into the grid.
+  useEffect(() => {
+    setSelectedKeys((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set([...prev].filter((k) => grid[k] !== undefined));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [grid]);
 
   // --- Publish "tiles remaining" so opponent pills mean something ------------
 
@@ -991,11 +1179,34 @@ export default function Game() {
           zoom={zoom}
           validCells={validCells}
           hiddenKey={null}
+          selectedKeys={selectedKeys}
+          selectionOffset={selectionOffset}
+          marquee={marquee}
+          mode={boardMode}
           onTilePointerDown={onBoardTilePointerDown}
           onBackgroundPointerDown={onBackgroundPointerDown}
           onViewportPointerDownCapture={onViewportPointerDownCapture}
         />
         <div className="zoom-controls">
+          <button
+            type="button"
+            className={`zoom-btn mode-btn${boardMode === 'select' ? ' active' : ''}`}
+            aria-pressed={boardMode === 'select'}
+            aria-label={boardMode === 'select' ? 'Switch to move mode' : 'Switch to select mode'}
+            title={
+              boardMode === 'select'
+                ? 'Select mode: drag a box to select tiles, then drag them together. Tap to switch back to moving the board.'
+                : 'Move mode: drag to move the board around. Tap to switch to selecting tiles.'
+            }
+            onClick={() => {
+              // Leaving select mode drops any selection — it has no meaning in move mode, and
+              // leaving tiles visibly highlighted with no way to act on them reads as a bug.
+              if (boardMode === 'select') setSelectedKeys(new Set());
+              setBoardMode(boardMode === 'select' ? 'navigate' : 'select');
+            }}
+          >
+            <BoardModeIcon mode={boardMode} />
+          </button>
           <button type="button" className="zoom-btn" onClick={() => handleZoomButton(1)} aria-label="Zoom in" title="Zoom in">
             <ZoomIcon mode="in" />
           </button>

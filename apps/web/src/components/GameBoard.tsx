@@ -10,6 +10,15 @@ interface Props {
   validCells: Set<string>;
   /** Cell currently lifted for dragging (hidden from the board). */
   hiddenKey: string | null;
+  /** Cell keys currently box-selected (select mode only). */
+  selectedKeys: Set<string>;
+  /** Live whole-cell shift applied to the selected tiles while they're being dragged. Null when
+   * no selection move is in flight. */
+  selectionOffset: { dx: number; dy: number } | null;
+  /** The live selection rectangle, in viewport-relative pixels. Null when not dragging one. */
+  marquee: { x: number; y: number; w: number; h: number } | null;
+  /** Drives the viewport's cursor via a data attribute — see styles.css. */
+  mode: 'navigate' | 'select';
   onTilePointerDown: (key: string, e: PointerEvent) => void;
   onBackgroundPointerDown: (e: PointerEvent) => void;
   /** Capture-phase pointerdown on the viewport itself, ahead of any tile/background bubble
@@ -35,6 +44,10 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
     zoom,
     validCells,
     hiddenKey,
+    selectedKeys,
+    selectionOffset,
+    marquee,
+    mode,
     onTilePointerDown,
     onBackgroundPointerDown,
     onViewportPointerDownCapture,
@@ -44,6 +57,7 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
   return (
     <div
       className="board-viewport"
+      data-mode={mode}
       ref={viewportRef}
       onPointerDown={onBackgroundPointerDown}
       onPointerDownCapture={onViewportPointerDownCapture}
@@ -59,11 +73,21 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
         {Object.entries(grid).map(([key, letter]) => {
           if (key === hiddenKey) return null;
           const { x, y } = parseKey(key);
+          const selected = selectedKeys.has(key);
+          // Only the selected tiles shift during a selection drag; everything else stays put,
+          // so the player can see exactly where the group will land relative to the rest.
+          const ox = selected && selectionOffset ? selectionOffset.dx : 0;
+          const oy = selected && selectionOffset ? selectionOffset.dy : 0;
           return (
             <div
               key={key}
-              className={`board-tile${validCells.has(key) ? ' valid' : ''}`}
-              style={{ left: x * CELL, top: y * CELL, width: CELL, height: CELL }}
+              className={`board-tile${validCells.has(key) ? ' valid' : ''}${selected ? ' selected' : ''}`}
+              style={{
+                left: (x + ox) * CELL,
+                top: (y + oy) * CELL,
+                width: CELL,
+                height: CELL,
+              }}
               onPointerDown={(e) => onTilePointerDown(key, e)}
             >
               {letter}
@@ -71,6 +95,15 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
           );
         })}
       </div>
+
+      {/* Sits outside board-world so it isn't scaled by the zoom transform — it's a screen-space
+          rectangle following the pointer, not part of the board. */}
+      {marquee && (
+        <div
+          className="board-marquee"
+          style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+        />
+      )}
     </div>
   );
 });

@@ -126,6 +126,21 @@ app.post('/rooms/:roomId/leave', async (c) => {
   return c.json(data);
 });
 
+// Rematch: reset THIS room back to a lobby (same id, same code, same players) rather than
+// creating a new one. Idempotent in the RPC, so several players clicking at once all succeed
+// and land in the same lobby.
+app.post('/rooms/:roomId/rematch', async (c) => {
+  const profileId = c.get('profileId');
+  const roomId = c.req.param('roomId');
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('rematch_room', {
+    p_room_id: roomId,
+    p_profile: profileId,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
 app.get('/rooms/:roomId/me', async (c) => {
   const profileId = c.get('profileId');
   const roomId = c.req.param('roomId');

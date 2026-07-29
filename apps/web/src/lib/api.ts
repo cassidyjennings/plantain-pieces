@@ -123,6 +123,14 @@ export const api = {
       body: '{}',
     }),
 
+  /** Reset this finished room back to a lobby — same room id, same code, same players.
+   * `alreadyReset` means another player got there first, which is a success, not an error. */
+  rematchRoom: (roomId: string) =>
+    call<{ roomId: string; code: string; alreadyReset: boolean }>(`/rooms/${roomId}/rematch`, {
+      method: 'POST',
+      body: '{}',
+    }),
+
   getMyState: (roomId: string) => call<MyState>(`/rooms/${roomId}/me`),
 
   peel: (roomId: string, grid: GridState) =>

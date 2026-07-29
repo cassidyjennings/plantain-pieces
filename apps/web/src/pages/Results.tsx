@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
 import { fetchDisplayName, fetchRoom, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyMatchHistory, fetchMyAchievements, type MatchHistoryRow } from '../lib/profile.js';
+import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError } from '../lib/api.js';
 
@@ -51,6 +52,13 @@ export default function Results() {
     };
   }, []);
 
+  // A rematch resets THIS room back to a lobby, so everyone still on the results screen has to
+  // follow it there — otherwise only the player who clicked would move and the others would sit
+  // on a results screen for a game that no longer exists.
+  useRoomEvents(roomId, (event) => {
+    if (event.type === 'rematch') navigate(`/room/${roomId}`, { replace: true });
+  });
+
   if (!room) return <div className="centered">Loading results...</div>;
 
   const won = room.winner_id === profileId;
@@ -67,12 +75,26 @@ export default function Results() {
         const solo = await api.createSoloRoom(name, room!.dictionary_config, room!.mode_config as SoloModeConfig);
         navigate(`/room/${solo.roomId}/game`);
       } else {
-        // A lightweight rematch: a fresh room with the same wordlist, ready for the same
-        // players to rejoin via the new room code.
-        const fresh = await api.createRoom(name, room!.dictionary_config);
-        navigate(`/room/${fresh.roomId}`);
+        // Reset THIS room back to a lobby — same room id, same code, same players, same
+        // wordlist. Creating a fresh room here (the old behavior) gave every player who
+        // clicked their own private room with a new code, so a rematch could never happen.
+        // The RPC is idempotent, so if someone else already rematched this just succeeds and
+        // we follow them in; its `rematch` event moves everyone else.
+        await api.rematchRoom(roomId!);
+        navigate(`/room/${roomId}`);
       }
     } catch (err) {
+      // Everyone left after the game, so leave_room tore the room down. Nothing to reset —
+      // fall back to a brand-new room so the button still does something useful.
+      if (err instanceof ApiError && err.message === 'ROOM_NOT_FOUND') {
+        try {
+          const fresh = await api.createRoom(name, room!.dictionary_config);
+          navigate(`/room/${fresh.roomId}`);
+          return;
+        } catch {
+          /* fall through to the error message below */
+        }
+      }
       setRematchError(err instanceof ApiError ? err.message : 'Failed to start a new game');
       setRematching(false);
     }

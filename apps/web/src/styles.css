@@ -888,6 +888,9 @@ button:disabled {
 }
 
 .tray-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 14px;
   font-size: 13px;
   border-radius: var(--radius-pill);
@@ -2223,6 +2226,57 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     min-width: 22px;
     height: 22px;
     font-size: 13px;
+  }
+}
+
+/* Mobile shrink: the tray toolbar and top bar are sized for a comfortable phone tap target by
+   default, but that ate into .board-area's flex share on small screens — the actual board window
+   ended up cramped. Text labels hide (not remove: aria-label on the buttons keeps them
+   accessible) and tooltips drop entirely, since a touchscreen has no hover to reveal them. */
+@media (max-width: 600px) {
+  .game-topbar {
+    padding: 8px 12px;
+    gap: var(--space-2);
+  }
+
+  .bunch-plantain {
+    --bunch-w: 130px;
+  }
+
+  .game-actions {
+    gap: var(--space-1);
+  }
+
+  .game-actions button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .rack-dock {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    min-height: 64px;
+    gap: var(--space-1);
+  }
+
+  .tray-toolbar {
+    padding: 4px var(--space-2);
+    gap: var(--space-1);
+  }
+
+  .tray-tool {
+    padding: 5px 9px;
+    font-size: 12px;
+    gap: 0;
+  }
+
+  .tray-tool-label {
+    display: none;
+  }
+
+  /* Scoped to the TRAY toolbar specifically, not `.tray-tool-group` in general -- that class is
+     reused by the topbar's Dump! button (Game.tsx), whose tooltip should stay. */
+  .tray-toolbar .info-tooltip {
+    display: none;
   }
 }
 

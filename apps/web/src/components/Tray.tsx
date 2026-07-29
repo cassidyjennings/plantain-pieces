@@ -39,9 +39,13 @@ export default function Tray({
             className={`tray-tool${collapsed ? ' active' : ''}`}
             onClick={onToggleCollapse}
             aria-pressed={collapsed}
+            aria-label={collapsed ? 'Expand duplicates' : 'Collapse duplicates'}
           >
-            {collapsed ? '▦ Expand duplicates' : '▤ Collapse duplicates'}
+            <span aria-hidden="true">{collapsed ? '▦' : '▤'}</span>
+            <span className="tray-tool-label">{collapsed ? 'Expand duplicates' : 'Collapse duplicates'}</span>
           </button>
+          {/* Below ~600px this drops out entirely (see the media query) — it's a hover-reveal
+              affordance and a phone has no hover. */}
           <InfoTooltip
             text={
               collapsed
@@ -51,8 +55,15 @@ export default function Tray({
           />
         </span>
         <span className="tray-tool-group">
-          <button type="button" className="tray-tool" onClick={onRecallInvalid} disabled={!canRecall}>
-            ↩ Recall invalid
+          <button
+            type="button"
+            className="tray-tool"
+            onClick={onRecallInvalid}
+            disabled={!canRecall}
+            aria-label="Recall invalid"
+          >
+            <span aria-hidden="true">↩</span>
+            <span className="tray-tool-label">Recall invalid</span>
           </button>
           <InfoTooltip text="Return every placed tile that isn't currently part of a valid word back to your tray, leaving valid words on the board." />
         </span>

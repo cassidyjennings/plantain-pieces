@@ -67,6 +67,20 @@ type DragData =
       startX: number;
       startY: number;
       moved: boolean;
+    }
+  | {
+      kind: 'pinch';
+      /** Screen distance between the two pointers when the pinch began — zoom is always
+       * computed as `startZoom * (currentDist / startDist)`, never incrementally from the live
+       * zoom, so drift can't accumulate across many pointermove events. */
+      startDist: number;
+      startZoom: number;
+      /** World-space point that sat under the pinch's midpoint at gesture start. Recomputing pan
+       * each move to keep this point under the CURRENT midpoint is what makes the gesture zoom
+       * under the fingers and pan when the midpoint drifts (a still-distance two-finger drag), in
+       * one formula. */
+      anchorWorldX: number;
+      anchorWorldY: number;
     };
 
 export default function Game() {
@@ -107,6 +121,11 @@ export default function Game() {
   const busyRef = useRef(false);
   const autoSigRef = useRef<string | null>(null);
   const centeredRef = useRef(false);
+  // Active touch pointers on the board, keyed by pointerId -> last known {x, y}. Only used to
+  // detect a second finger landing (promoting whatever single-pointer gesture was in progress to
+  // a pinch) and to read both fingers' live positions during one. Desktop mouse/trackpad zoom
+  // (ctrlKey + wheel, see onWheel below) doesn't touch this at all.
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   // Slice-fly wiring: the plantain cut-end anchor (slice origin), the animation layer handle, and
   // the set of tile ids we've already launched a slice for (so re-renders don't re-fire).
   const plantainCutRef = useRef<HTMLSpanElement>(null);
@@ -379,9 +398,61 @@ export default function Game() {
 
   // --- Drag lifecycle (window-level move/up, attached once) -------------------
 
+  /** Restore a lifted board tile and clear drag visuals when a gesture is pre-empted (a second
+   * finger promoting a drag to a pinch, or a pointercancel). Shared by both call sites so the
+   * "put the tile back" logic can't drift out of sync between them. */
+  const abortTileDrag = useCallback((d: DragData | null) => {
+    if (d?.kind === 'tile' && d.moved && d.source === 'board' && d.originKey) {
+      setGrid((g) => ({ ...g, [d.originKey!]: d.letter }));
+    }
+    setGhost(null);
+    setDraggingId(null);
+  }, []);
+
+  /** Enter pinch mode from the two pointers currently tracked. Called once a second finger lands
+   * on the board (see the viewport's capture-phase pointerdown below). Pre-empts whatever
+   * single-pointer gesture (pan or tile drag) the first finger had started. */
+  const beginPinch = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp || pointersRef.current.size < 2) return;
+    const [p1, p2] = [...pointersRef.current.values()];
+    const rect = vp.getBoundingClientRect();
+    const midX = (p1.x + p2.x) / 2 - rect.left;
+    const midY = (p1.y + p2.y) / 2 - rect.top;
+    abortTileDrag(dragRef.current);
+    dragRef.current = {
+      kind: 'pinch',
+      // Floor of 1: two fingers landing at (near-)identical points would otherwise divide by
+      // ~0 on the very next move event and send the zoom factor to infinity.
+      startDist: Math.max(Math.hypot(p2.x - p1.x, p2.y - p1.y), 1),
+      startZoom: zoomRef.current,
+      anchorWorldX: (midX - panRef.current.x) / zoomRef.current,
+      anchorWorldY: (midY - panRef.current.y) / zoomRef.current,
+    };
+  }, [abortTileDrag]);
+
   const handleMove = useCallback((e: globalThis.PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
+    if (d.kind === 'pinch') {
+      const vp = viewportRef.current;
+      if (!vp) return;
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const pts = [...pointersRef.current.values()];
+      if (pts.length < 2) return; // the partner finger hasn't reported a move yet
+      const [p1, p2] = pts;
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.startZoom * (dist / d.startDist)));
+      const rect = vp.getBoundingClientRect();
+      const midX = (p1.x + p2.x) / 2 - rect.left;
+      const midY = (p1.y + p2.y) / 2 - rect.top;
+      setZoom(newZoom);
+      setPan({
+        x: Math.round(midX - d.anchorWorldX * newZoom),
+        y: Math.round(midY - d.anchorWorldY * newZoom),
+      });
+      return;
+    }
     if (d.kind === 'pan') {
       setPan({
         x: Math.round(d.startPan.x + (e.clientX - d.startX)),
@@ -409,7 +480,17 @@ export default function Game() {
 
   const handleUp = useCallback(
     (e: globalThis.PointerEvent) => {
+      pointersRef.current.delete(e.pointerId);
       const d = dragRef.current;
+
+      if (d?.kind === 'pinch') {
+        // A pinch never represents a tile action, so there's nothing to "drop". Below 2 fingers
+        // the gesture is over; per design a lone remaining finger does NOT get reinterpreted as
+        // starting a fresh pan/tile drag — it just sits there until its own pointerup arrives.
+        if (pointersRef.current.size < 2) dragRef.current = null;
+        return;
+      }
+
       dragRef.current = null;
       setGhost(null);
       setDraggingId(null);
@@ -465,16 +546,47 @@ export default function Game() {
     [screenToCell],
   );
 
+  /** A pointer vanishing without a proper up (browser takes over the gesture, OS interrupts a
+   * touch, etc). Unlike handleUp this never attempts a drop — just cancels whatever was live. */
+  const handlePointerCancel = useCallback(
+    (e: globalThis.PointerEvent) => {
+      pointersRef.current.delete(e.pointerId);
+      const d = dragRef.current;
+      if (d?.kind === 'pinch') {
+        if (pointersRef.current.size < 2) dragRef.current = null;
+        return;
+      }
+      abortTileDrag(d);
+      dragRef.current = null;
+    },
+    [abortTileDrag],
+  );
+
   useEffect(() => {
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
     return () => {
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
     };
-  }, [handleMove, handleUp]);
+  }, [handleMove, handleUp, handlePointerCancel]);
+
+  /** Capture-phase pointerdown on the board viewport (wired via GameBoard's
+   * onViewportPointerDownCapture) — this is what makes a second finger reliably promote to a
+   * pinch. It has to run in the CAPTURE phase specifically: onBoardTilePointerDown below calls
+   * stopPropagation(), which would otherwise stop a same-phase/bubble listener on an ancestor
+   * from ever seeing the event; capture runs top-down before the event reaches the tile at all,
+   * so it can't be blocked that way. Scoped to the board viewport only — a second finger landing
+   * on the tray while dragging on the board (or vice versa) isn't treated as a pinch. */
+  function onViewportPointerDownCapture(e: PointerEvent) {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2) beginPinch();
+  }
 
   function onTrayPointerDown(id: string, e: PointerEvent) {
+    if (pointersRef.current.size >= 2) return; // a pinch already owns this gesture
     const tile = rack.find((t) => t.id === id);
     if (!tile) return;
     e.preventDefault();
@@ -492,6 +604,7 @@ export default function Game() {
   function onBoardTilePointerDown(key: string, e: PointerEvent) {
     e.stopPropagation();
     e.preventDefault();
+    if (pointersRef.current.size >= 2) return; // onViewportPointerDownCapture already started a pinch
     const letter = grid[key];
     if (!letter) return;
     dragRef.current = {
@@ -506,6 +619,7 @@ export default function Game() {
   }
 
   function onBackgroundPointerDown(e: PointerEvent) {
+    if (pointersRef.current.size >= 2) return; // onViewportPointerDownCapture already started a pinch
     dragRef.current = { kind: 'pan', startX: e.clientX, startY: e.clientY, startPan: pan };
   }
 
@@ -829,6 +943,7 @@ export default function Game() {
           hiddenKey={null}
           onTilePointerDown={onBoardTilePointerDown}
           onBackgroundPointerDown={onBackgroundPointerDown}
+          onViewportPointerDownCapture={onViewportPointerDownCapture}
         />
         <div className="zoom-controls">
           <button type="button" className="zoom-btn" onClick={() => handleZoomButton(1)} aria-label="Zoom in" title="Zoom in">

@@ -12,6 +12,10 @@ interface Props {
   hiddenKey: string | null;
   onTilePointerDown: (key: string, e: PointerEvent) => void;
   onBackgroundPointerDown: (e: PointerEvent) => void;
+  /** Capture-phase pointerdown on the viewport itself, ahead of any tile/background bubble
+   * handler — see the long comment at its call site in Game.tsx for why this has to be capture,
+   * not bubble. */
+  onViewportPointerDownCapture: (e: PointerEvent) => void;
 }
 
 /**
@@ -25,11 +29,25 @@ interface Props {
  * attaches a real `{ passive: false }` listener directly to this div via the forwarded ref.
  */
 const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
-  { grid, pan, zoom, validCells, hiddenKey, onTilePointerDown, onBackgroundPointerDown },
+  {
+    grid,
+    pan,
+    zoom,
+    validCells,
+    hiddenKey,
+    onTilePointerDown,
+    onBackgroundPointerDown,
+    onViewportPointerDownCapture,
+  },
   viewportRef,
 ) {
   return (
-    <div className="board-viewport" ref={viewportRef} onPointerDown={onBackgroundPointerDown}>
+    <div
+      className="board-viewport"
+      ref={viewportRef}
+      onPointerDown={onBackgroundPointerDown}
+      onPointerDownCapture={onViewportPointerDownCapture}
+    >
       <div
         className="board-world"
         style={{

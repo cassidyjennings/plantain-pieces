@@ -83,6 +83,10 @@ export function useMoveTracker(grid: GridState, rack: RackLike[]) {
         words,
         placedCount: Object.keys(finalGrid).length,
         moveStats: computeMoveStats({ tiles: s.lifecycles, dumps }),
+        // The board itself, for the end-of-game viewer. This is the only path that captures a
+        // NON-winner's true final board: room_players.grid_state is only persisted on
+        // Peel/Plantains, so for everyone who didn't win it's stale by the time the game ends.
+        grid: finalGrid,
       };
     },
   };

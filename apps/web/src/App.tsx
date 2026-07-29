@@ -9,6 +9,7 @@ import SoloSetup from './pages/SoloSetup.js';
 import Lobby from './pages/Lobby.js';
 import Game from './pages/Game.js';
 import Results from './pages/Results.js';
+import BoardViewer from './pages/BoardViewer.js';
 import Profile from './pages/Profile.js';
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/room/:roomId" element={<Lobby />} />
         <Route path="/room/:roomId/game" element={<Game />} />
         <Route path="/room/:roomId/results" element={<Results />} />
+        <Route path="/room/:roomId/boards" element={<BoardViewer />} />
       </Routes>
     </BrowserRouter>
   );

@@ -106,4 +106,46 @@ describe('validateGameSummary', () => {
       validateGameSummary({ ...good, moveStats: { ...good.moveStats, dumpRegret: 1.5 } }),
     ).toEqual({ valid: false, reason: 'OUT_OF_RANGE' });
   });
+
+  // --- grid (end-of-game board viewer) ---------------------------------------------------
+
+  it('accepts a well-formed grid', () => {
+    expect(validateGameSummary({ ...good, grid: { '10,10': 'C', '11,10': 'A', '12,10': 'T' } })).toEqual({
+      valid: true,
+    });
+  });
+
+  it('accepts a summary with no grid at all (older client build)', () => {
+    expect(validateGameSummary(good)).toEqual({ valid: true });
+    expect(validateGameSummary({ ...good, grid: undefined })).toEqual({ valid: true });
+  });
+
+  it('accepts an empty grid', () => {
+    expect(validateGameSummary({ ...good, grid: {} })).toEqual({ valid: true });
+  });
+
+  it('rejects a grid that is an array rather than a keyed object', () => {
+    expect(validateGameSummary({ ...good, grid: ['C', 'A', 'T'] })).toEqual({
+      valid: false,
+      reason: 'MALFORMED',
+    });
+  });
+
+  it('rejects malformed cell keys', () => {
+    expect(validateGameSummary({ ...good, grid: { 'ten,ten': 'C' } })).toEqual({ valid: false, reason: 'MALFORMED' });
+    expect(validateGameSummary({ ...good, grid: { '10': 'C' } })).toEqual({ valid: false, reason: 'MALFORMED' });
+    expect(validateGameSummary({ ...good, grid: { '10,10,10': 'C' } })).toEqual({ valid: false, reason: 'MALFORMED' });
+  });
+
+  it('rejects cell values that are not a single letter', () => {
+    expect(validateGameSummary({ ...good, grid: { '10,10': 'CAT' } })).toEqual({ valid: false, reason: 'MALFORMED' });
+    expect(validateGameSummary({ ...good, grid: { '10,10': '' } })).toEqual({ valid: false, reason: 'MALFORMED' });
+    expect(validateGameSummary({ ...good, grid: { '10,10': 4 } })).toEqual({ valid: false, reason: 'MALFORMED' });
+  });
+
+  it('rejects an absurdly large grid', () => {
+    const huge: Record<string, string> = {};
+    for (let i = 0; i < 500; i++) huge[`${i},0`] = 'A';
+    expect(validateGameSummary({ ...good, grid: huge })).toEqual({ valid: false, reason: 'OUT_OF_RANGE' });
+  });
 });

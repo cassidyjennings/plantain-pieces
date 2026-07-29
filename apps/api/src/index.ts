@@ -7,6 +7,7 @@ import {
   validateAvatarConfig,
   validateGameSummary,
   validateSoloModeConfig,
+  isValidGridShape,
   type GridState,
   type DictionaryConfig,
   type AvatarConfig,
@@ -183,6 +184,30 @@ app.post('/rooms/:roomId/peel', async (c) => {
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
 
   await admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid });
+  return c.json(data);
+});
+
+// Final board, for the post-game viewer. Persisted onto room_players.grid_state, which is
+// ephemeral — it cascades away when the room is deleted. Deliberately NOT archived onto
+// game_players: nothing can navigate to a board once the room is gone (Results renders off
+// rooms_public), so archiving it would retain player data no one could ever read.
+//
+// Needed because grid_state is otherwise only written on Peel/Plantains, so for every player
+// who didn't win it's stale by the time the game ends.
+app.post('/rooms/:roomId/final-grid', async (c) => {
+  const profileId = c.get('profileId');
+  const roomId = c.req.param('roomId');
+  const body = await c.req.json<{ grid: unknown }>();
+
+  if (!isValidGridShape(body.grid)) return c.json({ error: 'MALFORMED_GRID' }, 400);
+
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('persist_grid', {
+    p_room_id: roomId,
+    p_profile: profileId,
+    p_grid: body.grid,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
   return c.json(data);
 });
 

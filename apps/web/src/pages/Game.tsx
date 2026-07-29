@@ -313,6 +313,11 @@ export default function Game() {
     if (!gameId || summarySubmittedRef.current) return;
     summarySubmittedRef.current = true;
     api.submitGameSummary(gameId, moveTracker.buildSummary(gridRef.current)).catch(() => {});
+    // Separate call, and deliberately so: the summary is durable per-game stats, while the
+    // board is ephemeral and belongs to the ROOM (it's deleted with it). Sending the board as
+    // part of the summary would archive it forever, which is data no one can ever reach once
+    // the room is gone.
+    if (roomId) api.persistFinalGrid(roomId, gridRef.current).catch(() => {});
   }
 
   useRoomEvents(roomId, (event) => {

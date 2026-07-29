@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { fetchGameBoards, validCellsFor, type GameBoardRow } from '../lib/boards.js';
-import { fetchMyMatchHistory } from '../lib/profile.js';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  fetchRoomBoards,
+  resolveBoardWords,
+  EMPTY_BOARD_WORDS,
+  type BoardWords,
+  type RoomBoardRow,
+} from '../lib/boards.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import Avatar from '../components/Avatar.js';
 import BoardPreview from '../components/BoardPreview.js';
@@ -9,47 +14,34 @@ import BoardPreview from '../components/BoardPreview.js';
 /**
  * Post-game board viewer: look at what everyone actually built.
  *
+ * Keyed on the ROOM, not the game — the boards live on room_players and die with the room, so
+ * this screen only exists for as long as the room does. That's also exactly as long as it was
+ * ever reachable: Results renders off rooms_public, so once the room is gone there's no
+ * navigation path here either.
+ *
  * Deliberately its own route rather than a modal over Results — it has its own top bar (no
- * Bunch, no score pills, no tray) and owns the full viewport, which is awkward to fake inside
- * Results' centered column layout. A route also gets working browser-back for free.
+ * Bunch, no score pills, no tray) and owns the full viewport.
  */
 export default function BoardViewer() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const profileId = useSessionStore((s) => s.profileId);
 
-  // Boards are keyed by game, but the route is keyed by room. Results already knows the gameId
-  // and passes it through route state; the match-history fallback covers a refresh or a
-  // deep-link, where that state is gone.
-  const passedGameId = (location.state as { gameId?: string } | null)?.gameId ?? null;
-  const [gameId, setGameId] = useState<string | null>(passedGameId);
-  const [boards, setBoards] = useState<GameBoardRow[]>([]);
+  const [boards, setBoards] = useState<RoomBoardRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Word resolution costs a round-trip per board, so cache it per player — clicking back and
+  // forth between two players shouldn't re-validate the same grid every time.
+  const [wordsByPlayer, setWordsByPlayer] = useState<Record<string, BoardWords>>({});
 
+  // Every client persists its own final board asynchronously as the game ends, so the first
+  // read often lands before some players' boards exist. Refetch once shortly after to pick up
+  // the stragglers — same pattern the Results screen uses for its stats.
   useEffect(() => {
-    if (gameId) return;
-    let cancelled = false;
-    fetchMyMatchHistory().then((history) => {
-      if (cancelled) return;
-      const latest = history[0] ?? null;
-      setGameId(latest?.game_id ?? null);
-      if (!latest) setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [gameId]);
-
-  // Every client submits its own end-of-game summary asynchronously as the game ends, so the
-  // first read here often lands before some players' boards exist. Refetch once shortly after
-  // to pick up the stragglers — same pattern the Results screen uses for its stats.
-  useEffect(() => {
-    if (!gameId) return;
+    if (!roomId) return;
     let cancelled = false;
     async function load() {
-      const rows = await fetchGameBoards(gameId!);
+      const rows = await fetchRoomBoards(roomId!);
       if (cancelled) return;
       setBoards(rows);
       setLoading(false);
@@ -60,7 +52,7 @@ export default function BoardViewer() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [gameId]);
+  }, [roomId]);
 
   // Default to your own board — it's the one you actually want to see first.
   useEffect(() => {
@@ -71,8 +63,20 @@ export default function BoardViewer() {
 
   const selected = boards.find((b) => b.profile_id === selectedId) ?? null;
 
-  const validCells = useMemo(() => validCellsFor(selected), [selected]);
+  useEffect(() => {
+    if (!roomId || !selected) return;
+    const key = selected.profile_id;
+    if (wordsByPlayer[key]) return;
+    let cancelled = false;
+    resolveBoardWords(roomId, selected.grid_state).then((res) => {
+      if (!cancelled) setWordsByPlayer((prev) => ({ ...prev, [key]: res }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, selected, wordsByPlayer]);
 
+  const words = (selected && wordsByPlayer[selected.profile_id]) ?? EMPTY_BOARD_WORDS;
   const isSelf = selected?.profile_id === profileId;
 
   return (
@@ -126,8 +130,8 @@ export default function BoardViewer() {
           <p className="hint">No boards to show for this game.</p>
         ) : (
           <BoardPreview
-            grid={selected.final_grid ?? {}}
-            validCells={validCells}
+            grid={selected.grid_state ?? {}}
+            validCells={words.validCells}
             label={`${isSelf ? 'Your' : `${selected.display_name}'s`} final board`}
             emptyMessage={
               isSelf
@@ -143,9 +147,9 @@ export default function BoardViewer() {
           <span className="viewer-words-label">
             {isSelf ? 'Your words' : `${selected.display_name}'s words`}
           </span>
-          {selected.words_played?.length ? (
+          {words.words.length ? (
             <div className="viewer-word-list">
-              {selected.words_played.map((w, i) => (
+              {words.words.map((w, i) => (
                 <span key={`${w}-${i}`} className="viewer-word">
                   {w}
                 </span>

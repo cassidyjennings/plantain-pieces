@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
 import { fetchDisplayName, fetchRoom, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyMatchHistory, fetchMyAchievements, type MatchHistoryRow } from '../lib/profile.js';
-import { fetchGameBoards, validCellsFor, type GameBoardRow } from '../lib/boards.js';
+import { fetchRoomBoards, type RoomBoardRow } from '../lib/boards.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError } from '../lib/api.js';
@@ -20,7 +20,7 @@ export default function Results() {
   const [earned, setEarned] = useState<AchievementType[]>([]);
   const [rematching, setRematching] = useState(false);
   const [rematchError, setRematchError] = useState<string | null>(null);
-  const [myBoard, setMyBoard] = useState<GameBoardRow | null>(null);
+  const [myBoard, setMyBoard] = useState<RoomBoardRow | null>(null);
   const [boardCount, setBoardCount] = useState(0);
 
   useEffect(() => {
@@ -57,13 +57,13 @@ export default function Results() {
   }, []);
 
   // Your own final board, for the preview window. Refetched on the same delay as the stats
-  // above because every client's summary (which carries the board) lands asynchronously right
-  // as the game ends — including this client's own.
+  // above because every client persists its board asynchronously right as the game ends —
+  // including this client's own.
   useEffect(() => {
-    if (!match?.game_id) return;
+    if (!roomId) return;
     let cancelled = false;
     async function load() {
-      const rows = await fetchGameBoards(match!.game_id);
+      const rows = await fetchRoomBoards(roomId!);
       if (cancelled) return;
       setBoardCount(rows.length);
       setMyBoard(rows.find((r) => r.profile_id === profileId) ?? null);
@@ -74,7 +74,7 @@ export default function Results() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [match?.game_id, profileId]);
+  }, [roomId, profileId]);
 
   // A rematch resets THIS room back to a lobby, so everyone still on the results screen has to
   // follow it there — otherwise only the player who clicked would move and the others would sit
@@ -174,11 +174,11 @@ export default function Results() {
 
       {/* The board window: a look at what you actually built, and the way into everyone
           else's. Only offered once there's a game archived to look at. */}
-      {match && (
+      {myBoard && (
         <button
           type="button"
           className="results-board-window"
-          onClick={() => navigate(`/room/${roomId}/boards`, { state: { gameId: match.game_id } })}
+          onClick={() => navigate(`/room/${roomId}/boards`)}
         >
           <span className="results-board-window-head">
             <span className="results-board-window-title">
@@ -190,8 +190,7 @@ export default function Results() {
           </span>
           <span className="results-board-window-frame">
             <BoardPreview
-              grid={myBoard?.final_grid ?? {}}
-              validCells={validCellsFor(myBoard)}
+              grid={myBoard.grid_state ?? {}}
               label="Your final board"
               emptyMessage="Saving your board…"
             />

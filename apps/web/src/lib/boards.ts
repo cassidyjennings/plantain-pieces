@@ -1,60 +1,82 @@
 import { extractWordsWithCells, type AvatarConfig, type GridState } from '@plantain/shared';
 import { supabase } from './supabase.js';
+import { api } from './api.js';
 
-/** Every participant's final board for a finished game. Read directly via RLS — the
- * game_boards_public view does its own authorization (is_game_participant), so there's no
- * Worker round-trip here, same pattern as my_match_history / custom_word_sets_with_count. */
-export interface GameBoardRow {
-  game_id: string;
+/**
+ * Every player's final board for a FINISHED room. Read directly via RLS — room_boards_public
+ * does its own authorization (is_room_member + status = 'finished'), so there's no Worker
+ * round-trip, same pattern as room_players_public.
+ *
+ * These boards are ephemeral: they live on room_players and are deleted along with the room.
+ * There is deliberately no archived copy — see migration 20260728000005.
+ */
+export interface RoomBoardRow {
+  room_id: string;
   profile_id: string;
   display_name: string;
   seat: number;
   is_winner: boolean;
-  final_tile_count: number;
-  final_placed_count: number | null;
-  final_grid: GridState;
-  longest_word: string | null;
-  /** Dictionary-VALID words only — submit_game_summary filters them (migration …0002). */
-  words_played: string[];
+  tile_count: number;
+  grid_state: GridState;
   avatar_config: AvatarConfig;
 }
 
-export async function fetchGameBoards(gameId: string): Promise<GameBoardRow[]> {
+export async function fetchRoomBoards(roomId: string): Promise<RoomBoardRow[]> {
   const { data, error } = await supabase
-    .from('game_boards_public')
+    .from('room_boards_public')
     .select('*')
-    .eq('game_id', gameId)
+    .eq('room_id', roomId)
     .order('seat');
   if (error) return [];
-  return (data ?? []) as GameBoardRow[];
+  return (data ?? []) as RoomBoardRow[];
 }
 
-/**
- * Cells to tint green: those belonging to a dictionary-valid word. `words_played` is already
- * filtered server-side by submit_game_summary, so no dictionary lookup is needed here — which
- * is what makes this possible at all, since the room (and its dictionary config) may be long
- * gone by the time anyone opens the viewer.
- *
- * Mirrors the in-game rule exactly: a cell where a valid and an invalid word CROSS does not
- * tint. Tinting it would let an invalid word hide behind the valid words crossing it — the
- * same bug that once let auto-Peel fire on a board with a bad word still on it.
- *
- * Shared by the Results preview and the full viewer so the two can't drift apart.
- */
-export function validCellsFor(row: Pick<GameBoardRow, 'final_grid' | 'words_played'> | null): Set<string> {
-  const empty = new Set<string>();
-  if (!row) return empty;
-  const played = new Set(row.words_played ?? []);
-  if (played.size === 0) return empty;
+export interface BoardWords {
+  /** Cell keys belonging to a dictionary-valid word — tinted green, same cue as in-game. */
+  validCells: Set<string>;
+  /** The valid words on this board, in reading order. */
+  words: string[];
+}
 
-  const words = extractWordsWithCells(row.final_grid ?? {});
+export const EMPTY_BOARD_WORDS: BoardWords = { validCells: new Set(), words: [] };
+
+/**
+ * Work out which words a finished board actually scored, by extracting them from the grid and
+ * checking them against the room's dictionary through the existing /validate endpoint.
+ *
+ * Derived rather than stored: the durable words_played column exists for stats, but relying on
+ * it here would mean the viewer only worked for players whose client submitted a summary. The
+ * room is alive whenever this screen is reachable (that's the view's own precondition), so its
+ * dictionary is too.
+ *
+ * The cross-word rule mirrors the in-game one exactly: a cell where a valid and an invalid word
+ * CROSS does not tint. Tinting it would let an invalid word hide behind the valid words
+ * crossing it — the same bug that once let auto-Peel fire on a board with a bad word on it.
+ */
+export async function resolveBoardWords(roomId: string, grid: GridState): Promise<BoardWords> {
+  const found = extractWordsWithCells(grid ?? {});
+  if (found.length === 0) return EMPTY_BOARD_WORDS;
+
+  const unique = [...new Set(found.map((w) => w.word))];
+  let invalid: Set<string>;
+  try {
+    const { invalidWords } = await api.validate(roomId, unique);
+    invalid = new Set(invalidWords);
+  } catch {
+    // Transient failure — better to show the board with no tinting than to fail the screen.
+    return EMPTY_BOARD_WORDS;
+  }
+
   const bad = new Set<string>();
-  for (const w of words) {
-    if (!played.has(w.word)) for (const c of w.cells) bad.add(c);
+  for (const w of found) {
+    if (invalid.has(w.word)) for (const c of w.cells) bad.add(c);
   }
-  const good = new Set<string>();
-  for (const w of words) {
-    if (played.has(w.word)) for (const c of w.cells) if (!bad.has(c)) good.add(c);
+  const validCells = new Set<string>();
+  const words: string[] = [];
+  for (const w of found) {
+    if (invalid.has(w.word)) continue;
+    words.push(w.word);
+    for (const c of w.cells) if (!bad.has(c)) validCells.add(c);
   }
-  return good;
+  return { validCells, words };
 }

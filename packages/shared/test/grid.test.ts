@@ -6,6 +6,7 @@ import {
   isConnected,
   validateStructure,
   validateWithDictionary,
+  isValidGridShape,
   type GridState,
 } from '../src/index.js';
 
@@ -146,5 +147,42 @@ describe('validateWithDictionary', () => {
     const dict = new Set(['CAT', 'AAT']);
     const res = validateWithDictionary(g, dealt, (w) => dict.has(w));
     expect(res.valid).toBe(true);
+  });
+});
+
+describe('isValidGridShape', () => {
+  it('accepts a well-formed grid', () => {
+    expect(isValidGridShape({ '10,10': 'C', '11,10': 'A', '12,10': 'T' })).toBe(true);
+  });
+
+  it('accepts an empty grid', () => {
+    expect(isValidGridShape({})).toBe(true);
+  });
+
+  it('rejects non-objects and arrays', () => {
+    expect(isValidGridShape(null)).toBe(false);
+    expect(isValidGridShape(undefined)).toBe(false);
+    expect(isValidGridShape(42)).toBe(false);
+    expect(isValidGridShape(['C', 'A', 'T'])).toBe(false);
+  });
+
+  it('rejects malformed cell keys', () => {
+    expect(isValidGridShape({ 'ten,ten': 'C' })).toBe(false);
+    expect(isValidGridShape({ '10': 'C' })).toBe(false);
+    expect(isValidGridShape({ '10,10,10': 'C' })).toBe(false);
+    expect(isValidGridShape({ '': 'C' })).toBe(false);
+  });
+
+  it('rejects cell values that are not exactly one letter', () => {
+    expect(isValidGridShape({ '10,10': 'CAT' })).toBe(false);
+    expect(isValidGridShape({ '10,10': '' })).toBe(false);
+    expect(isValidGridShape({ '10,10': 4 })).toBe(false);
+    expect(isValidGridShape({ '10,10': '1' })).toBe(false);
+  });
+
+  it('rejects an absurdly large grid', () => {
+    const huge: Record<string, string> = {};
+    for (let i = 0; i < 500; i++) huge[`${i},0`] = 'A';
+    expect(isValidGridShape(huge)).toBe(false);
   });
 });

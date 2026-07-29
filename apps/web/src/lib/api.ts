@@ -133,6 +133,14 @@ export const api = {
 
   getMyState: (roomId: string) => call<MyState>(`/rooms/${roomId}/me`),
 
+  /** Persist this player's final board to the room so the post-game viewer can show it. The
+   * room owns it — it's deleted along with the room, never archived. */
+  persistFinalGrid: (roomId: string, grid: GridState) =>
+    call<{ ok: true }>(`/rooms/${roomId}/final-grid`, {
+      method: 'POST',
+      body: JSON.stringify({ grid }),
+    }),
+
   reportProgress: (roomId: string, remaining: number) =>
     call<{ ok: true }>(`/rooms/${roomId}/progress`, {
       method: 'POST',

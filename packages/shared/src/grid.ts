@@ -200,3 +200,29 @@ export function validateWithDictionary(
   }
   return structural;
 }
+
+/** Upper bound on cells in a submitted grid — a 144-tile Bunch can't produce more, this only
+ * exists to reject garbage before it reaches the database. */
+export const MAX_GRID_CELLS = 200;
+
+/** Cell keys are `${x},${y}` (see makeKey). Coordinates sit within 0..GRID_SIZE-1 in practice
+ * (screenToCell rejects negatives), but the sign is tolerated so a legitimate board is never
+ * thrown away over a coordinate convention. */
+const GRID_KEY_PATTERN = /^-?\d{1,3},-?\d{1,3}$/;
+
+/**
+ * Shape-check an untrusted grid payload: a plain object of `"x,y" -> single letter`, within a
+ * sane cell count. Used by the Worker before persisting a client-submitted final board — the
+ * board is casual, unverified data (we don't re-derive it from the rack), so this is only about
+ * rejecting malformed or absurd payloads, not about trusting the contents.
+ */
+export function isValidGridShape(grid: unknown): grid is GridState {
+  if (typeof grid !== 'object' || grid === null || Array.isArray(grid)) return false;
+  const entries = Object.entries(grid as Record<string, unknown>);
+  if (entries.length > MAX_GRID_CELLS) return false;
+  for (const [key, letter] of entries) {
+    if (!GRID_KEY_PATTERN.test(key)) return false;
+    if (typeof letter !== 'string' || !/^[A-Za-z]$/.test(letter)) return false;
+  }
+  return true;
+}

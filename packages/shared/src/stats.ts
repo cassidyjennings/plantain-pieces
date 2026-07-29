@@ -1,5 +1,4 @@
 import { WORD_PATTERN } from './dictionary.js';
-import type { GridState } from './types.js';
 
 /** How many of a player's subsequent moves count as "soon" when deciding whether a dumped
  * tile would have completed a word (dump-regret lookahead). */
@@ -54,10 +53,6 @@ export interface GameSummary {
   /** Number of tiles placed on the final grid. */
   placedCount: number;
   moveStats: MoveStats;
-  /** The final board itself, for the end-of-game board viewer. Optional because a client on an
-   * older build submits without it — the server keeps its archive-time snapshot in that case
-   * rather than blanking the board. */
-  grid?: GridState;
 }
 
 export interface TileLifecycle {
@@ -101,11 +96,6 @@ export function computeMoveStats(log: MoveLog): MoveStats {
 const MAX_SUMMARY_WORDS = 400;
 const MAX_SUMMARY_TILES = 200;
 
-/** Grid keys are `${x},${y}` (see makeKey). Coordinates are always within 0..GRID_SIZE-1 in
- * practice — screenToCell rejects negatives — but the sign is tolerated here so a legitimate
- * board never gets thrown away over a coordinate convention. */
-const GRID_KEY_PATTERN = /^-?\d{1,3},-?\d{1,3}$/;
-
 export type GameSummaryValidity =
   | { valid: true }
   | { valid: false; reason: 'MALFORMED' | 'OUT_OF_RANGE' | 'INVALID_WORD' };
@@ -132,20 +122,6 @@ export function validateGameSummary(
   if ((s.placedCount as number) > MAX_SUMMARY_TILES) return { valid: false, reason: 'OUT_OF_RANGE' };
   if (ctx?.finalTileCount !== undefined && (s.placedCount as number) > ctx.finalTileCount) {
     return { valid: false, reason: 'OUT_OF_RANGE' };
-  }
-
-  // grid is optional: a client on an older build submits without it, and rejecting those would
-  // lose their whole summary (words, stats) over a field that didn't exist when it was built.
-  if (s.grid !== undefined && s.grid !== null) {
-    if (typeof s.grid !== 'object' || Array.isArray(s.grid)) return { valid: false, reason: 'MALFORMED' };
-    const entries = Object.entries(s.grid as Record<string, unknown>);
-    if (entries.length > MAX_SUMMARY_TILES) return { valid: false, reason: 'OUT_OF_RANGE' };
-    for (const [key, letter] of entries) {
-      if (!GRID_KEY_PATTERN.test(key)) return { valid: false, reason: 'MALFORMED' };
-      if (typeof letter !== 'string' || !/^[A-Za-z]$/.test(letter)) {
-        return { valid: false, reason: 'MALFORMED' };
-      }
-    }
   }
 
   const ms = s.moveStats;

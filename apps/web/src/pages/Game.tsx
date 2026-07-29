@@ -133,6 +133,10 @@ export default function Game() {
   const animatedIds = useRef<Set<string>>(new Set());
   // Force-reveal fallback timers (see the slice-fly effect below) — cleared on unmount.
   const revealTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // Last "tiles remaining" value actually sent to the server, so the debounced report effect
+  // below doesn't re-POST a value the server already has (it also dedupes server-side, but this
+  // skips the network round-trip entirely on a no-op re-fire).
+  const lastReportedRef = useRef<number | null>(null);
   useEffect(() => {
     const timers = revealTimers.current;
     return () => timers.forEach((t) => clearTimeout(t));
@@ -321,8 +325,12 @@ export default function Game() {
       event.type === 'peel' ||
       event.type === 'dump' ||
       event.type === 'game_started' ||
-      event.type === 'player_left'
+      event.type === 'player_left' ||
+      event.type === 'progress'
     ) {
+      // progress events carry no bunchCount (just profileId/remaining) — this guard simply
+      // no-ops for them, which is correct; they only need the player-list refetch below so an
+      // opponent's pill picks up their new remaining_count.
       const payload = event.payload as { bunchCount?: number };
       if (typeof payload.bunchCount === 'number') setBunchCount(payload.bunchCount);
       if (roomId) fetchPlayers(roomId).then(setPlayers);
@@ -729,6 +737,36 @@ export default function Game() {
     return () => clearTimeout(handle);
   }, [grid, roomId, wordValidationEnabled]);
 
+  // --- Publish "tiles remaining" so opponent pills mean something ------------
+
+  // Tray tiles + placed tiles not currently part of a valid word. With word validation off,
+  // validCells is never populated (see above), so every placed tile would misread as "invalid" —
+  // there's no such distinction in that mode, so nothing counts as invalid-placed there.
+  const invalidPlacedCount = wordValidationEnabled
+    ? Object.keys(grid).filter((k) => !validCells.has(k)).length
+    : 0;
+  const remainingCount = rack.length + invalidPlacedCount;
+
+  useEffect(() => {
+    if (!roomId) return;
+    const handle = setTimeout(() => {
+      // Skip a report that lands mid-action (Peel/Dump/Plantains) rather than racing it — rack
+      // and grid are mid-update across several setState calls right then, so remainingCount can
+      // be transiently wrong. Nothing is lost: the settle after the action changes remainingCount
+      // again (or doesn't, in which case the stale number was already correct), re-firing this
+      // same effect.
+      if (busyRef.current) return;
+      if (lastReportedRef.current === remainingCount) return;
+      lastReportedRef.current = remainingCount;
+      api.reportProgress(roomId, remainingCount).catch(() => {
+        // Let a future change retry; an ApiError here would otherwise permanently believe the
+        // server has a value it never actually received.
+        lastReportedRef.current = null;
+      });
+    }, 1000);
+    return () => clearTimeout(handle);
+  }, [remainingCount, roomId]);
+
   // --- Auto-detect Peel / Plantains ------------------------------------------
 
   const runAutoAction = useCallback(async () => {
@@ -861,13 +899,12 @@ export default function Game() {
     setSelectedId(null);
   }
 
-  const opponents = players.filter((p) => p.profile_id !== profileId && !p.is_spectator);
+  // Every non-spectator, self first — replaces the old opponents-only list so the local player
+  // sees their own progress alongside everyone else's, not just opponents'.
+  const activePlayers = [...players.filter((p) => !p.is_spectator)].sort((a, b) =>
+    a.profile_id === profileId ? -1 : b.profile_id === profileId ? 1 : 0,
+  );
   const items = trayItems(rack, collapsed, pendingReveal);
-  // With word validation off, validCells is never populated (nothing is ever known-invalid),
-  // so don't let every placed tile read as "invalid" — there's no such distinction in this mode.
-  const invalidPlacedCount = wordValidationEnabled
-    ? Object.keys(grid).filter((k) => !validCells.has(k)).length
-    : 0;
 
   const isSolo = room?.mode === 'solo';
 
@@ -909,13 +946,21 @@ export default function Game() {
         {isTimed && (
           <span className="elapsed-time-pill">{formatElapsed(elapsedMs)}</span>
         )}
-        {opponents.length > 0 && (
-          <div className="opponent-pills">
-            {opponents.map((p) => (
-              <span key={p.profile_id} className="opponent-pill">
-                {p.display_name}: {p.tile_count}{!p.connected ? ' (disconnected)' : ''}
-              </span>
-            ))}
+        {activePlayers.length > 0 && (
+          <div className="player-pills">
+            {activePlayers.map((p) => {
+              const isSelf = p.profile_id === profileId;
+              // Self uses the live local count (no debounce lag on your own number); everyone
+              // else uses what THEY last reported, falling back to the raw inventory size
+              // (tile_count) until their client reports at least once this game.
+              const count = isSelf ? remainingCount : (p.remaining_count ?? p.tile_count);
+              return (
+                <span key={p.profile_id} className={`player-pill${isSelf ? ' player-pill-self' : ''}`}>
+                  {isSelf ? 'You' : p.display_name}: {count}
+                  {!p.connected ? ' (disconnected)' : ''}
+                </span>
+              );
+            })}
           </div>
         )}
         <div className="game-actions">

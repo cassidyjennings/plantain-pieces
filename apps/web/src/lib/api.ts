@@ -133,6 +133,12 @@ export const api = {
 
   getMyState: (roomId: string) => call<MyState>(`/rooms/${roomId}/me`),
 
+  reportProgress: (roomId: string, remaining: number) =>
+    call<{ ok: true }>(`/rooms/${roomId}/progress`, {
+      method: 'POST',
+      body: JSON.stringify({ remaining }),
+    }),
+
   peel: (roomId: string, grid: GridState) =>
     call<PeelResult>(`/rooms/${roomId}/peel`, { method: 'POST', body: JSON.stringify({ grid }) }),
 

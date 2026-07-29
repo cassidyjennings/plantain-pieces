@@ -186,6 +186,22 @@ app.post('/rooms/:roomId/peel', async (c) => {
   return c.json(data);
 });
 
+// Progress: the client reports its own private "tiles remaining" number (debounced) so
+// opponents' pills mean something. Dedupe/broadcast-on-change lives in the RPC.
+app.post('/rooms/:roomId/progress', async (c) => {
+  const profileId = c.get('profileId');
+  const roomId = c.req.param('roomId');
+  const body = await c.req.json<{ remaining: number }>();
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('report_progress', {
+    p_room_id: roomId,
+    p_profile: profileId,
+    p_remaining: body.remaining,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
 // Live validation: which of the submitted words are NOT in the room's dictionary.
 // Used by the client for green-highlighting valid words during play (read-only, no mutation).
 app.post('/rooms/:roomId/validate', async (c) => {

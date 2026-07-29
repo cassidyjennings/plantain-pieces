@@ -24,6 +24,10 @@ export interface PublicPlayer {
   tile_count: number;
   connected: boolean;
   avatar_config: AvatarConfig;
+  /** Self-reported "tiles remaining" (tray + placed-but-invalid), debounced from the client.
+   * Null until that player's client has reported at least once this game (a fresh join,
+   * reload, or an old client build) — fall back to tile_count in that case. */
+  remaining_count: number | null;
 }
 
 export async function fetchRoom(roomId: string): Promise<PublicRoom | null> {

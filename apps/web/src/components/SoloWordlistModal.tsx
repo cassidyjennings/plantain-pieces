@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { validateDictionaryConfig, MAX_PRESET_NAME_LENGTH, type DictionaryConfig } from '@plantain/shared';
+import {
+  validateDictionaryConfig,
+  dictionaryConfigsEqual,
+  MAX_PRESET_NAME_LENGTH,
+  type DictionaryConfig,
+} from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
@@ -94,17 +99,21 @@ export default function SoloWordlistModal({ config, onApply, onClose }: SoloWord
                   <div className="journal-section">
                     <h3>Start from a preset</h3>
                     <div className="journal-chip-row">
-                      {presets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          className="journal-chip"
-                          onClick={() => setDraft(preset.config)}
-                          disabled={busy}
-                        >
-                          {preset.name}
-                        </button>
-                      ))}
+                      {presets.map((preset) => {
+                        const isActive = dictionaryConfigsEqual(preset.config, draft);
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={`journal-chip${isActive ? ' active' : ''}`}
+                            aria-pressed={isActive}
+                            onClick={() => setDraft(preset.config)}
+                            disabled={busy}
+                          >
+                            {preset.name}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

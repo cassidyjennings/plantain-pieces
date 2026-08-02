@@ -132,3 +132,25 @@ export function validateDictionaryConfig(
 
   return { valid: true };
 }
+
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((id) => bSet.has(id));
+}
+
+/** Structural equality for two DictionaryConfigs, field by field — NOT `JSON.stringify(a) ===
+ * JSON.stringify(b)`. A config round-tripped through Postgres jsonb (e.g. a saved preset) comes
+ * back with its keys in a different order than a client-built object, so a stringify comparison
+ * silently never matches even when every field is identical. id lists are compared as sets since
+ * their order isn't meaningful. */
+export function dictionaryConfigsEqual(a: DictionaryConfig, b: DictionaryConfig): boolean {
+  return (
+    a.minLength === b.minLength &&
+    a.maxLength === b.maxLength &&
+    a.baseEnabled === b.baseEnabled &&
+    (a.baseSetId ?? null) === (b.baseSetId ?? null) &&
+    sameIdSet(a.customSetIds, b.customSetIds) &&
+    sameIdSet(a.excludedTopics, b.excludedTopics)
+  );
+}

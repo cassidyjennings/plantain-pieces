@@ -1736,6 +1736,10 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  /* The next section's own h3 top-margin doesn't help here — .journal-section h3:first-child
+     zeroes it, since that heading is the first child of its own section div regardless of
+     where the section sits on the page. This margin is the only real gap before it. */
+  margin-bottom: var(--space-4);
 }
 
 .journal-chip {

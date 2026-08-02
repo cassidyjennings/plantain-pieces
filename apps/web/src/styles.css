@@ -114,7 +114,7 @@ button:active:not(:disabled) {
 .profile-tab:active:not(:disabled),
 .avatar-option:active:not(:disabled),
 .segmented-option:active:not(:disabled),
-.toggle-group-option:active:not(:disabled) {
+.choice-tile:active:not(:disabled) {
   box-shadow: none;
 }
 
@@ -3172,65 +3172,241 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   color: var(--color-text-primary);
 }
 
-/* Solo mode setup modal */
-/* A bit of extra breathing room above the primary action, on top of .centered's uniform gap. */
-.solo-start-btn {
-  margin-top: var(--space-4);
+/* Solo setup (option 3b redesign) — everything lives in one panel, matching Home's own panel
+ * shape, instead of the old loose stack of a joined toggle group, a segmented row and a floating
+ * orange pill bar. .solo-setup-section (base rule further up this file) stays — the Lobby still
+ * uses it for its own wordlist-settings-row. */
+/* Scoped tightening of .centered's gap for this screen only, the same pattern .lobby-screen
+   already uses elsewhere. */
+.solo-screen {
+  gap: var(--space-6);
 }
 
-.solo-setup-section {
+.solo-back {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-6);
+  height: 40px;
+  padding: 0 var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: var(--text-small);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-faint);
+  border: 2px solid var(--color-border);
+  box-shadow: none;
+}
+.solo-back:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  color: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+
+/* Uses the wordmark's shadow (0 5px 0), not .page-title's (0 4px 0) — deliberate per the design
+ * handoff, and there's no subtitle under it. */
+.solo-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(32px, 10vw, 48px);
+  color: var(--color-text-primary);
+  text-shadow: 0 5px 0 #0a1e12;
+  -webkit-text-stroke: 2px #0f2f1e;
+  margin: 0;
+}
+
+.solo-panel {
+  width: 520px;
+  max-width: 100%;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-6) 40px var(--space-8);
+}
+
+.solo-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+  border-top: 2px solid var(--color-border);
+}
+.solo-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+.solo-section-label {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-small);
+  color: var(--color-text-primary);
+}
+
+/* The one selection control, shared by Pace and Bunch size. */
+.tile-row {
+  display: flex;
+  gap: var(--space-2);
+}
+.choice-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-inner);
+  color: var(--color-text-muted);
+  border: 2px solid var(--color-border);
+  box-shadow: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.choice-tile:hover:not(:disabled):not(.selected) {
+  background: var(--color-surface-raised);
+}
+.choice-tile.selected {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-color: var(--color-accent);
+}
+.choice-tile.selected:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+.choice-tile .t {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+}
+.choice-tile .s {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* The lobby's label-over-control triple, reused here with no box around it. */
+.solo-rules {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-6) 0;
+  border-top: 2px solid var(--color-border);
+}
+.solo-rule {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
 }
-.solo-setup-section h3 {
-  margin: 0;
+.solo-rule-label {
   font-family: var(--font-display);
-  font-size: var(--text-body);
+  font-weight: 800;
+  font-size: var(--text-small);
   color: var(--color-text-primary);
 }
-
-/* A true joined segmented control — buttons share one continuous border with no gaps between
- * them, unlike .segmented's row of individually-rounded pill buttons. Used for Pace. */
-.toggle-group {
+.solo-rule-box {
   display: flex;
-  /* A fixed width, not a percentage: .solo-setup-section shrink-wraps its content (it isn't
-     stretched by its flex-column parent), so a percentage width here would resolve against
-     that auto size and visibly resize whenever a sibling (the pace hint text below, which
-     differs in length between Zen and Timed) changes the section's shrink-wrap width. */
-  width: 320px;
+  align-items: center;
+  height: 42px;
+}
+/* The stepper is the untouched DS component, scaled up so it reads level with the taller
+   dictionary button beside it rather than resized as its own variant. */
+.solo-rule-box.stepper {
+  transform: scale(1.35);
+}
+.solo-rule-box.switch {
+  height: 34px;
+}
+
+/* Quiet, in-panel variant of .dictionary-open-btn — deliberately not the heavy orange bar
+   version .wordlist-control-box gives it in the Lobby. */
+.solo-rules .dictionary-open-btn {
+  height: 42px;
   max-width: 100%;
+  padding: 0 24px;
+  font-size: 15px;
   border-radius: var(--radius-pill);
-  border: 2px solid var(--color-border);
   background: var(--color-surface-inner);
-  overflow: hidden;
-}
-.toggle-group-option {
-  flex: 1;
-  padding: 12px 20px;
-  background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
+  border: 2px solid var(--color-border);
   box-shadow: none;
-  border: none;
-  border-radius: 0;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: var(--text-small);
-  border-right: 2px solid var(--color-border);
 }
-.toggle-group-option:last-child {
-  border-right: none;
+.solo-rules .dictionary-open-btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
 }
-.toggle-group-option:hover:not(:disabled):not(.selected) {
-  background: var(--color-surface-raised);
+
+/* .btn-split is shared with the Lobby's own Split! button, which is content-width and centered
+   by .lobby-actions' flex column — full-width is specific to sitting in this panel. */
+.solo-panel .btn-split {
+  display: block;
+  width: 100%;
 }
-.toggle-group-option.selected {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-}
-.toggle-group-option.selected:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+
+@media (max-width: 640px) {
+  .solo-screen {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+  .solo-back {
+    top: var(--space-4);
+    right: var(--space-4);
+    height: 36px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+  .solo-back-full {
+    display: none;
+  }
+  .solo-title {
+    font-size: 38px;
+  }
+  .solo-panel {
+    width: 100%;
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+  .solo-section,
+  .solo-rules {
+    padding: var(--space-4) 0;
+  }
+  .choice-tile .t {
+    font-size: 14px;
+  }
+  .choice-tile .s {
+    font-size: 11px;
+  }
+  .solo-rules {
+    gap: var(--space-2);
+  }
+  .solo-rule {
+    gap: 6px;
+  }
+  .solo-rule-label {
+    font-size: 11px;
+    text-align: center;
+  }
+  .solo-rule-box {
+    height: 34px;
+  }
+  .solo-rule-box.stepper {
+    transform: scale(1.2);
+  }
+  .solo-rules .dictionary-open-btn {
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+  /* Scoped to the panel, not bare .btn-split — that class is shared with the Lobby's Split!
+     button, which has its own (different) mobile sizing further up this file. */
+  .solo-panel .btn-split {
+    padding: 18px 28px;
+    font-size: 19px;
+  }
 }
 
 /* Game topbar elapsed-time pill (Timed solo mode) */

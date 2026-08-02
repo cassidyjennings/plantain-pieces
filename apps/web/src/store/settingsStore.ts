@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { BUNCH_SIZE_PRESETS } from '@plantain/shared';
 
 /** Accessibility preferences. Client-only (localStorage) this pass — not synced to the
  * server. Each setting maps to a data-attribute on <html>; CSS in tokens.css overrides
@@ -27,11 +28,17 @@ interface SettingsState {
   /** Board drag behaviour — see BoardMode. Not a data-attribute like the a11y settings; the
    * board reads it directly. */
   boardMode: BoardMode;
+  /** Last-used Solo setup choices, persisted silently so returning to /solo picks up where you
+   * left off instead of resetting to the defaults every time. */
+  soloBunchSize: number;
+  soloTimed: boolean;
   setColorblindMode: (m: ColorblindMode) => void;
   setFontScale: (s: FontScale) => void;
   setContrast: (c: Contrast) => void;
   setWordValidationEnabled: (enabled: boolean) => void;
   setBoardMode: (m: BoardMode) => void;
+  setSoloBunchSize: (n: number) => void;
+  setSoloTimed: (timed: boolean) => void;
 }
 
 const KEYS = {
@@ -40,6 +47,8 @@ const KEYS = {
   contrast: 'plantain-a11y-contrast',
   wordValidation: 'plantain-word-validation-enabled',
   boardMode: 'plantain-board-mode',
+  soloBunchSize: 'plantain-solo-bunch-size',
+  soloTimed: 'plantain-solo-timed',
 } as const;
 
 function read<T extends string>(key: string, fallback: T): T {
@@ -49,6 +58,12 @@ function read<T extends string>(key: string, fallback: T): T {
 function readBool(key: string, fallback: boolean): boolean {
   const raw = localStorage.getItem(key);
   return raw === null ? fallback : raw === 'true';
+}
+
+function readNumber(key: string, fallback: number): number {
+  const raw = localStorage.getItem(key);
+  const parsed = raw === null ? NaN : Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 /** Reflect the current settings onto <html> data-attributes so CSS can react. */
@@ -66,6 +81,8 @@ const initial = {
   wordValidationEnabled: readBool(KEYS.wordValidation, true),
   // Defaults to the historical behaviour, so an existing player's board feels unchanged.
   boardMode: read<BoardMode>(KEYS.boardMode, 'navigate'),
+  soloBunchSize: readNumber(KEYS.soloBunchSize, BUNCH_SIZE_PRESETS[1].size),
+  soloTimed: readBool(KEYS.soloTimed, false),
 };
 
 // Apply persisted settings immediately at module load, before first paint of any screen.
@@ -95,5 +112,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setBoardMode: (boardMode) => {
     localStorage.setItem(KEYS.boardMode, boardMode);
     set({ boardMode });
+  },
+  setSoloBunchSize: (soloBunchSize) => {
+    localStorage.setItem(KEYS.soloBunchSize, String(soloBunchSize));
+    set({ soloBunchSize });
+  },
+  setSoloTimed: (soloTimed) => {
+    localStorage.setItem(KEYS.soloTimed, String(soloTimed));
+    set({ soloTimed });
   },
 }));

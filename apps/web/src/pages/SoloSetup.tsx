@@ -27,14 +27,18 @@ export default function SoloSetup() {
   const name = displayName.trim() || 'Guest';
   const wordValidationEnabled = useSettingsStore((s) => s.wordValidationEnabled);
   const setWordValidationEnabled = useSettingsStore((s) => s.setWordValidationEnabled);
+  // Bunch size / Pace read and write straight through the settings store (same pattern as word
+  // validation above), so the last-used setup is silently remembered between visits.
+  const bunchSize = useSettingsStore((s) => s.soloBunchSize);
+  const setBunchSize = useSettingsStore((s) => s.setSoloBunchSize);
+  const timed = useSettingsStore((s) => s.soloTimed);
+  const setTimed = useSettingsStore((s) => s.setSoloTimed);
 
   const [dictConfig, setDictConfig] = useState<DictionaryConfig>(DEFAULT_DICTIONARY_CONFIG);
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
   const [officialSets, setOfficialSets] = useState<OfficialWordSet[]>([]);
   const [presets, setPresets] = useState<DictionaryPresetRow[]>([]);
   const [showWordlist, setShowWordlist] = useState(false);
-  const [bunchSize, setBunchSize] = useState<number>(BUNCH_SIZE_PRESETS[1].size);
-  const [timed, setTimed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,36 +72,57 @@ export default function SoloSetup() {
   }
 
   return (
-    <div className="centered">
-      <h1 className="page-title">Play Solo!</h1>
-      <p className="page-subtitle">Clear a Bunch all by yourself, at your own pace.</p>
+    <div className="centered solo-screen">
+      <button type="button" className="solo-back" disabled={busy} onClick={() => navigate('/')}>
+        ← <span className="solo-back-full">Back to </span>Menu
+      </button>
 
-      <div className="solo-setup-section">
-        <h3>Pace</h3>
-        <div className="toggle-group">
-          <button
-            type="button"
-            className={`toggle-group-option${!timed ? ' selected' : ''}`}
-            onClick={() => setTimed(false)}
-          >
-            Zen
-          </button>
-          <button
-            type="button"
-            className={`toggle-group-option${timed ? ' selected' : ''}`}
-            onClick={() => setTimed(true)}
-          >
-            Timed
-          </button>
+      <h1 className="solo-title">Play Solo!</h1>
+
+      <div className="solo-panel">
+        <div className="solo-section">
+          <span className="solo-section-label">Pace</span>
+          <div className="tile-row">
+            <button
+              type="button"
+              className={`choice-tile${!timed ? ' selected' : ''}`}
+              onClick={() => setTimed(false)}
+            >
+              <span className="t">Zen</span>
+              <span className="s">No clock</span>
+            </button>
+            <button
+              type="button"
+              className={`choice-tile${timed ? ' selected' : ''}`}
+              onClick={() => setTimed(true)}
+            >
+              <span className="t">Timed</span>
+              <span className="s">Against the clock</span>
+            </button>
+          </div>
         </div>
-        <p className="hint">{timed ? 'Race to finish the bunch!' : 'No clock. Play at your own pace.'}</p>
-      </div>
 
-      <div className="solo-setup-section">
-        <div className="wordlist-settings-row">
-          <div className="wordlist-control">
-            <span className="wordlist-control-label">Min. word length</span>
-            <div className="wordlist-control-box">
+        <div className="solo-section">
+          <span className="solo-section-label">Bunch size</span>
+          <div className="tile-row">
+            {BUNCH_SIZE_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className={`choice-tile${bunchSize === preset.size ? ' selected' : ''}`}
+                onClick={() => setBunchSize(preset.size)}
+              >
+                <span className="t">{preset.label}</span>
+                <span className="s">{preset.size} tiles</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="solo-rules">
+          <div className="solo-rule">
+            <span className="solo-rule-label">Min. word length</span>
+            <div className="solo-rule-box stepper">
               <WordLengthStepper
                 value={dictConfig.minLength}
                 maxValue={maxMinLength}
@@ -105,17 +130,17 @@ export default function SoloSetup() {
               />
             </div>
           </div>
-          <div className="wordlist-control">
-            <span className="wordlist-control-label">Dictionaries</span>
-            <div className="wordlist-control-box">
+          <div className="solo-rule">
+            <span className="solo-rule-label">Dictionaries</span>
+            <div className="solo-rule-box">
               <button type="button" className="dictionary-open-btn" onClick={() => setShowWordlist(true)}>
                 {getDictionaryButtonLabel(dictConfig, nameFor, presets)}
               </button>
             </div>
           </div>
-          <div className="wordlist-control">
-            <span className="wordlist-control-label">Word validation</span>
-            <div className="wordlist-control-box">
+          <div className="solo-rule">
+            <span className="solo-rule-label">Word validation</span>
+            <div className="solo-rule-box switch">
               <PillSwitch
                 checked={wordValidationEnabled}
                 onChange={setWordValidationEnabled}
@@ -124,32 +149,13 @@ export default function SoloSetup() {
             </div>
           </div>
         </div>
+
+        {error && <p className="error">{error}</p>}
+
+        <button className="btn-split" disabled={busy} onClick={handleStart}>
+          {busy ? 'Splitting…' : 'Split!'}
+        </button>
       </div>
-
-      <div className="solo-setup-section">
-        <h3>Bunch size</h3>
-        <div className="segmented">
-          {BUNCH_SIZE_PRESETS.map((preset) => (
-            <button
-              key={preset.label}
-              className={`segmented-option${bunchSize === preset.size ? ' selected' : ''}`}
-              onClick={() => setBunchSize(preset.size)}
-            >
-              {preset.label} ({preset.size})
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {error && <p className="error">{error}</p>}
-
-      <button className="solo-start-btn" disabled={busy} onClick={handleStart}>
-        {busy ? 'Starting…' : 'Start Solo Game'}
-      </button>
-
-      <button type="button" className="btn-leave" disabled={busy} onClick={() => navigate('/')}>
-        ← Back to Menu
-      </button>
 
       {showWordlist && (
         <SoloWordlistModal

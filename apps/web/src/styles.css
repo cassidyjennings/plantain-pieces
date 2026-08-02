@@ -924,7 +924,6 @@ button:disabled {
   align-items: center;
   gap: var(--space-2);
   min-height: 84px;
-  touch-action: none;
 }
 
 /* Little toolbar row sitting above the tiles. */
@@ -1073,6 +1072,11 @@ button:disabled {
   max-height: 30vh;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Explicitly allow touch-scroll here. .tile-chip sets touch-action:none for its own drag
+     gesture, but touch-action is inherited via ancestor intersection, not just the element's
+     own value — without this, a `none` anywhere upstream would silently block scrolling a
+     hand that overflows the 30vh cap above. */
+  touch-action: pan-y;
   /* Room for each tile's own box-shadow (the "pressed" bottom edge), the hover lift
      (translateY(-2px)), and the count-badge overhang (top:-6px/right:-6px) — without this,
      overflow-y:auto's clipping box cuts those off at the scroll container's exact edges. */
@@ -1601,6 +1605,23 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   transform: translateY(-3px);
 }
 
+/* Narrow phones: the 60px spine offset plus full tab padding is tight against even 2 tabs —
+   measured the "Presets" tab spilling 20px past its own container at 280px, and nothing in
+   this dialog's ancestor chain clips horizontal overflow, so that becomes real page-level
+   scroll rather than a contained clip. Shrink the spine reserve and tab padding here instead
+   of making the bar scrollable, since scroll would clip the tabs' upward box-shadow/lift
+   (the "tucks under the torn page edge" effect relies on z-index layering, not overflow). */
+@media (max-width: 400px) {
+  .journal-tabs {
+    padding-left: 24px;
+    gap: 4px;
+  }
+
+  .journal-tab {
+    padding: 8px 12px 16px;
+  }
+}
+
 .journal-page {
   flex: 1;
   min-height: 0;
@@ -1796,6 +1817,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 .journal-set-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   padding: 8px 12px;
   background: rgba(255, 250, 235, 0.42);
@@ -1813,6 +1835,12 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
 .journal-set-name {
   flex: 1;
+  /* `flex: 1` alone resolves to a 0% basis, and this element's `overflow: hidden` zeroes its
+     automatic minimum size too — with no floor, a long name loses almost the entire shrink
+     negotiation to its fixed-size siblings (count badge, Edit, Delete) and renders as an
+     illegible sliver instead of a fair ellipsis. min-width keeps a legible fragment on screen;
+     flex-wrap on the row (above) is the safety net if that floor ever doesn't fit. */
+  min-width: 72px;
   font-weight: 700;
   color: #33280f;
   overflow: hidden;
@@ -2598,6 +2626,67 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
      reused by the topbar's Dump! button (Game.tsx), whose tooltip should stay. */
   .tray-toolbar .info-tooltip {
     display: none;
+  }
+}
+
+/* Landscape phones: a short viewport (this can be 700-900px WIDE, so the max-width:600px block
+   above never triggers) breaks the height budget instead of the width one. .game-topbar and
+   .rack-dock are both sized for portrait, where there's plenty of vertical room; in landscape
+   their combined natural height can consume the ENTIRE viewport before .board-area (flex: 1,
+   min-height: 0) gets any share at all -- measured a genuine 700x320 load: topbar 158px +
+   rack-dock 162px = 320px, leaving the board at 0x0, fully invisible. Shrink both here so the
+   board keeps a real, usable share of a short viewport. Tile size is deliberately left alone --
+   shrinking it would trade this bug for a tap-target regression -- the savings come from
+   padding/gaps and a tighter tray scroll cap instead. */
+@media (max-height: 550px) and (orientation: landscape) {
+  .game-topbar {
+    padding: 6px 16px;
+    gap: var(--space-3);
+  }
+
+  .bunch-plantain {
+    --bunch-w: 120px;
+  }
+
+  .player-pills {
+    gap: 4px;
+  }
+
+  .player-pill {
+    padding: 4px 10px;
+  }
+
+  .game-actions {
+    gap: 4px;
+  }
+
+  .game-actions button {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .rack-dock {
+    padding: 4px var(--space-3) 6px;
+    min-height: 56px;
+    gap: 4px;
+  }
+
+  .tray-toolbar {
+    padding: 2px 6px;
+    gap: 4px;
+  }
+
+  .tray-tool {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  /* Tighter than the portrait 30vh cap -- in a viewport this short, 30vh of a large hand would
+     still eat most of the remaining budget after the topbar. Touch-scroll already works here
+     (see .tile-rack's touch-action: pan-y above) so a smaller cap just means more scrolling
+     within the tray, not lost or hidden tiles. */
+  .tile-rack {
+    max-height: 18vh;
   }
 }
 

@@ -1206,12 +1206,17 @@ export default function Game() {
             }}
           >
             <BoardModeIcon mode={boardMode} />
+            {/* title never fires on touch, and unlike zoom's +/- this icon isn't a universal
+                symbol — a player has no way to discover what it does without this label. */}
+            <span className="zoom-btn-label">{boardMode === 'select' ? 'Select' : 'Move'}</span>
           </button>
           <button type="button" className="zoom-btn" onClick={() => handleZoomButton(1)} aria-label="Zoom in" title="Zoom in">
             <ZoomIcon mode="in" />
+            <span className="zoom-btn-label">Zoom in</span>
           </button>
           <button type="button" className="zoom-btn" onClick={() => handleZoomButton(-1)} aria-label="Zoom out" title="Zoom out">
             <ZoomIcon mode="out" />
+            <span className="zoom-btn-label">Zoom out</span>
           </button>
         </div>
       </div>

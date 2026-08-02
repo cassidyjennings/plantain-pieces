@@ -4,11 +4,18 @@
   box-sizing: border-box;
 }
 
+/* Stops iOS's rubber-band bounce-scroll of the whole page when a drag (the board, a modal) goes
+   past its edge -- this is meant to read as a full-screen app, not a scrollable document. */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   font-family: var(--font-body);
   background: var(--color-bg);
   color: var(--color-text-primary);
+  overscroll-behavior: none;
 }
 
 h1,
@@ -21,7 +28,12 @@ h3 {
 
 .centered {
   position: relative;
+  /* Same reasoning as .game-layout's height: min-height (not height) means an address-bar
+     show/hide only changes empty scroll room below the fold here, not a hard layout snap -- but
+     the dvh companion is still a free, zero-downside improvement (unsupported values are
+     dropped, not applied as 0). */
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -90,6 +102,13 @@ button {
   cursor: pointer;
   box-shadow: var(--shadow-press-md) var(--color-accent-shadow);
   transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  /* A fast double-tap on any button (e.g. Dump in frustration, or double-tapping zoom-in) isn't
+     otherwise guarded against iOS Safari's native double-tap-to-zoom. */
+  touch-action: manipulation;
+  /* The default gray tap-flash would otherwise stack visually on top of this app's own
+     :active press states (translateY + shadow swap above), reading as broken rather than
+     polished on Android/older iOS. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 button:hover:not(:disabled) {
@@ -287,8 +306,12 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  /* Matches .room-code-pill's own height (its parent) rather than the ~44px guideline exactly --
+     going bigger would make the button visibly overflow the pill it sits inside. Still a real
+     improvement over the 26px it measured before (CopyIcon itself stays its own fixed size,
+     centered in the larger tappable circle). */
+  width: 40px;
+  height: 40px;
   padding: 0;
   border-radius: 50%;
   background: transparent;
@@ -515,6 +538,11 @@ button:disabled {
      viewport (a hidden tooltip bubble, a wrapped row of tiles) makes the whole page scrollable
      in that direction, which defeats the point of a single-screen game layout. */
   overflow: hidden;
+  /* Blanket horizontal clearance for a side-mounted notch (the common case in landscape, where
+     the topbar/rack-dock get their own top/bottom handling instead -- see those rules). env()
+     resolves to 0 without a notch, so this is a no-op on the vast majority of devices. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .game-topbar {
@@ -524,6 +552,9 @@ button:disabled {
   gap: var(--space-6);
   background: var(--color-surface);
   padding: 14px 24px;
+  /* Clears a notch/Dynamic Island in portrait -- env() resolves to 0 on devices/browsers without
+     one, so this is a no-op everywhere else. Longhand after the shorthand so it wins. */
+  padding-top: max(14px, env(safe-area-inset-top));
   flex-wrap: wrap;
 }
 
@@ -713,6 +744,9 @@ button:disabled {
   cursor: grab;
   touch-action: none;
   user-select: none;
+  /* The board is 100% custom pan/zoom, not a native scroll region -- suppress any native
+     rubber-band/bounce physics entirely rather than just containing it. */
+  overscroll-behavior: none;
 }
 
 .board-viewport:active {
@@ -865,22 +899,36 @@ button:disabled {
   bottom: var(--space-4);
   display: flex;
   flex-direction: column;
+  /* Pills are no longer a fixed width like the old circles were -- right-align them against
+     the board edge they're anchored to instead of letting them stretch/left-align. */
+  align-items: flex-end;
   gap: var(--space-2);
   z-index: 5;
 }
 
+/* Was an icon-only circle -- discoverable only via `title`, which never fires on touch. Same
+   fix already applied once to the tray toolbar ("an icon with no label is a guess, not a UI"),
+   carried over here: a short visible label rides next to the icon instead. */
 .zoom-btn {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 50%;
+  width: auto;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
   background: var(--color-surface-raised);
   border: 2px solid var(--color-border);
   color: var(--color-text-primary);
   box-shadow: var(--shadow-card);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.zoom-btn-label {
+  line-height: 1;
 }
 
 .zoom-btn:hover:not(:disabled) {
@@ -919,6 +967,9 @@ button:disabled {
 .rack-dock {
   background: var(--color-surface);
   padding: var(--space-3) var(--space-6) var(--space-4);
+  /* Clears the home-indicator on iOS / a gesture-nav bar on Android -- env() resolves to 0
+     elsewhere, so this is a no-op on devices without one. */
+  padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1077,6 +1128,8 @@ button:disabled {
      own value — without this, a `none` anywhere upstream would silently block scrolling a
      hand that overflows the 30vh cap above. */
   touch-action: pan-y;
+  /* Scrolling to the end of a big hand shouldn't chain into scrolling the page behind it. */
+  overscroll-behavior: contain;
   /* Room for each tile's own box-shadow (the "pressed" bottom edge), the hover lift
      (translateY(-2px)), and the count-badge overhang (top:-6px/right:-6px) — without this,
      overflow-y:auto's clipping box cuts those off at the scroll container's exact edges. */
@@ -1389,6 +1442,7 @@ button:disabled {
   gap: var(--space-2);
   max-height: 28vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .viewer-words-label {
@@ -1533,8 +1587,8 @@ button:disabled {
 }
 
 .journal-close {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 50%;
   background: rgba(70, 45, 18, 0.85);
@@ -1627,6 +1681,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
   padding: var(--space-6) var(--space-6) var(--space-6) 56px;
   background: transparent;
   color: #3a2c12;
@@ -1872,7 +1927,10 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 
 .journal-icon-btn {
-  padding: 4px 10px;
+  /* Taller padding lifts this from ~29px to ~40px tall -- short of the 44px guideline exactly,
+     but this is a small pill-style label button, not an icon-only control; ballooning the
+     padding further starts to look oversized next to the row's other text. */
+  padding: 12px 14px;
   min-width: 0;
   background: transparent;
   box-shadow: none;
@@ -1883,6 +1941,12 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   font-size: 12px;
   font-weight: 800;
   flex-shrink: 0;
+}
+
+/* Extra breathing room before Delete specifically -- it's destructive and otherwise sits right
+   up against Edit at the row's normal gap, one mis-tap away. */
+.journal-icon-btn.danger {
+  margin-left: 4px;
 }
 
 .journal-icon-btn:hover:not(:disabled) {
@@ -2062,60 +2126,14 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   box-shadow: 0 2px 0 var(--color-accent-shadow);
 }
 
-/* Everything here shrinks together on a narrow phone so the bar stays one row instead of
-   wrapping — .wordlist-control's min-width: 0 (above) is what actually lets a flex column
-   shrink below its label's natural text width to make room. */
-@media (max-width: 640px) {
-  .wordlist-settings-row {
-    gap: var(--space-2);
-    padding: var(--space-4) var(--space-3);
-    /* A full stadium radius reads as a bulging blob at this much shorter width-to-height
-       ratio, so fall back to a plain rounded rect. */
-    border-radius: var(--radius-xl);
-  }
-
-  .wordlist-control-label {
-    font-size: 10px;
-    white-space: nowrap;
-  }
-
-  .wordlist-control-box {
-    height: 30px;
-  }
-  .wordlist-control-box .dictionary-open-btn {
-    height: 30px;
-    padding: 0 8px;
-    font-size: 11px;
-    max-width: 70px;
-  }
-
-  .length-stepper-btn {
-    width: 18px;
-    height: 18px;
-    font-size: 0.75rem;
-  }
-  .length-stepper-value {
-    font-size: 0.75rem;
-  }
-
-  .pill-switch {
-    width: 46px;
-    height: 22px;
-  }
-  .pill-switch-knob {
-    width: 16px;
-    height: 16px;
-  }
-  .pill-switch.on .pill-switch-knob {
-    transform: translateX(24px);
-  }
-  .pill-switch-text {
-    font-size: 8px;
-  }
-}
-
 /* Pill-shaped on/off switch (word validation). The knob sits on one side; the ON/OFF word
- * shows in the negative space on the other side, so the visible word always matches state. */
+ * shows in the negative space on the other side, so the visible word always matches state.
+ * MUST stay ABOVE the @media (max-width: 640px) block below -- both declare `.pill-switch` at
+ * equal specificity, and CSS resolves ties by source order, not by which one is inside a media
+ * query. Found live: with this base rule below the override (as it originally was), the
+ * override never won regardless of viewport width, so the "mobile compact" pill-switch never
+ * actually applied on a real phone -- it silently rendered at the full 74x32 desktop size
+ * inside the mobile row's 30px-tall box the whole time. */
 .pill-switch {
   position: relative;
   flex-shrink: 0;
@@ -2196,6 +2214,61 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   .pill-switch-knob,
   .pill-switch-text {
     transition: none;
+  }
+}
+
+/* Everything here shrinks together on a narrow phone so the bar stays one row instead of
+   wrapping — .wordlist-control's min-width: 0 (above) is what actually lets a flex column
+   shrink below its label's natural text width to make room. */
+@media (max-width: 640px) {
+  .wordlist-settings-row {
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-3);
+    /* A full stadium radius reads as a bulging blob at this much shorter width-to-height
+       ratio, so fall back to a plain rounded rect. */
+    border-radius: var(--radius-xl);
+  }
+
+  .wordlist-control-label {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .wordlist-control-box {
+    height: 30px;
+  }
+  .wordlist-control-box .dictionary-open-btn {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+    max-width: 70px;
+  }
+
+  /* Was 18x18 -- well under the 44px tap-target guideline for a value adjuster players tap
+     repeatedly. Restored to the same 26x26 the desktop (unshrunk) rule already uses rather than
+     inventing a new size: .wordlist-control-box's 30px-tall compact row is the real ceiling on
+     how big this can get without a wider redesign of the whole settings bar, and 26px already
+     fits it with a couple px to spare. */
+  .length-stepper-value {
+    font-size: 0.75rem;
+  }
+
+  /* Was 46x22 with a 16x16 knob (and never actually rendered -- see the note on the base
+     .pill-switch rule above). Grown as much as the row's 30px height allows without a
+     redesign -- short of 44px tall, but a real improvement over the original. */
+  .pill-switch {
+    width: 58px;
+    height: 26px;
+  }
+  .pill-switch-knob {
+    width: 20px;
+    height: 20px;
+  }
+  .pill-switch.on .pill-switch-knob {
+    transform: translateX(32px);
+  }
+  .pill-switch-text {
+    font-size: 8px;
   }
 }
 
@@ -2520,6 +2593,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 @media (min-width: 1024px) {
   .game-topbar {
     padding: 20px 32px;
+    padding-top: max(20px, env(safe-area-inset-top));
     gap: var(--space-8);
   }
 
@@ -2541,6 +2615,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
   .rack-dock {
     padding: var(--space-6) var(--space-8);
+    padding-bottom: max(var(--space-6), env(safe-area-inset-bottom));
     min-height: 130px;
     gap: var(--space-3);
   }
@@ -2580,6 +2655,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 @media (max-width: 600px) {
   .game-topbar {
     padding: 8px 12px;
+    padding-top: max(8px, env(safe-area-inset-top));
     gap: var(--space-2);
   }
 
@@ -2598,6 +2674,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
   .rack-dock {
     padding: var(--space-2) var(--space-3) var(--space-3);
+    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
     min-height: 64px;
     gap: var(--space-1);
   }
@@ -2622,10 +2699,23 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     flex-shrink: 0;
   }
 
-  /* Scoped to the TRAY toolbar specifically, not `.tray-tool-group` in general -- that class is
-     reused by the topbar's Dump! button (Game.tsx), whose tooltip should stay. */
-  .tray-toolbar .info-tooltip {
+  /* Was scoped to the TRAY toolbar only, leaving Dump's tooltip (.game-actions .tray-tool-group)
+     exposed -- it relies on :focus-within from a non-form-control span, whose tap-to-focus
+     behavior is inconsistent across mobile browsers, so it could end up effectively
+     unreachable by touch anyway. Same hide-below-mobile treatment as the tray toolbar's own
+     tooltips: Dump's disabled state (no tile selected) already explains itself without it. */
+  .tray-toolbar .info-tooltip,
+  .game-actions .info-tooltip {
     display: none;
+  }
+
+  /* Now a labelled pill instead of a bare circle -- keep it from eating too much board on a
+     narrow phone, same shrink-not-remove treatment as .tray-tool above. */
+  .zoom-btn {
+    height: 38px;
+    padding: 0 12px;
+    font-size: 12px;
+    gap: 6px;
   }
 }
 
@@ -2641,6 +2731,12 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 @media (max-height: 550px) and (orientation: landscape) {
   .game-topbar {
     padding: 6px 16px;
+    padding-top: max(6px, env(safe-area-inset-top));
+    /* Landscape is exactly when a notch is most likely to be on the SIDE instead -- give this a
+       little horizontal clearance too, on top of .game-layout's blanket left/right handling
+       below, since the topbar is the row most likely to actually run text under it. */
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
     gap: var(--space-3);
   }
 
@@ -2667,6 +2763,12 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
   .rack-dock {
     padding: 4px var(--space-3) 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    /* Landscape home-indicator sits at the physical bottom regardless of rotation, but a
+       side-mounted notch (from the topbar's perspective) can still land here too depending on
+       device -- match the topbar's horizontal clearance for consistency. */
+    padding-left: max(var(--space-3), env(safe-area-inset-left));
+    padding-right: max(var(--space-3), env(safe-area-inset-right));
     min-height: 56px;
     gap: 4px;
   }
@@ -3176,6 +3278,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 .modal-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: flex-end;
 }

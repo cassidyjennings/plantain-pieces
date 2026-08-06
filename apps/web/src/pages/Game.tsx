@@ -323,6 +323,52 @@ export default function Game() {
     }
   }, [roomId]);
 
+  // --- Xtina mode ------------------------------------------------------------
+  // Everything here is presentation over an otherwise ordinary game: the server already dealt
+  // the scripted tiles, and the board, tray and drag system are untouched. Only the partner
+  // sees hints — the owner is playing a real (unwinnable) game.
+  //
+  // Declared this high in the component on purpose: the realtime handler, `invalidPlacedCount`
+  // and the auto-fire effect all read these, and a `const` referenced from a dependency array
+  // must be initialized before that array is evaluated during render.
+  const xtinaConfig = room?.mode === 'xtina' ? (room.mode_config as XtinaModeConfig) : null;
+  const isXtina = xtinaConfig !== null;
+  const isXtinaPartner = isXtina && xtinaConfig.partnerId === profileId;
+  const xtinaStep = xtinaConfig?.step ?? 0;
+
+  // Hints are for the word whose tiles are in the tray RIGHT NOW (step), not the next one.
+  // They vanish once those cells are filled, so a correctly-placed word leaves a clean board
+  // until the peel lands and the next set appears.
+  const xtinaHints = useMemo(() => {
+    if (!isXtinaPartner || xtinaStep < 1 || xtinaStep > XTINA_STEPS) return EMPTY_CELLS;
+    const pending = [...xtinaHintCells(xtinaStep)].filter((k) => !(k in grid));
+    return pending.length > 0 ? new Set(pending) : EMPTY_CELLS;
+  }, [isXtinaPartner, xtinaStep, grid]);
+
+  const xtinaAccents = useMemo(
+    () => (isXtinaPartner ? xtinaAccentCells() : EMPTY_CELLS),
+    [isXtinaPartner],
+  );
+
+  /**
+   * "Is this cell part of a word we're happy with?" — the single test behind auto-fire, the
+   * "tiles remaining" count and Recall invalid.
+   *
+   * Normally that's just dictionary validity. In xtina mode it can't be: YOURE (and MY/LOVE's
+   * shared letters around it) is deliberately not in Collins/SOWPODS, so its cells would never
+   * enter `validCells` — auto-Peel could never fire on the very first word, the partner's public
+   * "tiles remaining" would over-report forever, and Recall invalid would rip the word off the
+   * board. Accent cells are scripted by us, so they count as good by construction. The
+   * dictionary check stays ON (the other nine words still have to tint green on their own).
+   *
+   * `xtinaAccents` is EMPTY_CELLS for anyone who isn't the xtina partner, so this is a no-op
+   * for every ordinary game.
+   */
+  const cellIsGood = useCallback(
+    (k: string) => validCells.has(k) || xtinaAccents.has(k),
+    [validCells, xtinaAccents],
+  );
+
   // Timed solo mode: a live elapsed-time ticker from the room's started_at. Zen mode and
   // multiplayer show nothing (mode_config.timed is only ever true for solo).
   const isTimed = room?.mode === 'solo' && (room.mode_config as { timed?: boolean }).timed === true;
@@ -375,6 +421,15 @@ export default function Game() {
   useRoomEvents(roomId, (event) => {
     if (event.type === 'game_over') {
       submitSummaryOnce();
+      // room_events are delivered to the actor too (see the actor !== profileId guard on `peel`
+      // below), so the partner receives this broadcast right after her own Plantains response
+      // already set xtinaFinished. Navigating here would yank her straight off the held board
+      // and its "View the board" button — the entire point of the mode — a fraction of a second
+      // after it appeared. Hold the board instead; she leaves it on her own.
+      if (isXtinaPartner) {
+        setXtinaFinished(true);
+        return;
+      }
       navigate(`/room/${roomId}/results`, { replace: true });
       return;
     }
@@ -393,6 +448,13 @@ export default function Game() {
       if (roomId) fetchPlayers(roomId).then(setPlayers);
     }
     if (event.type === 'peel') {
+      // The room row itself changes on a Peel in xtina mode: the RPC increments
+      // mode_config.step. `room` is otherwise fetched exactly once (loadState), so without this
+      // the client's step freezes at 1 forever — hints stay pinned to word 1's now-filled cells
+      // and the placement gate keeps comparing word 2..10 against word 1's target, which can
+      // never match. That's a silent soft-lock: no peel, no error, no way forward. Runs for
+      // every player and every mode; for a non-xtina room it's just a cheap row refresh.
+      if (roomId) fetchRoom(roomId).then((r) => r && setRoom(r));
       const payload = event.payload as { actor?: string };
       if (payload.actor) setLastPeelBy(payload.actor);
       if (payload.actor && payload.actor !== profileId && roomId) {
@@ -953,7 +1015,7 @@ export default function Game() {
   // validCells is never populated (see above), so every placed tile would misread as "invalid" —
   // there's no such distinction in that mode, so nothing counts as invalid-placed there.
   const invalidPlacedCount = wordValidationEnabled
-    ? Object.keys(grid).filter((k) => !validCells.has(k)).length
+    ? Object.keys(grid).filter((k) => !cellIsGood(k)).length
     : 0;
   const remainingCount = rack.length + invalidPlacedCount;
 
@@ -976,29 +1038,6 @@ export default function Game() {
     }, 1000);
     return () => clearTimeout(handle);
   }, [remainingCount, roomId]);
-
-  // --- Xtina mode ------------------------------------------------------------
-  // Everything here is presentation over an otherwise ordinary game: the server already dealt
-  // the scripted tiles, and the board, tray and drag system are untouched. Only the partner
-  // sees hints — the owner is playing a real (unwinnable) game.
-  const xtinaConfig = room?.mode === 'xtina' ? (room.mode_config as XtinaModeConfig) : null;
-  const isXtina = xtinaConfig !== null;
-  const isXtinaPartner = isXtina && xtinaConfig.partnerId === profileId;
-  const xtinaStep = xtinaConfig?.step ?? 0;
-
-  // Hints are for the word whose tiles are in the tray RIGHT NOW (step), not the next one.
-  // They vanish once those cells are filled, so a correctly-placed word leaves a clean board
-  // until the peel lands and the next set appears.
-  const xtinaHints = useMemo(() => {
-    if (!isXtinaPartner || xtinaStep < 1 || xtinaStep > XTINA_STEPS) return EMPTY_CELLS;
-    const pending = [...xtinaHintCells(xtinaStep)].filter((k) => !(k in grid));
-    return pending.length > 0 ? new Set(pending) : EMPTY_CELLS;
-  }, [isXtinaPartner, xtinaStep, grid]);
-
-  const xtinaAccents = useMemo(
-    () => (isXtinaPartner ? xtinaAccentCells() : EMPTY_CELLS),
-    [isXtinaPartner],
-  );
 
   // --- Auto-detect Peel / Plantains ------------------------------------------
 
@@ -1065,6 +1104,13 @@ export default function Game() {
   }
 
   useEffect(() => {
+    // The xtina owner must never auto-fire anything. Peel advances the script for the WHOLE room
+    // regardless of who called it, and her five X/Z tiles laid out in a connected line are
+    // structurally valid — so (especially with word validation off) idly lining them up would
+    // peel the partner's next word into her tray mid-word and jump her hints forward, leaving
+    // the word she's actually building unhinted. She still has a real, unwinnable board; it just
+    // never triggers a server action.
+    if (isXtina && !isXtinaPartner) return;
     const fullRack = [...rack.map((t) => t.letter), ...Object.values(grid)];
     const res = validateStructure(grid, fullRack);
     if (!res.valid) {
@@ -1084,7 +1130,7 @@ export default function Game() {
     // reportActionError above).
     if (wordValidationEnabled) {
       if (wordsPending) return;
-      const allWordsValid = Object.keys(grid).every((k) => validCells.has(k));
+      const allWordsValid = Object.keys(grid).every((k) => cellIsGood(k));
       if (!allWordsValid) {
         autoSigRef.current = null;
         return;
@@ -1106,7 +1152,17 @@ export default function Game() {
     if (autoSigRef.current === sig) return; // already attempted this exact complete grid
     autoSigRef.current = sig;
     runAutoAction();
-  }, [grid, rack, runAutoAction, wordsPending, validCells, wordValidationEnabled, isXtinaPartner, xtinaStep]);
+  }, [
+    grid,
+    rack,
+    runAutoAction,
+    wordsPending,
+    cellIsGood,
+    wordValidationEnabled,
+    isXtina,
+    isXtinaPartner,
+    xtinaStep,
+  ]);
 
   // --- Dump (still a deliberate action on a selected tray tile) ---------------
 
@@ -1136,7 +1192,9 @@ export default function Game() {
 
   /** Pull every placed tile that isn't part of a valid word back into the tray. */
   function handleRecallInvalid() {
-    const toRecall = Object.keys(grid).filter((k) => !validCells.has(k));
+    // cellIsGood, not validCells — otherwise this button rips the xtina partner's scripted
+    // accent words (YOURE/MY/LOVE) straight back off the board, since they're not dictionary words.
+    const toRecall = Object.keys(grid).filter((k) => !cellIsGood(k));
     if (toRecall.length === 0) return;
     const recalledTiles = toRecall.map((k) => newRackTile(grid[k]));
     setGrid((g) => {

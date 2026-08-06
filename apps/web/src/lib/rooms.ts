@@ -1,6 +1,12 @@
 import type { AvatarConfig, DictionaryConfig, SoloModeConfig } from '@plantain/shared';
 import { supabase } from './supabase.js';
 
+/** rooms.mode_config for an xtina room. `step` is how many of the ten words have been dealt. */
+export interface XtinaModeConfig {
+  partnerId: string;
+  step: number;
+}
+
 export interface PublicRoom {
   id: string;
   code: string;
@@ -9,8 +15,8 @@ export interface PublicRoom {
   dictionary_config: DictionaryConfig;
   bunch_count: number;
   winner_id: string | null;
-  mode: 'multiplayer' | 'solo';
-  mode_config: SoloModeConfig | Record<string, never>;
+  mode: 'multiplayer' | 'solo' | 'xtina';
+  mode_config: SoloModeConfig | XtinaModeConfig | Record<string, never>;
   started_at: string | null;
   finished_at: string | null;
 }

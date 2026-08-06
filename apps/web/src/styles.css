@@ -938,6 +938,16 @@ button:disabled {
   z-index: 5;
 }
 
+/* Sits over the held board once the xtina game completes. Positioned rather than in flow so it
+   can't reflow the board underneath it at the moment the player is looking at it. */
+.xtina-view-board {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
 /* Was an icon-only circle -- discoverable only via `title`, which never fires on touch. Same
    fix already applied once to the tray toolbar ("an icon with no label is a guess, not a UI"),
    carried over here: a short visible label rides next to the icon instead. */

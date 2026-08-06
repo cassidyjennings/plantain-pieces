@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   extractWordsWithCells,
@@ -6,10 +6,21 @@ import {
   parseKey,
   validateStructure,
   GRID_SIZE,
+  XTINA_STEPS,
+  xtinaAccentCells,
+  xtinaGridMatches,
+  xtinaHintCells,
   type GridState,
 } from '@plantain/shared';
 import { api, ApiError } from '../lib/api.js';
-import { fetchLastPeelActor, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
+import {
+  fetchLastPeelActor,
+  fetchPlayers,
+  fetchRoom,
+  type PublicPlayer,
+  type PublicRoom,
+  type XtinaModeConfig,
+} from '../lib/rooms.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useMoveTracker } from '../hooks/useMoveTracker.js';
 import { useSessionStore } from '../store/sessionStore.js';
@@ -134,6 +145,9 @@ export default function Game() {
   const [pendingReveal, setPendingReveal] = useState<Set<string>>(new Set());
   const [sliceRevealed, setSliceRevealed] = useState<Set<string>>(new Set());
   const [flashSignal, setFlashSignal] = useState(0);
+  // Holds the completed board on screen instead of navigating to Results — see runAutoAction's
+  // Plantains branch below.
+  const [xtinaFinished, setXtinaFinished] = useState(false);
 
   // Select-mode state. `selectedKeys` are committed selections; `marquee` is the live rectangle
   // being dragged (screen coords); `selectionOffset` is the in-flight whole-cell shift of a
@@ -963,6 +977,29 @@ export default function Game() {
     return () => clearTimeout(handle);
   }, [remainingCount, roomId]);
 
+  // --- Xtina mode ------------------------------------------------------------
+  // Everything here is presentation over an otherwise ordinary game: the server already dealt
+  // the scripted tiles, and the board, tray and drag system are untouched. Only the partner
+  // sees hints — the owner is playing a real (unwinnable) game.
+  const xtinaConfig = room?.mode === 'xtina' ? (room.mode_config as XtinaModeConfig) : null;
+  const isXtina = xtinaConfig !== null;
+  const isXtinaPartner = isXtina && xtinaConfig.partnerId === profileId;
+  const xtinaStep = xtinaConfig?.step ?? 0;
+
+  // Hints are for the word whose tiles are in the tray RIGHT NOW (step), not the next one.
+  // They vanish once those cells are filled, so a correctly-placed word leaves a clean board
+  // until the peel lands and the next set appears.
+  const xtinaHints = useMemo(() => {
+    if (!isXtinaPartner || xtinaStep < 1 || xtinaStep > XTINA_STEPS) return EMPTY_CELLS;
+    const pending = [...xtinaHintCells(xtinaStep)].filter((k) => !(k in grid));
+    return pending.length > 0 ? new Set(pending) : EMPTY_CELLS;
+  }, [isXtinaPartner, xtinaStep, grid]);
+
+  const xtinaAccents = useMemo(
+    () => (isXtinaPartner ? xtinaAccentCells() : EMPTY_CELLS),
+    [isXtinaPartner],
+  );
+
   // --- Auto-detect Peel / Plantains ------------------------------------------
 
   const runAutoAction = useCallback(async () => {
@@ -987,7 +1024,14 @@ export default function Game() {
         await api.plantains(roomId, submittedGrid);
         submitSummaryOnce();
         fireCallout('PLANTAINS!');
-        setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
+        if (isXtinaPartner) {
+          // Hold the completed board on screen rather than yanking her to a scoreboard. The
+          // Plantains call already persisted the grid, so the board viewer below has something
+          // to show whenever she chooses to open it.
+          setXtinaFinished(true);
+        } else {
+          setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
+        }
       }
     } catch (err) {
       if (err instanceof ApiError && err.message === 'BUNCH_TOO_LOW') {
@@ -1006,7 +1050,7 @@ export default function Game() {
     } finally {
       busyRef.current = false;
     }
-  }, [roomId, navigate]);
+  }, [roomId, navigate, isXtinaPartner]);
 
   function reportActionError(err: unknown) {
     // Auto-fire (Peel/Plantains) rejections — bad words, an incomplete/disconnected grid —
@@ -1046,6 +1090,15 @@ export default function Game() {
         return;
       }
     }
+    // The soft gate. Her rack holds exactly one word's tiles, so a structurally valid grid is
+    // nearly always the right word — but it could be the right letters in the wrong place, which
+    // would peel the script forward onto a board that no longer matches the picture. Requiring an
+    // exact match means a wrong placement simply doesn't advance: no error, no rejected drag, no
+    // visible fight with the player.
+    if (isXtinaPartner && !xtinaGridMatches(grid, xtinaStep)) {
+      autoSigRef.current = null;
+      return;
+    }
     const sig = Object.keys(grid)
       .sort()
       .map((k) => `${k}:${grid[k]}`)
@@ -1053,7 +1106,7 @@ export default function Game() {
     if (autoSigRef.current === sig) return; // already attempted this exact complete grid
     autoSigRef.current = sig;
     runAutoAction();
-  }, [grid, rack, runAutoAction, wordsPending, validCells, wordValidationEnabled]);
+  }, [grid, rack, runAutoAction, wordsPending, validCells, wordValidationEnabled, isXtinaPartner, xtinaStep]);
 
   // --- Dump (still a deliberate action on a selected tray tile) ---------------
 
@@ -1160,12 +1213,14 @@ export default function Game() {
           </div>
         )}
         <div className="game-actions">
-          <span className="tray-tool-group">
-            <button className="btn-tertiary" disabled={!selectedId} onClick={handleDump}>
-              Dump!
-            </button>
-            <InfoTooltip text="Select a tile in your tray first. Dump returns it to the Bunch face-down and draws you 3 new tiles in exchange." />
-          </span>
+          {!isXtina && (
+            <span className="tray-tool-group">
+              <button className="btn-tertiary" disabled={!selectedId} onClick={handleDump}>
+                Dump!
+              </button>
+              <InfoTooltip text="Select a tile in your tray first. Dump returns it to the Bunch face-down and draws you 3 new tiles in exchange." />
+            </span>
+          )}
           <button type="button" className="btn-leave" onClick={handleLeave}>
             Leave
           </button>
@@ -1181,8 +1236,8 @@ export default function Game() {
           pan={pan}
           zoom={zoom}
           validCells={validCells}
-          hintCells={EMPTY_CELLS}
-          accentCells={EMPTY_CELLS}
+          hintCells={xtinaHints}
+          accentCells={xtinaAccents}
           hiddenKey={null}
           selectedKeys={selectedKeys}
           selectionOffset={selectionOffset}
@@ -1224,6 +1279,15 @@ export default function Game() {
             <span className="zoom-btn-label">Zoom out</span>
           </button>
         </div>
+        {xtinaFinished && (
+          <button
+            type="button"
+            className="btn-primary xtina-view-board"
+            onClick={() => navigate(`/room/${roomId}/boards`)}
+          >
+            View the board
+          </button>
+        )}
       </div>
 
       {callout && (

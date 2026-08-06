@@ -47,16 +47,17 @@ export const XTINA_WORDS: XtinaWord[] = [
 
 export const XTINA_STEPS = XTINA_WORDS.length;
 
+/** Both players are dealt the same count at Split so the public tile-count pills stay symmetric. */
+export const XTINA_OWNER_DEAL = 5;
+
 /**
  * The owner's tiles for the entire game, in draw order: the first XTINA_OWNER_DEAL at Split, then
  * one per Peel. Deliberately nothing but X and Z, so no word is ever possible.
  */
-export const XTINA_OWNER_TILES: Letter[] = [
-  'X', 'Z', 'X', 'Z', 'X', 'Z', 'X', 'Z', 'X', 'Z', 'X', 'Z', 'X', 'Z',
-];
-
-/** Both players are dealt the same count at Split so the public tile-count pills stay symmetric. */
-export const XTINA_OWNER_DEAL = 5;
+export const XTINA_OWNER_TILES: Letter[] = Array.from(
+  { length: XTINA_OWNER_DEAL + (XTINA_STEPS - 1) },
+  (_, i) => (i % 2 === 0 ? 'X' : 'Z'),
+);
 
 /** Cells a word occupies, in reading order. */
 export function xtinaWordCells(w: XtinaWord): { key: string; letter: Letter }[] {
@@ -127,4 +128,4 @@ export function xtinaBunch(): LetterCounts {
   return counts;
 }
 
-export const XTINA_BUNCH_SIZE = 70;
+export const XTINA_BUNCH_SIZE = Object.values(xtinaBunch()).reduce((a, b) => a + b, 0);

@@ -14,6 +14,7 @@ import {
   xtinaAccentCells,
   xtinaGridMatches,
   xtinaBunch,
+  xtinaWordCells,
 } from '../src/index.js';
 
 const EXPECTED_WORDS = [
@@ -62,7 +63,10 @@ describe('xtina board spec', () => {
 
   it('deals exactly the letters of the cells it hints', () => {
     for (let step = 1; step <= XTINA_STEPS; step++) {
-      expect(xtinaStepLetters(step)).toHaveLength(xtinaHintCells(step).size);
+      const hinted = xtinaHintCells(step);
+      const dealtCells = xtinaWordCells(XTINA_WORDS[step - 1]).filter((c) => hinted.has(c.key));
+      expect(new Set(dealtCells.map((c) => c.key))).toEqual(hinted);
+      expect(dealtCells.map((c) => c.letter)).toEqual(xtinaStepLetters(step));
     }
   });
 

@@ -14,7 +14,7 @@ export interface AvatarConfig {
  * optional accessory slots; `base` is required and defaults to 'ripe'. Keep ids stable —
  * they're persisted in profiles.avatar_config. */
 export const ACCESSORY_SETS = {
-  base: ['ripe', 'green', 'golden', 'speckled'],
+  base: ['ripe', 'green', 'golden', 'speckled', 'stina'],
   hat: ['none', 'straw', 'party', 'crown', 'beanie', 'trucker'],
   glasses: ['none', 'round', 'shades', 'star', 'monocle'],
   // Facial hair shares the `hair` slot rather than getting one of its own — one head decoration

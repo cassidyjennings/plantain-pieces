@@ -21,12 +21,16 @@ const BODY_FILL: Record<string, string> = {
   green: '#a7c957',
   golden: '#e39a2f',
   speckled: '#f4c542',
+  // PLACEHOLDER — replace with the real Stina design. Distinct enough to be obviously
+  // unfinished so it can't ship by accident.
+  stina: '#f2a7c3',
 };
 const BODY_STROKE: Record<string, string> = {
   ripe: '#c98f1e',
   green: '#6f9134',
   golden: '#b06f16',
   speckled: '#c98f1e',
+  stina: '#b4587a',
 };
 
 const HAIR_FILL = '#5a3a1c';

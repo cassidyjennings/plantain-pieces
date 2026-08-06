@@ -29,6 +29,11 @@ describe('validateAvatarConfig', () => {
     expect(validateAvatarConfig(null).valid).toBe(false);
     expect(validateAvatarConfig('ripe').valid).toBe(false);
   });
+
+  it("accepts 'stina' as a base without any change to the validator", () => {
+    expect(validateAvatarConfig({ base: 'stina' })).toEqual({ valid: true });
+    expect(normalizeAvatarConfig({ base: 'stina' }).base).toBe('stina');
+  });
 });
 
 describe('normalizeAvatarConfig', () => {

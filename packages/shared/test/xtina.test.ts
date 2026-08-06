@@ -77,8 +77,10 @@ describe('xtina board spec', () => {
 
   it('accents exactly the cells of YOURE, MY and LOVE', () => {
     const accent = xtinaAccentCells();
-    // YOURE (5) + MY (2) + LOVE (4), minus the Y and L each shares = 9 distinct cells.
-    expect(accent.size).toBe(9);
+    // YOURE (5) + MY (2) + LOVE (4) = 11 cells, minus the one Y that YOURE and MY SHARE WITH
+    // EACH OTHER = 10 distinct. LOVE's L is shared with BEAUTIFUL, which is not an accent word,
+    // so it does not collapse anything here.
+    expect(accent.size).toBe(10);
     expect(accent.has('18,22')).toBe(true); // shared Y of YOURE/MY
     expect(accent.has('18,21')).toBe(true); // M of MY
     expect(accent.has('20,27')).toBe(true); // shared L of BEAUTIFUL/LOVE

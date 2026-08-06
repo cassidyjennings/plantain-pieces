@@ -21,6 +21,7 @@ import {
 } from '../lib/profile.js';
 import { signOut, upgradeWith, signInWith, getLinkedIdentities, consumeOAuthRedirectError } from '../lib/auth.js';
 import Avatar from '../components/Avatar.js';
+import XtinaToggle from '../components/XtinaToggle.js';
 import DictionaryJournal from '../components/DictionaryJournal.js';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal.js';
 import { AccessibilitySettings } from '../components/AccessibilitySettings.js';
@@ -250,6 +251,8 @@ function Overview() {
           My Dictionaries
         </button>
       </div>
+
+      <XtinaToggle />
 
       <div className="profile-section">
         <h3>Account</h3>

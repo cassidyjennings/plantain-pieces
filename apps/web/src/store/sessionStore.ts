@@ -8,9 +8,12 @@ interface SessionState {
   avatarConfig: AvatarConfig;
   isGuest: boolean;
   authReady: boolean;
+  xtinaRole: 'owner' | 'partner' | null;
+  xtinaEnabled: boolean;
   setProfileId: (id: string) => void;
   setDisplayName: (name: string) => void;
   setAvatarConfig: (config: AvatarConfig) => void;
+  setXtinaEnabled: (enabled: boolean) => void;
   /** Load the persisted profile (name/avatar/guest status) from the server after auth.
    * A returning guest who typed a name last session but whose profile still holds the
    * auto 'Guest-xxxx' default keeps the locally-cached name. */
@@ -26,12 +29,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   avatarConfig: DEFAULT_AVATAR_CONFIG,
   isGuest: true,
   authReady: false,
+  xtinaRole: null,
+  xtinaEnabled: false,
   setProfileId: (id) => set({ profileId: id, authReady: true }),
   setDisplayName: (name) => {
     localStorage.setItem(STORAGE_KEY, name);
     set({ displayName: name });
   },
   setAvatarConfig: (config) => set({ avatarConfig: normalizeAvatarConfig(config) }),
+  setXtinaEnabled: (xtinaEnabled) => set({ xtinaEnabled }),
   hydrateProfile: async () => {
     const profile = await fetchMyProfile();
     if (!profile) return;
@@ -43,6 +49,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       displayName,
       avatarConfig: normalizeAvatarConfig(profile.avatar_config),
       isGuest: profile.is_guest,
+      xtinaRole: profile.xtina_role ?? null,
+      xtinaEnabled: profile.xtina_enabled ?? false,
     });
   },
 }));

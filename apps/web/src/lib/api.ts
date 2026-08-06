@@ -198,6 +198,12 @@ export const api = {
   updateProfile: (patch: { displayName?: string; avatarConfig?: AvatarConfig }) =>
     call<ProfileResult>('/profile', { method: 'PATCH', body: JSON.stringify(patch) }),
 
+  setXtinaEnabled: (enabled: boolean) =>
+    call<{ ok: true; enabled: boolean }>('/profile/xtina', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    }),
+
   exportMyData: () => call<Record<string, unknown>>('/profile/export'),
 
   deleteAccount: () => call<{ ok: true }>('/profile', { method: 'DELETE' }),

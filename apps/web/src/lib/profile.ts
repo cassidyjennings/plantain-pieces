@@ -16,6 +16,11 @@ export interface ProfileRow {
   current_streak: number;
   longest_streak: number;
   last_played_date: string | null;
+  /** 'owner' may arm xtina mode; 'partner' is the account its scripted deal targets.
+   * Null for every ordinary account, which is everyone. */
+  xtina_role: 'owner' | 'partner' | null;
+  /** Whether xtina mode is armed. Only meaningful on an owner row. */
+  xtina_enabled: boolean;
 }
 
 export interface ProfileStatsRow {

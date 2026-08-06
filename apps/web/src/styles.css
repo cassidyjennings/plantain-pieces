@@ -855,6 +855,38 @@ button:disabled {
   border-color: var(--color-tile-valid-border);
 }
 
+/* Xtina mode: where the next word goes. An outline on an EMPTY cell, never a letter — the
+   player works the word out from the tiles in their tray. pointer-events:none so it can't
+   swallow a pointerdown that belongs to the board's drag system. */
+.board-hint {
+  position: absolute;
+  border: 2px dashed var(--color-accent);
+  border-radius: 8px;
+  background: rgba(255, 159, 67, 0.1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .board-hint {
+    animation: hint-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes hint-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* Xtina mode accent words (YOURE, MY, LOVE). Deliberately overrides .valid rather than
+   composing with it: one of these words is not in the dictionary and would otherwise render
+   untinted next to nine tinted ones. */
+.board-tile.accent {
+  background: var(--color-accent);
+  border-color: var(--color-accent-shadow);
+  color: var(--color-text-on-accent);
+}
+
 .drag-ghost {
   position: fixed;
   transform: translate(-50%, -50%) rotate(-3deg);

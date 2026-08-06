@@ -59,6 +59,9 @@ const BUTTON_ZOOM_STEP = 1.2;
 // as soon as the real gesture tails off instead of chasing that last stretch of momentum.
 const MIN_ZOOM_DELTA = 1.5;
 
+/** Stable empty set — a fresh `new Set()` per render would defeat GameBoard's reconciliation. */
+const EMPTY_CELLS: Set<string> = new Set();
+
 type DragData =
   | { kind: 'pan'; startX: number; startY: number; startPan: { x: number; y: number } }
   | {
@@ -1178,6 +1181,8 @@ export default function Game() {
           pan={pan}
           zoom={zoom}
           validCells={validCells}
+          hintCells={EMPTY_CELLS}
+          accentCells={EMPTY_CELLS}
           hiddenKey={null}
           selectedKeys={selectedKeys}
           selectionOffset={selectionOffset}

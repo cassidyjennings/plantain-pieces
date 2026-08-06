@@ -8,6 +8,12 @@ interface Props {
   zoom: number;
   /** Cell keys that belong to at least one valid dictionary word (green tint). */
   validCells: Set<string>;
+  /** Empty cells to outline in dotted lines — where the next scripted word goes. Deliberately
+   * carries no letters: working the word out from the tiles in the tray is the point. */
+  hintCells: Set<string>;
+  /** Cells rendered in the accent color instead of the ordinary tile color. Takes precedence
+   * over `validCells`, so an accented word never reads as an invalid one. */
+  accentCells: Set<string>;
   /** Cell currently lifted for dragging (hidden from the board). */
   hiddenKey: string | null;
   /** Cell keys currently box-selected (select mode only). */
@@ -43,6 +49,8 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
     pan,
     zoom,
     validCells,
+    hintCells,
+    accentCells,
     hiddenKey,
     selectedKeys,
     selectionOffset,
@@ -70,6 +78,17 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
+        {[...hintCells].map((key) => {
+          const { x, y } = parseKey(key);
+          return (
+            <div
+              key={`hint-${key}`}
+              className="board-hint"
+              style={{ left: x * CELL, top: y * CELL, width: CELL, height: CELL }}
+            />
+          );
+        })}
+
         {Object.entries(grid).map(([key, letter]) => {
           if (key === hiddenKey) return null;
           const { x, y } = parseKey(key);
@@ -81,7 +100,7 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
           return (
             <div
               key={key}
-              className={`board-tile${validCells.has(key) ? ' valid' : ''}${selected ? ' selected' : ''}`}
+              className={`board-tile${accentCells.has(key) ? ' accent' : validCells.has(key) ? ' valid' : ''}${selected ? ' selected' : ''}`}
               style={{
                 left: (x + ox) * CELL,
                 top: (y + oy) * CELL,

@@ -32,6 +32,17 @@ app.use('/profile/*', requireAuth);
 
 app.get('/', (c) => c.json({ ok: true, service: 'plantain-pieces-api' }));
 
+/** A room's mode, for the handful of routes that must behave differently in xtina mode.
+ * Returns null when the room is missing — callers treat that as "not xtina" and let the RPC
+ * below them raise the real ROOM_NOT_FOUND. */
+async function roomMode(
+  admin: ReturnType<typeof createAdminClient>,
+  roomId: string,
+): Promise<string | null> {
+  const { data } = await admin.from('rooms').select('mode').eq('id', roomId).single();
+  return (data as { mode?: string } | null)?.mode ?? null;
+}
+
 // --- Room lifecycle ---------------------------------------------------------
 
 app.post('/rooms', async (c) => {
@@ -248,6 +259,14 @@ app.post('/rooms/:roomId/dump', async (c) => {
   const roomId = c.req.param('roomId');
   const body = await c.req.json<{ tile: string }>();
   const admin = createAdminClient(c.env);
+
+  // Dump draws three tiles from the shared Bunch, which would desynchronize the scripted deal
+  // and leave the endgame arithmetic unable to land on zero. The client hides the button too;
+  // this is the authoritative half.
+  if ((await roomMode(admin, roomId)) === 'xtina') {
+    return c.json({ error: 'XTINA_NO_DUMP' }, 400);
+  }
+
   const { data, error } = await admin.rpc('dump', {
     p_room_id: roomId,
     p_profile: profileId,
@@ -281,19 +300,27 @@ app.post('/rooms/:roomId/plantains', async (c) => {
     return c.json({ error: structural.reason, orphans: structural.orphans }, 400);
   }
 
-  const { data: invalidWords, error: dictError } = await admin.rpc('find_invalid_words', {
-    p_room_id: roomId,
-    p_words: structural.words,
-  });
-  if (dictError) return c.json({ error: dictError.message }, statusForRpcError(dictError.message));
-
-  if (invalidWords && invalidWords.length > 0) {
-    await admin.rpc('append_room_event', {
+  // The xtina board is scripted end to end, so there is nothing to cheat — and one of its words
+  // ("YOURE") is deliberately not in Collins/SOWPODS. Skipping the lookup here is what lets it
+  // through; structural validation above still runs in full. An earlier design added YOURE to an
+  // official word set instead, which was wrong: official sets are world-readable via
+  // official_word_sets, so it would have appeared in the partner's Dictionary journal as a fake
+  // language.
+  if ((await roomMode(admin, roomId)) !== 'xtina') {
+    const { data: invalidWords, error: dictError } = await admin.rpc('find_invalid_words', {
       p_room_id: roomId,
-      p_type: 'plantains_rejected',
-      p_payload: { actor: profileId, reason: 'INVALID_WORDS', invalidWords },
+      p_words: structural.words,
     });
-    return c.json({ error: 'INVALID_WORDS', invalidWords }, 400);
+    if (dictError) return c.json({ error: dictError.message }, statusForRpcError(dictError.message));
+
+    if (invalidWords && invalidWords.length > 0) {
+      await admin.rpc('append_room_event', {
+        p_room_id: roomId,
+        p_type: 'plantains_rejected',
+        p_payload: { actor: profileId, reason: 'INVALID_WORDS', invalidWords },
+      });
+      return c.json({ error: 'INVALID_WORDS', invalidWords }, 400);
+    }
   }
 
   const { data, error } = await admin.rpc('finish_game', {
@@ -485,6 +512,19 @@ app.delete('/profile', async (c) => {
   return c.json({ ok: true });
 });
 
+// Toggle "xtina mode" availability for this profile.
+app.post('/profile/xtina', async (c) => {
+  const profileId = c.get('profileId');
+  const body = await c.req.json<{ enabled: boolean }>();
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('set_xtina_enabled', {
+    p_profile: profileId,
+    p_on: Boolean(body.enabled),
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
 // Client end-of-game summary (Phase 2): the words a player made and their move stats, which
 // only the client knows. Rolled straight into profile_stats — keyed by ROOM, since nothing
 // per-game is stored. Idempotent server-side via room_players.summary_applied.
@@ -497,6 +537,14 @@ app.post('/rooms/:roomId/summary', async (c) => {
   if (!check.valid) return c.json({ error: 'INVALID_SUMMARY', reason: check.reason }, 400);
 
   const admin = createAdminClient(c.env);
+
+  // An xtina game is not a real game: it must not touch lifetime stats, the daily streak, or
+  // achievements. archive_game already early-returns for the server-side half; this is the
+  // client-submitted half.
+  if ((await roomMode(admin, roomId)) === 'xtina') {
+    return c.json({ ok: true, longestWord: null, rarestWord: null, wordCount: 0 });
+  }
+
   const { data, error } = await admin.rpc('submit_game_summary', {
     p_room_id: roomId,
     p_profile: profileId,

@@ -207,6 +207,21 @@ routes to the scripted path.
   count if it matters.
 - **`rooms_public` exposes `mode` and `mode_config`** to both players, so `'xtina'` and her own
   profile id are readable by anyone opening devtools. Nothing in the UI surfaces it.
+- **⚠️ OPEN — the entire scripted board ships in the public `apps/web` JS bundle, in plaintext, to
+  every visitor of the site.** `packages/shared/src/xtina.ts`'s `XTINA_WORDS` table (all 10 words,
+  in order, with their board coordinates) is bundled because the client currently computes hints,
+  the completion gate, and accent-lighting locally. Confirmed live: `curl
+  https://plantainpieces.com/assets/index-*.js | grep YOURE` returns the word list. No login, no
+  account, and no relationship to either the owner or partner account is needed — anyone who
+  opens DevTools → Sources, or downloads the bundle directly, can read the whole finished message
+  in advance. This is a materially bigger exposure than the `rooms_public` seam above: it doesn't
+  require snooping on a specific account, just mild curiosity about the site at all.
+  **Deliberately left unfixed (2026-08-07, explicit user decision — "leave it for now").** The
+  real fix moves hint/gate/accent computation server-side so the client only ever receives the
+  CURRENT step's cells (already revealed during play by design), never the full script — that's
+  real rework, not a config change, and was scoped as future work rather than done silently.
+  Revisit before treating this feature as safe against a technically curious visitor, not just an
+  incurious one.
 
 ## Out of scope
 

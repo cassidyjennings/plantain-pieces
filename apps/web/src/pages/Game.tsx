@@ -7,8 +7,9 @@ import {
   validateStructure,
   GRID_SIZE,
   XTINA_STEPS,
-  xtinaAccentCells,
+  xtinaCellIsScripted,
   xtinaGridMatches,
+  xtinaLitCells,
   xtinaHintCells,
   type GridState,
 } from '@plantain/shared';
@@ -55,6 +56,10 @@ function formatElapsed(ms: number): string {
 }
 
 const CALLOUT_MS = 900;
+/** How many slices SliceFlyLayer flies at once (its MAX_ACTIVE) — bursts queue in waves of this. */
+const SLICE_WAVE = 4;
+/** One slice's full flight: ~750ms leg A + ~1050ms leg B. */
+const SLICE_FLIGHT_MS = 1800;
 const DRAG_THRESHOLD = 5;
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 2.5;
@@ -271,6 +276,16 @@ export default function Game() {
     // collapsed mode duplicates share one group chip instead — trayItems() uses this same
     // pendingIds set to exclude in-flight tiles from that group's displayed count, so a
     // duplicate letter's badge doesn't jump to the new total before the slice visually arrives.
+    // Peel deals 1 tile and Dump deals 3, which is what the flat 180ms stagger was tuned for.
+    // Xtina mode deals a whole word at once — up to 10 — and SliceFlyLayer only flies MAX_ACTIVE
+    // (4) at a time, so a big burst queues in waves. At 180ms apart a 10-tile deal ran well past
+    // the old fixed 3500ms safety net, which then fired mid-flight and snapped the last tiles
+    // into the tray while their slices were still traveling. Tighten the stagger once a burst is
+    // bigger than one wave, and size the net to the burst actually launched.
+    const stagger = fresh.length > 1 ? (fresh.length > SLICE_WAVE ? 70 : 180) : 0;
+    const flightWaves = Math.ceil(fresh.length / SLICE_WAVE);
+    const revealFallbackMs = SLICE_FLIGHT_MS * flightWaves + stagger * fresh.length + 1200;
+
     if (!reduce) {
       setPendingReveal((prev) => {
         const next = new Set(prev);
@@ -279,11 +294,9 @@ export default function Game() {
       });
       // Safety net: whatever the cause (a backgrounded tab pausing requestAnimationFrame, a
       // dropped WAAPI animation, anything else that can stop a flight short of landing), a tile
-      // must never stay hidden/uncounted forever just because its slice never finished. Force
-      // the reveal well after the longest possible real flight (~2.2s: 750ms leg A + 1050ms leg B
-      // + up to two 180ms Dump stagger steps) if it hasn't happened on its own by then.
+      // must never stay hidden/uncounted forever just because its slice never finished.
       fresh.forEach((t) => {
-        const timer = setTimeout(() => revealChip(t.id), 3500);
+        const timer = setTimeout(() => revealChip(t.id), revealFallbackMs);
         revealTimers.current.add(timer);
       });
     }
@@ -300,7 +313,7 @@ export default function Game() {
       },
       letters: fresh.map((t) => t.letter),
       count: fresh.length,
-      staggerMs: fresh.length > 1 ? 180 : 0,
+      staggerMs: stagger,
       onLanded: (i) => revealChip(fresh[i].id),
     });
   }, [rack, collapsed, revealChip]);
@@ -345,28 +358,32 @@ export default function Game() {
     return pending.length > 0 ? new Set(pending) : EMPTY_CELLS;
   }, [isXtinaPartner, xtinaStep, grid]);
 
+  // An accent word lights only once it is COMPLETE. LOVE's L is BEAUTIFUL's L and lands at step 2
+  // — eight words before LOVE exists — so lighting the static accent set flared that tile orange
+  // early and gave the ending away.
   const xtinaAccents = useMemo(
-    () => (isXtinaPartner ? xtinaAccentCells() : EMPTY_CELLS),
-    [isXtinaPartner],
+    () => (isXtinaPartner ? xtinaLitCells(grid) : EMPTY_CELLS),
+    [isXtinaPartner, grid],
   );
 
   /**
    * "Is this cell part of a word we're happy with?" — the single test behind auto-fire, the
    * "tiles remaining" count and Recall invalid.
    *
-   * Normally that's just dictionary validity. In xtina mode it can't be: YOURE (and MY/LOVE's
-   * shared letters around it) is deliberately not in Collins/SOWPODS, so its cells would never
-   * enter `validCells` — auto-Peel could never fire on the very first word, the partner's public
-   * "tiles remaining" would over-report forever, and Recall invalid would rip the word off the
-   * board. Accent cells are scripted by us, so they count as good by construction. The
-   * dictionary check stays ON (the other nine words still have to tint green on their own).
+   * For an ordinary game that is dictionary validity, unchanged.
    *
-   * `xtinaAccents` is EMPTY_CELLS for anyone who isn't the xtina partner, so this is a no-op
-   * for every ordinary game.
+   * For the xtina partner it deliberately is NOT. Her board is scripted end to end, so "is this
+   * tile where the script wants it" is a strictly STRONGER statement than "is this tile part of a
+   * word the dictionary knows" — and unlike the dictionary it cannot be knocked out by which word
+   * lists a room has enabled. Routing her through the dictionary was a real soft-lock: YOURE isn't
+   * in Collins/SOWPODS at all, and during testing an unseeded local `words` table made *every*
+   * word invalid, which silently froze the script at word two with no error and no way forward.
+   * Green tinting is unaffected — it reads `validCells` directly, so her other nine words still
+   * have to earn their tint.
    */
   const cellIsGood = useCallback(
-    (k: string) => validCells.has(k) || xtinaAccents.has(k),
-    [validCells, xtinaAccents],
+    (k: string) => (isXtinaPartner ? xtinaCellIsScripted(k, grid[k]) : validCells.has(k)),
+    [isXtinaPartner, grid, validCells],
   );
 
   // Timed solo mode: a live elapsed-time ticker from the room's started_at. Zen mode and

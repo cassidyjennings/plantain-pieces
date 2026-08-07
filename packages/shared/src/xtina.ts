@@ -94,7 +94,10 @@ export function xtinaStepLetters(step: number): Letter[] {
     .map((c) => c.letter);
 }
 
-/** Cells belonging to an accent word (YOURE, MY, LOVE), including their shared letters. */
+/** The finished 56-cell board. Declared before the helpers that close over it. */
+const FINAL_TARGET: GridState = xtinaTarget(XTINA_WORDS.length);
+
+/** Every cell belonging to an accent word (YOURE, MY, LOVE), regardless of what is on the board. */
 export function xtinaAccentCells(): Set<string> {
   const keys = new Set<string>();
   for (const w of XTINA_WORDS) {
@@ -102,6 +105,39 @@ export function xtinaAccentCells(): Set<string> {
     for (const { key } of xtinaWordCells(w)) keys.add(key);
   }
   return keys;
+}
+
+/**
+ * The accent cells that should actually be LIT right now: an accent word lights only once every
+ * one of its cells is filled.
+ *
+ * This is not the same as the static set above, because accent words share cells with ordinary
+ * ones. LOVE's `L` is BEAUTIFUL's `L` and lands at step 2 — eight words before LOVE exists — so
+ * lighting the static set would flare that tile orange early and give the ending away. MY's `Y`
+ * has the same problem via YOURE, though there it happens to be harmless (YOURE is itself an
+ * accent word and completes at the same moment).
+ */
+export function xtinaLitCells(grid: GridState): Set<string> {
+  const keys = new Set<string>();
+  for (const w of XTINA_WORDS) {
+    if (!w.accent) continue;
+    const cells = xtinaWordCells(w);
+    if (!cells.every(({ key, letter }) => grid[key] === letter)) continue;
+    for (const { key } of cells) keys.add(key);
+  }
+  return keys;
+}
+
+/**
+ * Whether this cell/letter pair belongs to the finished scripted board.
+ *
+ * Used in place of the dictionary check for the partner: her board is scripted, so "is this tile
+ * where the script wants it" is a strictly stronger statement than "is this tile part of a word
+ * the dictionary knows", and unlike the dictionary it cannot be affected by which word lists the
+ * room happens to have enabled — or, as happened in testing, by an unseeded `words` table.
+ */
+export function xtinaCellIsScripted(key: string, letter: Letter | undefined): boolean {
+  return letter !== undefined && FINAL_TARGET[key] === letter;
 }
 
 /**

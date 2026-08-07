@@ -166,6 +166,16 @@ function Overview() {
     }
   }
 
+  function randomizeAvatar() {
+    const pick = <T,>(options: readonly T[]): T => options[Math.floor(Math.random() * options.length)];
+    saveAvatar({
+      base: pick(ACCESSORY_SETS.base),
+      hat: pick(ACCESSORY_SETS.hat),
+      glasses: pick(ACCESSORY_SETS.glasses),
+      hair: pick(ACCESSORY_SETS.hair),
+    });
+  }
+
   async function handleSignOut() {
     setBusy(true);
     await signOut();
@@ -221,6 +231,11 @@ function Overview() {
             {isGuest ? 'Guest account' : `Linked · ${providers.join(', ') || 'account'}`}
           </span>
         </div>
+        {editingAvatar && (
+          <button className="btn-secondary edit-avatar-btn" onClick={randomizeAvatar}>
+            Randomize
+          </button>
+        )}
         <button className="btn-secondary edit-avatar-btn" onClick={() => setEditingAvatar((v) => !v)}>
           {editingAvatar ? 'Done' : 'Edit avatar'}
         </button>
@@ -291,19 +306,14 @@ function Overview() {
 
 function AvatarEditor({ config, onChange }: { config: AvatarConfig; onChange: (c: AvatarConfig) => void }) {
   const current = normalizeAvatarConfig(config);
-  const xtinaRole = useSessionStore((s) => s.xtinaRole);
   const slots: AccessorySlot[] = ['base', 'hat', 'glasses', 'hair'];
-  // The Stina base is hers alone. Gated on the role rather than on xtinaEnabled deliberately:
-  // the avatar shouldn't disappear just because no game happens to be armed.
-  const optionsFor = (slot: AccessorySlot): readonly string[] =>
-    ACCESSORY_SETS[slot].filter((o) => o !== 'stina' || xtinaRole === 'partner');
   return (
     <div className="avatar-editor">
       {slots.map((slot) => (
         <div key={slot} className="avatar-slot">
           <span className="avatar-slot-label">{slot}</span>
           <div className="avatar-options">
-            {optionsFor(slot).map((option) => (
+            {ACCESSORY_SETS[slot].map((option) => (
               <button
                 key={option}
                 className={`avatar-option${current[slot] === option ? ' selected' : ''}`}

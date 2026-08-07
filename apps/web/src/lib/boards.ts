@@ -53,7 +53,14 @@ export const EMPTY_BOARD_WORDS: BoardWords = { validCells: new Set(), words: [] 
  * CROSS does not tint. Tinting it would let an invalid word hide behind the valid words
  * crossing it — the same bug that once let auto-Peel fire on a board with a bad word on it.
  */
-export async function resolveBoardWords(roomId: string, grid: GridState): Promise<BoardWords> {
+export async function resolveBoardWords(
+  roomId: string,
+  grid: GridState,
+  /** Words to accept regardless of what the dictionary says. Used for a scripted board, whose
+   * words are correct by construction — YOURE isn't in Collins/SOWPODS, so without this the
+   * viewer dropped the word the whole board is built around and left its cells untinted. */
+  alwaysValid?: ReadonlySet<string>,
+): Promise<BoardWords> {
   const found = extractWordsWithCells(grid ?? {});
   if (found.length === 0) return EMPTY_BOARD_WORDS;
 
@@ -61,7 +68,7 @@ export async function resolveBoardWords(roomId: string, grid: GridState): Promis
   let invalid: Set<string>;
   try {
     const { invalidWords } = await api.validate(roomId, unique);
-    invalid = new Set(invalidWords);
+    invalid = new Set(invalidWords.filter((w) => !alwaysValid?.has(w)));
   } catch {
     // Transient failure — better to show the board with no tinting than to fail the screen.
     return EMPTY_BOARD_WORDS;

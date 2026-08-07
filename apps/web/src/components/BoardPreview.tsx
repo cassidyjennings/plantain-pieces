@@ -6,6 +6,9 @@ interface Props {
   grid: GridState;
   /** Cell keys belonging to a dictionary-valid word — tinted green, same cue as in-game. */
   validCells?: Set<string>;
+  /** Cell keys rendered in the accent colour. Takes precedence over `validCells`, matching the
+   * in-game board: an accent word that isn't in the dictionary must not read as invalid. */
+  accentCells?: Set<string>;
   /** Never scale past this. A six-tile board blown up to fill a screen reads as broken, not
    * impressive, so the default is 1 (never larger than the real in-game tile size). */
   maxScale?: number;
@@ -29,6 +32,7 @@ interface Props {
 export default function BoardPreview({
   grid,
   validCells,
+  accentCells,
   maxScale = 1,
   label,
   emptyMessage = 'Board not available',
@@ -101,7 +105,9 @@ export default function BoardPreview({
           return (
             <div
               key={key}
-              className={`board-tile${validCells?.has(key) ? ' valid' : ''}`}
+              className={`board-tile${
+                accentCells?.has(key) ? ' accent' : validCells?.has(key) ? ' valid' : ''
+              }`}
               style={{
                 left: (x - box.minX) * CELL,
                 top: (y - box.minY) * CELL,

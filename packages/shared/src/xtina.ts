@@ -47,6 +47,13 @@ export const XTINA_WORDS: XtinaWord[] = [
 
 export const XTINA_STEPS = XTINA_WORDS.length;
 
+/**
+ * The ten scripted words. The post-game board viewer needs these: it derives its word list by
+ * checking the grid against the room's dictionary, and YOURE isn't in Collins/SOWPODS — without
+ * this it would silently drop the word the whole board is built around.
+ */
+export const XTINA_WORD_LIST: readonly string[] = XTINA_WORDS.map((w) => w.word);
+
 /** Both players are dealt the same count at Split so the public tile-count pills stay symmetric. */
 export const XTINA_OWNER_DEAL = 5;
 

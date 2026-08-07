@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import {
+  XTINA_STEPS,
+  XTINA_WORD_LIST,
+  xtinaAccentCells,
+  xtinaGridMatches,
+} from '@plantain/shared';
 import {
   fetchRoomBoards,
   resolveBoardWords,
@@ -22,6 +28,10 @@ import BoardPreview from '../components/BoardPreview.js';
  * Deliberately its own route rather than a modal over Results — it has its own top bar (no
  * Bunch, no score pills, no tray) and owns the full viewport.
  */
+/** Stable empties/constants — a fresh Set per render would defeat memoization downstream. */
+const EMPTY_CELLS: Set<string> = new Set();
+const SCRIPTED_WORDS: ReadonlySet<string> = new Set(XTINA_WORD_LIST);
+
 export default function BoardViewer() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -63,18 +73,30 @@ export default function BoardViewer() {
 
   const selected = boards.find((b) => b.profile_id === selectedId) ?? null;
 
+  // Is this the completed scripted board? Checked against the board itself rather than the room's
+  // mode, which keeps this screen self-contained (no extra fetch) and makes it impossible to
+  // mislabel somebody else's board — only the finished 56-cell script matches.
+  const isScripted = selected ? xtinaGridMatches(selected.grid_state ?? {}, XTINA_STEPS) : false;
+  const scriptedAccents = useMemo(
+    () => (isScripted ? xtinaAccentCells() : EMPTY_CELLS),
+    [isScripted],
+  );
+
   useEffect(() => {
     if (!roomId || !selected) return;
     const key = selected.profile_id;
     if (wordsByPlayer[key]) return;
     let cancelled = false;
-    resolveBoardWords(roomId, selected.grid_state).then((res) => {
+    // A scripted board's words are correct by construction, so they bypass the dictionary — the
+    // viewer used to drop YOURE entirely, which is the word the board is built around.
+    const alwaysValid = isScripted ? SCRIPTED_WORDS : undefined;
+    resolveBoardWords(roomId, selected.grid_state, alwaysValid).then((res) => {
       if (!cancelled) setWordsByPlayer((prev) => ({ ...prev, [key]: res }));
     });
     return () => {
       cancelled = true;
     };
-  }, [roomId, selected, wordsByPlayer]);
+  }, [roomId, selected, wordsByPlayer, isScripted]);
 
   const words = (selected && wordsByPlayer[selected.profile_id]) ?? EMPTY_BOARD_WORDS;
   const isSelf = selected?.profile_id === profileId;
@@ -132,6 +154,7 @@ export default function BoardViewer() {
           <BoardPreview
             grid={selected.grid_state ?? {}}
             validCells={words.validCells}
+            accentCells={scriptedAccents}
             label={`${isSelf ? 'Your' : `${selected.display_name}'s`} final board`}
             emptyMessage={
               isSelf

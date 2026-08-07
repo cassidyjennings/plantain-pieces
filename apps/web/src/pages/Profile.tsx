@@ -26,6 +26,19 @@ import DictionaryJournal from '../components/DictionaryJournal.js';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal.js';
 import { AccessibilitySettings } from '../components/AccessibilitySettings.js';
 
+// Stina's own pieces — one id per slot, gated to the xtina partner role in both the option
+// list and the randomizer below. Kept in one place so a future Stina piece only needs adding
+// here, not re-threading through both call sites.
+const STINA_EXCLUSIVE: Partial<Record<AccessorySlot, string>> = {
+  base: 'stina base',
+  hair: 'stina hair',
+  glasses: 'stina glasses',
+};
+
+function isStinaLocked(slot: AccessorySlot, option: string, xtinaRole: 'owner' | 'partner' | null): boolean {
+  return STINA_EXCLUSIVE[slot] === option && xtinaRole !== 'partner';
+}
+
 type Tab = 'overview' | 'stats' | 'achievements' | 'accessibility';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -169,12 +182,13 @@ function Overview() {
 
   function randomizeAvatar() {
     const pick = <T,>(options: readonly T[]): T => options[Math.floor(Math.random() * options.length)];
-    const baseOptions = ACCESSORY_SETS.base.filter((o) => o !== 'stina' || xtinaRole === 'partner');
+    const poolFor = (slot: AccessorySlot) =>
+      ACCESSORY_SETS[slot].filter((o) => !isStinaLocked(slot, o, xtinaRole));
     saveAvatar({
-      base: pick(baseOptions),
-      hat: pick(ACCESSORY_SETS.hat),
-      glasses: pick(ACCESSORY_SETS.glasses),
-      hair: pick(ACCESSORY_SETS.hair),
+      base: pick(poolFor('base')),
+      hat: pick(poolFor('hat')),
+      glasses: pick(poolFor('glasses')),
+      hair: pick(poolFor('hair')),
     });
   }
 
@@ -310,10 +324,10 @@ function AvatarEditor({ config, onChange }: { config: AvatarConfig; onChange: (c
   const current = normalizeAvatarConfig(config);
   const xtinaRole = useSessionStore((s) => s.xtinaRole);
   const slots: AccessorySlot[] = ['base', 'hat', 'glasses', 'hair'];
-  // The Stina base is hers alone. Gated on the role rather than on xtinaEnabled deliberately:
-  // the avatar shouldn't disappear just because no game happens to be armed.
+  // Stina's pieces are hers alone. Gated on the role rather than on xtinaEnabled deliberately:
+  // they shouldn't disappear just because no game happens to be armed.
   const optionsFor = (slot: AccessorySlot): readonly string[] =>
-    ACCESSORY_SETS[slot].filter((o) => o !== 'stina' || xtinaRole === 'partner');
+    ACCESSORY_SETS[slot].filter((o) => !isStinaLocked(slot, o, xtinaRole));
   return (
     <div className="avatar-editor">
       {slots.map((slot) => (

@@ -14,14 +14,20 @@ export interface AvatarConfig {
  * optional accessory slots; `base` is required and defaults to 'ripe'. Keep ids stable —
  * they're persisted in profiles.avatar_config. */
 export const ACCESSORY_SETS = {
-  base: ['ripe', 'green', 'golden', 'speckled', 'stina'],
+  // 'stina base' + 'stina hair' + 'stina glasses' are Stina's pieces (skin tone incl. her
+  // mouth/eyes, hairstyle, glasses) — each an ordinary option in its slot rather than one
+  // monolithic character, so she can mix them with the rest of the generic accessories. The
+  // space in each id renders as two words via the option button's CSS capitalize. Access to
+  // these three ids is gated client-side to the xtina partner role
+  // (apps/web/src/pages/Profile.tsx) — hers alone.
+  base: ['ripe', 'green', 'golden', 'speckled', 'stina base'],
   hat: ['none', 'straw', 'party', 'crown', 'beanie', 'trucker'],
-  glasses: ['none', 'round', 'shades', 'star', 'monocle'],
+  glasses: ['none', 'round', 'shades', 'star', 'monocle', 'stina glasses'],
   // Facial hair shares the `hair` slot rather than getting one of its own — one head decoration
   // at a time keeps the tiny 64px avatar readable, and the slot's options are self-describing.
   // (No plain 'beard' — with mustache/goatee already covering that ground it pushed the editor's
   // hair row onto a second line; goatee's chin coverage plus mustache is enough range.)
-  hair: ['none', 'swoop', 'curls', 'mohawk', 'mustache', 'goatee'],
+  hair: ['none', 'swoop', 'curls', 'mohawk', 'mustache', 'goatee', 'stina hair'],
 } as const;
 
 export type AccessorySlot = keyof typeof ACCESSORY_SETS;

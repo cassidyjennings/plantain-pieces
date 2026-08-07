@@ -30,9 +30,16 @@ describe('validateAvatarConfig', () => {
     expect(validateAvatarConfig('ripe').valid).toBe(false);
   });
 
-  it("accepts 'stina' as a base without any change to the validator", () => {
-    expect(validateAvatarConfig({ base: 'stina' })).toEqual({ valid: true });
-    expect(normalizeAvatarConfig({ base: 'stina' }).base).toBe('stina');
+  it("accepts Stina's pieces ('stina base', 'stina hair', 'stina glasses') as ordinary options", () => {
+    expect(
+      validateAvatarConfig({ base: 'stina base', hair: 'stina hair', glasses: 'stina glasses' }),
+    ).toEqual({ valid: true });
+    expect(normalizeAvatarConfig({ base: 'stina base', hair: 'stina hair', glasses: 'stina glasses' })).toEqual({
+      base: 'stina base',
+      hat: 'none',
+      glasses: 'stina glasses',
+      hair: 'stina hair',
+    });
   });
 });
 

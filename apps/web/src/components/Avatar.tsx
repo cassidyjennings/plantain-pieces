@@ -21,12 +21,14 @@ const BODY_FILL: Record<string, string> = {
   green: '#a7c957',
   golden: '#e39a2f',
   speckled: '#f4c542',
+  'stina base': '#e3b184',
 };
 const BODY_STROKE: Record<string, string> = {
   ripe: '#c98f1e',
   green: '#6f9134',
   golden: '#b06f16',
   speckled: '#c98f1e',
+  'stina base': '#b07f4e',
 };
 
 /** Stina's curls — her own browns, deliberately not the generic HAIR_* tokens, so retuning the
@@ -47,13 +49,6 @@ const HAT_CROWN_TOP = 5.5;
 export default function Avatar({ config, size = 52, ring = false }: AvatarProps) {
   const c = normalizeAvatarConfig(config ?? {});
 
-  // Stina is a complete character, not a body tone: she ships her own hair, glasses, eyes and
-  // lips. Layering the generic accessory slots over her would collide (the plain face dots would
-  // show through her eyes, a hat would sit inside her curls), so this base short-circuits the
-  // whole accessory stack rather than adding to it. Her body path is byte-identical to the
-  // generic one, so she still reads as the same plantain.
-  if (c.base === 'stina') return <StinaAvatar size={size} ring={ring} />;
-
   const fill = BODY_FILL[c.base] ?? BODY_FILL.ripe;
   const stroke = BODY_STROKE[c.base] ?? BODY_STROKE.ripe;
   // Several avatars render on one page, so the trucker hat's mesh pattern and the mohawk's clip
@@ -65,6 +60,9 @@ export default function Avatar({ config, size = 52, ring = false }: AvatarProps)
 
   const hat = c.hat ?? 'none';
   const hair = c.hair ?? 'none';
+  // Stina's face (eyes + mouth) ships as part of the stina base rather than as its own slot — a
+  // body tone she stays recognizable in even before anyone touches hair/glasses.
+  const tan = c.base === 'stina base';
 
   return (
     <svg
@@ -76,8 +74,11 @@ export default function Avatar({ config, size = 52, ring = false }: AvatarProps)
       aria-label="Plantain avatar"
       style={ring ? { boxShadow: '0 0 0 3px var(--color-secondary)', borderRadius: '50%' } : undefined}
     >
+      {/* Hair layer that sits behind the body (volume behind the head/shoulders) — only
+          `stina hair` uses this; every other hairstyle renders null here. */}
+      <HairBack kind={hair} />
       {/* stem */}
-      <rect x="30" y="3" width="4" height="7" rx="2" fill="#6b4a2b" />
+      <rect x="30" y="3" width="4" height="7" rx="2" fill={tan ? '#5c3d1e' : '#6b4a2b'} />
       {/* body */}
       <path
         d="M32 8 C 22 8 18 20 18 33 C 18 48 24 57 32 57 C 40 57 46 48 46 33 C 46 20 42 8 32 8 Z"
@@ -93,16 +94,26 @@ export default function Avatar({ config, size = 52, ring = false }: AvatarProps)
           <ellipse cx="40" cy="42" rx="1.4" ry="0.9" />
         </g>
       )}
+      {tan && (
+        <path
+          d="M40.4 12.6 C 44.4 19 45.6 26 45.4 34 C 45.2 45 41.4 53.4 35.6 56.4 C 42 55.2 46 46.6 46 33 C 46 24 44.4 16.6 40.4 12.6 Z"
+          fill="#cf9a68"
+          opacity="0.55"
+        />
+      )}
       {/* face — eyes sit a bit above center so there's clear room below them for glasses to rest
           on and, further down, for the mustache/goatee to sit without crowding the lenses. */}
-      <g fill="#3a2c12">
-        <circle cx="27" cy="32.5" r="2.4" />
-        <circle cx="37" cy="32.5" r="2.4" />
-      </g>
-      <path d="M27 42 Q 32 46 37 42" fill="none" stroke="#3a2c12" strokeWidth="2" strokeLinecap="round" />
+      <Eyes tan={tan} />
+      <Mouth tan={tan} />
 
       <Hair kind={hair} />
+
       <Glasses kind={c.glasses ?? 'none'} />
+
+      {/* Hair layer that sits in front of the face (Stina's outer curls frame her cheeks over
+          the glasses temples) — only `stina hair` uses this. */}
+      <HairFront kind={hair} />
+
       <Hat kind={hat} meshId={meshId} />
 
       {/* A mohawk under a hat would otherwise be completely swallowed by it. Redrawing just the
@@ -123,26 +134,58 @@ export default function Avatar({ config, size = 52, ring = false }: AvatarProps)
   );
 }
 
-/**
- * Stina — a bespoke plantain, transcribed from a supplied design.
- *
- * Deliberately self-contained rather than composed from the accessory slots: her curls are three
- * separate layers that sit BOTH behind and in front of the body (back volume, top crown, outer
- * side falls), which the generic `<Hair>` slot can't express since it renders in one pass after
- * the body. Draw order below is load-bearing — reordering the groups buries her face.
- */
-function StinaAvatar({ size, ring }: { size: number; ring: boolean }) {
+/** Generic dot eyes, or Stina's own (white sclera, dark iris, sparkle) when `tan` is selected. */
+function Eyes({ tan }: { tan: boolean }) {
+  if (!tan) {
+    return (
+      <g fill="#3a2c12">
+        <circle cx="27" cy="32.5" r="2.4" />
+        <circle cx="37" cy="32.5" r="2.4" />
+      </g>
+    );
+  }
   return (
-    <svg
-      className="avatar-svg"
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      role="img"
-      aria-label="Stina, a plantain avatar"
-      style={ring ? { boxShadow: '0 0 0 3px var(--color-secondary)', borderRadius: '50%' } : undefined}
-    >
-      {/* Hair, back layer — the volume that reads behind the head. */}
+    <>
+      <ellipse cx="26.9" cy="32.4" rx="3.5" ry="3.9" fill="#fdf8ec" stroke="#b07f4e" strokeWidth="0.7" />
+      <ellipse cx="37.1" cy="32.4" rx="3.5" ry="3.9" fill="#fdf8ec" stroke="#b07f4e" strokeWidth="0.7" />
+      <circle cx="27.2" cy="32.8" r="2.3" fill="#2a1d0c" />
+      <circle cx="37.4" cy="32.8" r="2.3" fill="#2a1d0c" />
+      <circle cx="26.3" cy="31.7" r="1" fill="#ffffff" />
+      <circle cx="36.5" cy="31.7" r="1" fill="#ffffff" />
+      <path d="M28.6 34.1 L 29.1 35.1 L 30.1 35.6 L 29.1 36.1 L 28.6 37.1 L 28.1 36.1 L 27.1 35.6 L 28.1 35.1 Z" fill="#ffffff" />
+      <path d="M38.8 34.1 L 39.3 35.1 L 40.3 35.6 L 39.3 36.1 L 38.8 37.1 L 38.3 36.1 L 37.3 35.6 L 38.3 35.1 Z" fill="#ffffff" />
+      <path d="M23.6 26.4 Q 26.9 24.2 30.2 26.1" fill="none" stroke="#4a2c14" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M33.8 26.1 Q 37.1 24.2 40.4 26.4" fill="none" stroke="#4a2c14" strokeWidth="1.5" strokeLinecap="round" />
+    </>
+  );
+}
+
+/** Generic closed smile, or Stina's own lips when `tan` is selected. */
+function Mouth({ tan }: { tan: boolean }) {
+  if (!tan) {
+    return <path d="M27 42 Q 32 46 37 42" fill="none" stroke="#3a2c12" strokeWidth="2" strokeLinecap="round" />;
+  }
+  return (
+    <>
+      <path
+        d="M28.6 45.2 Q 30.1 44 31.1 44.9 Q 32 44.3 32.9 44.9 Q 33.9 44 35.4 45.2 Q 33.9 47.8 32 47.8 Q 30.1 47.8 28.6 45.2 Z"
+        fill="#c0496a"
+        stroke="#8a2f4a"
+        strokeWidth="0.9"
+        strokeLinejoin="round"
+      />
+      <path d="M29.4 45.4 Q 32 46.2 34.6 45.4" fill="none" stroke="#8a2f4a" strokeWidth="0.7" strokeLinecap="round" />
+      <ellipse cx="33.4" cy="46.6" rx="0.8" ry="0.5" fill="#ffffff" opacity="0.45" transform="rotate(-18 33.4 46.6)" />
+    </>
+  );
+}
+
+/** Stina's hair layer that sits behind the body (drawn before the stem/body so it
+ * reads as volume behind the head/shoulders). Every other hairstyle renders nothing here. */
+function HairBack({ kind }: { kind: string }) {
+  if (kind !== 'stina hair') return null;
+  return (
+    <>
       <g fill={STINA_HAIR}>
         <ellipse cx="20.5" cy="44" rx="9" ry="17" />
         <ellipse cx="43.5" cy="44" rx="9" ry="17" />
@@ -163,75 +206,16 @@ function StinaAvatar({ size, ring }: { size: number; ring: boolean }) {
         <circle cx="42.6" cy="36.6" r="1.5" /><circle cx="21" cy="53" r="1.4" />
         <circle cx="43" cy="53" r="1.4" />
       </g>
+    </>
+  );
+}
 
-      {/* Body — same path as every other plantain, so she reads as the same fruit. */}
-      <rect x="30" y="3" width="4" height="7" rx="2" fill="#5c3d1e" />
-      <path
-        d="M32 8 C 22 8 18 20 18 33 C 18 48 24 57 32 57 C 40 57 46 48 46 33 C 46 20 42 8 32 8 Z"
-        fill="#e3b184"
-        stroke="#b07f4e"
-        strokeWidth="2"
-      />
-      <path
-        d="M40.4 12.6 C 44.4 19 45.6 26 45.4 34 C 45.2 45 41.4 53.4 35.6 56.4 C 42 55.2 46 46.6 46 33 C 46 24 44.4 16.6 40.4 12.6 Z"
-        fill="#cf9a68"
-        opacity="0.55"
-      />
-
-      {/* Hair, top crown. */}
-      <g fill={STINA_HAIR}>
-        <circle cx="26.4" cy="11.4" r="4.9" /><circle cx="32" cy="9.8" r="5.1" />
-        <circle cx="37.6" cy="11.4" r="4.9" /><circle cx="22.4" cy="15.2" r="5.1" />
-        <circle cx="29" cy="15" r="4.7" /><circle cx="35" cy="15" r="4.7" />
-        <circle cx="41.6" cy="15.2" r="5.1" />
-        <circle cx="25.2" cy="19.6" r="4.5" /><circle cx="38.8" cy="19.6" r="4.5" />
-        <circle cx="21.4" cy="20.2" r="5" />
-        <circle cx="42.6" cy="20.2" r="5" />
-        <circle cx="20.4" cy="25.2" r="4.4" /><circle cx="23.4" cy="24" r="4" />
-        <circle cx="43.6" cy="25.2" r="4.4" /><circle cx="40.6" cy="24" r="4" />
-      </g>
-      <g fill={STINA_HAIR_LIGHT} opacity="0.65">
-        <circle cx="27.4" cy="10.6" r="1.9" /><circle cx="22.8" cy="14" r="1.8" />
-        <circle cx="20.8" cy="19.4" r="1.8" />
-        <circle cx="33.4" cy="10.2" r="1.6" />
-      </g>
-      <g fill={STINA_HAIR_SHADE} opacity="0.4">
-        <circle cx="43.4" cy="21.4" r="1.8" />
-        <circle cx="36.4" cy="13.4" r="1.5" />
-      </g>
-
-      {/* Eyes and brows. */}
-      <ellipse cx="26.9" cy="32.4" rx="3.5" ry="3.9" fill="#fdf8ec" stroke="#b07f4e" strokeWidth="0.7" />
-      <ellipse cx="37.1" cy="32.4" rx="3.5" ry="3.9" fill="#fdf8ec" stroke="#b07f4e" strokeWidth="0.7" />
-      <circle cx="27.2" cy="32.8" r="2.3" fill="#2a1d0c" />
-      <circle cx="37.4" cy="32.8" r="2.3" fill="#2a1d0c" />
-      <circle cx="26.3" cy="31.7" r="1" fill="#ffffff" />
-      <circle cx="36.5" cy="31.7" r="1" fill="#ffffff" />
-      <path d="M28.6 34.1 L 29.1 35.1 L 30.1 35.6 L 29.1 36.1 L 28.6 37.1 L 28.1 36.1 L 27.1 35.6 L 28.1 35.1 Z" fill="#ffffff" />
-      <path d="M38.8 34.1 L 39.3 35.1 L 40.3 35.6 L 39.3 36.1 L 38.8 37.1 L 38.3 36.1 L 37.3 35.6 L 38.3 35.1 Z" fill="#ffffff" />
-      <path d="M23.6 26.4 Q 26.9 24.2 30.2 26.1" fill="none" stroke="#4a2c14" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M33.8 26.1 Q 37.1 24.2 40.4 26.4" fill="none" stroke="#4a2c14" strokeWidth="1.5" strokeLinecap="round" />
-
-      {/* Glasses. */}
-      <path d="M20.8 30.4 L 17.2 29.2 M43.2 30.4 L 46.8 29.2" stroke="#173d2a" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M31.4 32.4 L 32.6 32.4" stroke="#1c4632" strokeWidth="1.8" strokeLinecap="round" />
-      <rect x="20.8" y="27.5" width="10.6" height="9.8" rx="4.6" fill="none" stroke="#1c4632" strokeWidth="2" />
-      <rect x="32.6" y="27.5" width="10.6" height="9.8" rx="4.6" fill="none" stroke="#1c4632" strokeWidth="2" />
-      <path d="M23.2 30 L 26 30 L 23.4 34 L 22.4 32.6 Z" fill="#ffffff" opacity="0.22" />
-      <path d="M35 30 L 37.8 30 L 35.2 34 L 34.2 32.6 Z" fill="#ffffff" opacity="0.22" />
-
-      {/* Lips. */}
-      <path
-        d="M28.6 45.2 Q 30.1 44 31.1 44.9 Q 32 44.3 32.9 44.9 Q 33.9 44 35.4 45.2 Q 33.9 47.8 32 47.8 Q 30.1 47.8 28.6 45.2 Z"
-        fill="#c0496a"
-        stroke="#8a2f4a"
-        strokeWidth="0.9"
-        strokeLinejoin="round"
-      />
-      <path d="M29.4 45.4 Q 32 46.2 34.6 45.4" fill="none" stroke="#8a2f4a" strokeWidth="0.7" strokeLinecap="round" />
-      <ellipse cx="33.4" cy="46.6" rx="0.8" ry="0.5" fill="#ffffff" opacity="0.45" transform="rotate(-18 33.4 46.6)" />
-
-      {/* Hair, outer side falls — drawn last so the curls frame the face in front of the body. */}
+/** Stina's outer curls, drawn last (after the glasses) so they frame her cheeks in
+ * front of the temple arms, matching the original bespoke design's layering. */
+function HairFront({ kind }: { kind: string }) {
+  if (kind !== 'stina hair') return null;
+  return (
+    <>
       <g fill={STINA_HAIR}>
         <circle cx="19.2" cy="26.2" r="5.2" /><circle cx="16.8" cy="32.2" r="5.3" />
         <circle cx="14.6" cy="38.2" r="5.2" /><circle cx="12.8" cy="44" r="4.9" />
@@ -250,7 +234,7 @@ function StinaAvatar({ size, ring }: { size: number; ring: boolean }) {
         <circle cx="45.6" cy="27.4" r="1.7" /><circle cx="48" cy="33.4" r="1.6" />
         <circle cx="50.2" cy="39.4" r="1.5" /><circle cx="52" cy="53.6" r="1.4" />
       </g>
-    </svg>
+    </>
   );
 }
 
@@ -355,6 +339,18 @@ function Hat({ kind, meshId }: { kind: string; meshId: string }) {
 
 function Glasses({ kind }: { kind: string }) {
   switch (kind) {
+    case 'stina glasses':
+      // Stina's own — rounded rectangle lenses with a green frame, transcribed from her design.
+      return (
+        <g>
+          <path d="M20.8 30.4 L 17.2 29.2 M43.2 30.4 L 46.8 29.2" stroke="#173d2a" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M31.4 32.4 L 32.6 32.4" stroke="#1c4632" strokeWidth="1.8" strokeLinecap="round" />
+          <rect x="20.8" y="27.5" width="10.6" height="9.8" rx="4.6" fill="none" stroke="#1c4632" strokeWidth="2" />
+          <rect x="32.6" y="27.5" width="10.6" height="9.8" rx="4.6" fill="none" stroke="#1c4632" strokeWidth="2" />
+          <path d="M23.2 30 L 26 30 L 23.4 34 L 22.4 32.6 Z" fill="#ffffff" opacity="0.22" />
+          <path d="M35 30 L 37.8 30 L 35.2 34 L 34.2 32.6 Z" fill="#ffffff" opacity="0.22" />
+        </g>
+      );
     case 'round':
       return (
         <g fill="none" stroke="#3a2c12" strokeWidth="1.6">
@@ -434,6 +430,33 @@ function Mohawk() {
 
 function Hair({ kind }: { kind: string }) {
   switch (kind) {
+    case 'stina hair':
+      // Stina's top crown. Her back volume and outer side-falls render separately as
+      // HairBack/HairFront so they can sit behind the body and in front of the glasses.
+      return (
+        <>
+          <g fill={STINA_HAIR}>
+            <circle cx="26.4" cy="11.4" r="4.9" /><circle cx="32" cy="9.8" r="5.1" />
+            <circle cx="37.6" cy="11.4" r="4.9" /><circle cx="22.4" cy="15.2" r="5.1" />
+            <circle cx="29" cy="15" r="4.7" /><circle cx="35" cy="15" r="4.7" />
+            <circle cx="41.6" cy="15.2" r="5.1" />
+            <circle cx="25.2" cy="19.6" r="4.5" /><circle cx="38.8" cy="19.6" r="4.5" />
+            <circle cx="21.4" cy="20.2" r="5" />
+            <circle cx="42.6" cy="20.2" r="5" />
+            <circle cx="20.4" cy="25.2" r="4.4" /><circle cx="23.4" cy="24" r="4" />
+            <circle cx="43.6" cy="25.2" r="4.4" /><circle cx="40.6" cy="24" r="4" />
+          </g>
+          <g fill={STINA_HAIR_LIGHT} opacity="0.65">
+            <circle cx="27.4" cy="10.6" r="1.9" /><circle cx="22.8" cy="14" r="1.8" />
+            <circle cx="20.8" cy="19.4" r="1.8" />
+            <circle cx="33.4" cy="10.2" r="1.6" />
+          </g>
+          <g fill={STINA_HAIR_SHADE} opacity="0.4">
+            <circle cx="43.4" cy="21.4" r="1.8" />
+            <circle cx="36.4" cy="13.4" r="1.5" />
+          </g>
+        </>
+      );
     case 'swoop':
       // A side-swept fringe: it sits high on the right and sweeps down into a tail past the left
       // temple. The asymmetry is the whole point — earlier symmetric versions just read as a

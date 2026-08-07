@@ -885,6 +885,18 @@ button:disabled {
   background: var(--color-accent);
   border-color: var(--color-accent-shadow);
   color: var(--color-text-on-accent);
+  /* The tile's underside has to be retinted too. .board-tile's own box-shadow is the green
+     --color-tile-shadow, so without this an orange tile sat on a green lip and read as a
+     rendering glitch rather than a highlight. */
+  box-shadow: 0 2px 0 var(--color-accent-shadow);
+}
+
+/* Select mode lifts a tile with a taller shadow. This rule carries three classes so it beats
+   BOTH .board-tile.selected and .board-tile.accent on specificity rather than on source order —
+   two equally-specific rules setting box-shadow would otherwise be decided by whichever happens
+   to appear later in this file, which is exactly how the .pill-switch cascade bug happened. */
+.board-tile.accent.selected {
+  box-shadow: 0 4px 0 var(--color-accent-shadow);
 }
 
 .drag-ghost {

@@ -914,13 +914,48 @@ button:disabled {
   z-index: 900;
 }
 
+/* A banner that DROPS OVER the board rather than sitting in the layout flow. It used to be an
+   in-flow <p>, so every message shoved the board and tray down by its own height and then yanked
+   them back when it cleared — a jarring shift at exactly the moment the player is concentrating
+   on where a tile goes. Fixed positioning means it can never reflow anything underneath it. */
 .game-message {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 40;
   margin: 0;
-  padding: var(--space-2) var(--space-6);
+  max-width: min(92vw, 520px);
+  padding: var(--space-3) var(--space-6);
+  border-radius: 0 0 14px 14px;
   background: var(--color-surface-inner);
   color: var(--color-text-primary);
   font-size: var(--text-small);
   text-align: center;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  transform: translateX(-50%);
+  animation: game-message-drop 260ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+/* An error is the one case worth a louder colour — a rejected Peel stays silent, so anything
+   that reaches this banner is a real failure the player can act on. */
+.game-message.error {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+@keyframes game-message-drop {
+  from {
+    transform: translate(-50%, -100%);
+  }
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-message {
+    animation: none;
+  }
 }
 
 /* Mouse-friendly zoom — a mouse wheel alone has no pinch gesture, so give it explicit

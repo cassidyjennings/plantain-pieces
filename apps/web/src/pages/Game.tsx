@@ -56,6 +56,25 @@ function formatElapsed(ms: number): string {
 }
 
 const CALLOUT_MS = 900;
+/**
+ * Auto-fire rejections that are a normal part of building a board, not failures worth a banner.
+ * The player is mid-word; the tile colours already say what's wrong. Everything NOT in this set
+ * is a real problem (room gone, not a member, server down) and does get surfaced.
+ */
+const SILENT_ACTION_ERRORS = new Set([
+  'TILES_REMAINING',
+  'EXTRA_TILES',
+  'NOT_CONNECTED',
+  'ORPHAN_TILE',
+  'EMPTY_GRID',
+  'INVALID_WORDS',
+  'BUNCH_TOO_LOW',
+  'STALE_ACTION',
+]);
+
+/** How long an error banner stays up before dismissing itself. */
+const ERROR_BANNER_MS = 6000;
+
 /** How many slices SliceFlyLayer flies at once (its MAX_ACTIVE) — bursts queue in waves of this. */
 const SLICE_WAVE = 4;
 /** One slice's full flight: ~750ms leg A + ~1050ms leg B. */
@@ -143,6 +162,9 @@ export default function Game() {
   const [callout, setCallout] = useState<string | null>(null);
   const [validCells, setValidCells] = useState<Set<string>>(new Set());
   const [wordsPending, setWordsPending] = useState(false);
+  /** Whether the current banner is a real failure (louder styling) rather than a neutral note. */
+  const [messageIsError, setMessageIsError] = useState(false);
+  const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Slice-fly animation: chips waiting for their flying slice to land, chips that were just
   // revealed by a landed slice (so they get a soft settle instead of the drop-in pop — the slice
   // rolling in with the letter already visible *is* their reveal), and a counter that pulses the
@@ -1108,16 +1130,34 @@ export default function Game() {
     }
   }, [roomId, navigate, isXtinaPartner]);
 
+  /** Drop an error banner over the board, and clear it on its own so it can't linger. */
+  function showError(text: string) {
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    setMessageIsError(true);
+    setMessage(text);
+    errorTimer.current = setTimeout(() => {
+      setMessage(null);
+      setMessageIsError(false);
+    }, ERROR_BANNER_MS);
+  }
+
   function reportActionError(err: unknown) {
     // Auto-fire (Peel/Plantains) rejections — bad words, an incomplete/disconnected grid —
     // are a normal part of building a board and not a real error; the player just keeps
     // adjusting tiles. Surfacing a banner for every rejected auto-attempt was noisy and
     // read as a scary error message for what's actually silent, expected feedback (the
-    // tile-color validation already shows which words are wrong). Only a genuinely
-    // unexpected failure (e.g. a network error) gets a message.
-    if (!(err instanceof ApiError)) {
-      setMessage('Action failed. Try again.');
-    }
+    // tile-color validation already shows which words are wrong).
+    //
+    // But "expected rejection" and "the server is unreachable / the room is gone" used to be
+    // equally silent, because BOTH arrive as an ApiError. That made a genuinely broken game
+    // indistinguishable from an unfinished word: the board just sat there forever with no
+    // explanation. Only the grid-shaped rejections stay quiet now; anything else says so.
+    if (err instanceof ApiError && SILENT_ACTION_ERRORS.has(err.message)) return;
+    const text =
+      err instanceof ApiError
+        ? `Couldn't reach the game (${err.message}). Your tiles are safe — try moving one.`
+        : "Couldn't reach the game. Your tiles are safe — check your connection.";
+    showError(text);
   }
 
   useEffect(() => {
@@ -1302,7 +1342,13 @@ export default function Game() {
         </div>
       </div>
 
-      {message && <p className="game-message">{message}</p>}
+      {/* Overlays the board — see .game-message. Deliberately NOT in the layout flow: as an
+          in-flow element it shoved the board and tray down whenever a message appeared. */}
+      {message && (
+        <p className={`game-message${messageIsError ? ' error' : ''}`} role="status">
+          {message}
+        </p>
+      )}
 
       <div className="board-area">
         <GameBoard

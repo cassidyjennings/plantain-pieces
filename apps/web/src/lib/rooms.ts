@@ -67,7 +67,9 @@ export async function fetchLastPeelActor(roomId: string): Promise<string | null>
   return ((data[0].payload as { actor?: string }).actor) ?? null;
 }
 
+/** Reads from profiles_public, not profiles — the base table's RLS is self-row-only, so a
+ * cross-account lookup (Results' winner name) has to go through the narrower public view. */
 export async function fetchDisplayName(profileId: string): Promise<string> {
-  const { data } = await supabase.from('profiles').select('display_name').eq('id', profileId).single();
+  const { data } = await supabase.from('profiles_public').select('display_name').eq('id', profileId).single();
   return data?.display_name ?? 'Player';
 }

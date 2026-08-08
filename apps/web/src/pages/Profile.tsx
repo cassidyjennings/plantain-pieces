@@ -500,11 +500,18 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
   const showCompetitiveStats = filter !== 'solo';
   const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '-';
 
-  const letterEntries = Object.entries(stats.first_letter_counts);
+  const letterEntries = Object.entries(stats.first_letter_counts ?? {});
   const maxLetterCount = letterEntries.reduce((max, [, count]) => Math.max(max, count), 0);
-  const favoriteLetters = maxLetterCount > 0
-    ? letterEntries.filter(([, count]) => count === maxLetterCount).map(([letter]) => letter).sort().join(', ')
-    : '-';
+  let favoriteLetters = '-';
+  if (maxLetterCount > 0) {
+    const tiedLetters = letterEntries
+      .filter(([, count]) => count === maxLetterCount)
+      .map(([letter]) => letter)
+      .sort();
+    favoriteLetters = tiedLetters.length > 4
+      ? `${tiedLetters.slice(0, 4).join(', ')} +${tiedLetters.length - 4}`
+      : tiedLetters.join(', ');
+  }
 
   const tiles: { label: string; value: string | number }[] = [
     { label: 'Games played', value: stats.games_played },
@@ -518,7 +525,7 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
     { label: 'Tiles dumped', value: stats.total_dumps },
     { label: 'Favorite starting letter', value: favoriteLetters },
     ...(showCompetitiveStats
-      ? [{ label: 'Best peel streak', value: stats.best_peel_streak > 0 ? stats.best_peel_streak : '-' }]
+      ? [{ label: 'Best peel streak', value: (stats.best_peel_streak ?? 0) > 0 ? stats.best_peel_streak : '-' }]
       : []),
   ];
 

@@ -6,9 +6,9 @@
 --    on it), add the two new lifetime fields.
 -- ---------------------------------------------------------------------------
 alter table public.profile_stats
-  drop column choke_count,
-  add column best_peel_streak int not null default 0,
-  add column first_letter_counts jsonb not null default '{}'::jsonb;
+  drop column if exists choke_count,
+  add column if not exists best_peel_streak int not null default 0,
+  add column if not exists first_letter_counts jsonb not null default '{}'::jsonb;
 
 -- ---------------------------------------------------------------------------
 -- 2. _merge_letter_counts — sums two per-letter frequency maps key-wise. Pure: no table access,
@@ -44,7 +44,7 @@ as $$
     select grp, count(*) as cnt
     from (
       select type,
-             sum((type = 'dump')::int) over (order by created_at rows between unbounded preceding and current row) as grp
+             sum((type = 'dump')::int) over (order by id rows between unbounded preceding and current row) as grp
       from public.room_events
       where room_id = p_room_id
         and payload ->> 'actor' = p_profile_id::text
@@ -99,6 +99,9 @@ begin
   select * into v_room from public.rooms where id = p_room_id for update;
   if not found then raise exception 'ROOM_NOT_FOUND' using errcode = 'P0002'; end if;
 
+  -- Idempotency now lives on the room itself: stats_applied marks that this room's server-side
+  -- rollup already happened. (It replaces the old "does a games row exist?" check, which is
+  -- gone along with the table.) A rematch clears it, so game 2 in the same room rolls up again.
   if v_room.stats_applied then
     return jsonb_build_object('ok', true, 'roomId', p_room_id, 'alreadyApplied', true);
   end if;
@@ -269,6 +272,10 @@ begin
     from jsonb_array_elements_text(coalesce(p_summary -> 'words', '[]'::jsonb)) w
     where upper(w) ~ '^[A-Z]{2,20}$';
 
+  -- Dictionary-filter before anything is counted: a losing player's final grid is whatever
+  -- half-built state they were in, so without this a fragment like REDUND lands in their
+  -- lifetime records as a real word. The room's own config is the right dictionary and it's
+  -- guaranteed to still exist here (the summary arrives while the room is alive).
   v_invalid := public._find_invalid_words_cfg(coalesce(v_room.dictionary_config, '{}'::jsonb), v_words);
   select coalesce(array_agg(w), '{}') into v_valid_words
     from unnest(v_words) w

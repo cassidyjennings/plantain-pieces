@@ -67,7 +67,7 @@ export async function fetchMyProfile(): Promise<ProfileRow | null> {
 }
 
 /** Merges multiple per-mode rows into one aggregate: sums the additive counters, min/max the
- * extremal ones, and unions first_letter_counts. Used for the Stats tab's default "All modes" view. */
+ * extremal ones, and sums first_letter_counts per letter. Used for the Stats tab's default "All modes" view. */
 function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
   if (rows.length === 0) return null;
   if (rows.length === 1) return rows[0];
@@ -91,8 +91,8 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     if (r.fastest_peel_ms != null && (fastestPeel == null || r.fastest_peel_ms < fastestPeel)) {
       fastestPeel = r.fastest_peel_ms;
     }
-    bestStreak = Math.max(bestStreak, r.best_peel_streak);
-    for (const [letter, count] of Object.entries(r.first_letter_counts)) {
+    bestStreak = Math.max(bestStreak, r.best_peel_streak ?? 0);
+    for (const [letter, count] of Object.entries(r.first_letter_counts ?? {})) {
       letterCounts[letter] = (letterCounts[letter] ?? 0) + count;
     }
   }

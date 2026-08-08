@@ -1,6 +1,6 @@
-// scripts/smoke-stats-helpers.mjs
-// Scripted smoke test for the two pure stats helpers against the LOCAL supabase stack.
-// Run from the repo root:  node scripts/smoke-stats-helpers.mjs
+// scripts/smoke-stats-tiles.mjs
+// Scripted smoke test for stats helpers and archive_game integration against the LOCAL supabase stack.
+// Run from the repo root:  node scripts/smoke-stats-tiles.mjs
 import pg from 'pg';
 
 const DB = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
@@ -66,7 +66,43 @@ async function main() {
   )).rows[0].s;
   assert(noEvents === 0, 'no events after the cutoff yields 0, not null or an error');
 
-  console.log('\nAll smoke-stats-helpers checks passed.');
+  console.log('\narchive_game: best_peel_streak (multiplayer)');
+
+  const owner = await makeUser(`owner-${Date.now()}@example.test`);
+  const opp = await makeUser(`opp-${Date.now()}@example.test`);
+  const mpRoom = (await client.query(`select public.create_room($1, 'Owner', null) as r`, [owner])).rows[0].r;
+  const mpRoomId = mpRoom.roomId ?? mpRoom.room_id ?? mpRoom.id;
+  await client.query(`select public.join_room($1, $2, 'Opp', false)`, [mpRoom.code, opp]);
+  await client.query(`select public.start_game($1, $2)`, [mpRoomId, owner]);
+
+  // Drive a peel-peel-dump-peel-peel-peel pattern directly via room_events (bypassing real
+  // tile/bunch mechanics, which archive_game doesn't touch anyway) so this stays a fast, focused
+  // check of the rollup logic rather than a full gameplay simulation.
+  const mpSeq = ['peel', 'peel', 'dump', 'peel', 'peel', 'peel'];
+  for (let i = 0; i < mpSeq.length; i++) {
+    await client.query(
+      `insert into public.room_events (room_id, type, payload, created_at)
+       values ($1, $2, $3, now() + ($4 || ' seconds')::interval)`,
+      [mpRoomId, mpSeq[i], JSON.stringify({ actor: owner }), i],
+    );
+  }
+  await client.query(`update public.rooms set status = 'finished', finished_at = now(), winner_id = $1 where id = $2`, [owner, mpRoomId]);
+  await client.query(`select public.archive_game($1, $2)`, [mpRoomId, owner]);
+
+  const mpStat = (await client.query(
+    `select best_peel_streak
+       from public.profile_stats where profile_id = $1 and mode = 'multiplayer'`,
+    [owner],
+  )).rows[0];
+  assert(mpStat.best_peel_streak === 3, 'multiplayer game rolls up a best_peel_streak of 3');
+
+  const chokeGone = await client.query(
+    `select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'profile_stats' and column_name = 'choke_count'`,
+  );
+  assert(chokeGone.rowCount === 0, 'choke_count column no longer exists');
+
+  console.log('\nAll smoke-stats-tiles checks passed.');
   await client.end();
 }
 

@@ -84,7 +84,7 @@ export default function Home() {
         <div className="join-row">
           <input
             value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value)}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
             placeholder="Room code"
             maxLength={6}
           />

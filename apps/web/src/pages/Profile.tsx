@@ -15,11 +15,21 @@ import {
   fetchMyStats,
   fetchMyAchievements,
   fetchMyProfile,
+  guestHasProgress,
   type ProfileStatsRow,
   type AchievementRow,
   type GameMode,
 } from '../lib/profile.js';
-import { signOut, upgradeWith, signInWith, getLinkedIdentities, consumeOAuthRedirectError } from '../lib/auth.js';
+import {
+  signOut,
+  upgradeWith,
+  signInWith,
+  getLinkedIdentities,
+  consumeOAuthRedirectError,
+  markOAuthFallbackAttempted,
+  oauthFallbackAttempted,
+  clearOAuthFallbackGuard,
+} from '../lib/auth.js';
 import Avatar from '../components/Avatar.js';
 import XtinaToggle from '../components/XtinaToggle.js';
 import DictionaryJournal from '../components/DictionaryJournal.js';
@@ -51,6 +61,7 @@ type StatsFilter = 'all' | GameMode;
 
 export default function Profile() {
   const navigate = useNavigate();
+  const isGuest = useSessionStore((s) => s.isGuest);
   const [tab, setTab] = useState<Tab>('overview');
   const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
   const [stats, setStats] = useState<ProfileStatsRow | null>(null);
@@ -95,9 +106,21 @@ export default function Profile() {
       <div className="profile-content">
         {tab === 'overview' && <Overview />}
         {tab === 'stats' && (
-          <StatsBoard stats={stats} streak={streak} filter={statsFilter} onFilterChange={setStatsFilter} />
+          <GuestGate locked={isGuest} what="stats">
+            <StatsBoard
+              stats={stats}
+              streak={streak}
+              filter={statsFilter}
+              onFilterChange={setStatsFilter}
+              locked={isGuest}
+            />
+          </GuestGate>
         )}
-        {tab === 'achievements' && <AchievementGrid achievements={achievements} />}
+        {tab === 'achievements' && (
+          <GuestGate locked={isGuest} what="achievements">
+            <AchievementGrid achievements={achievements} />
+          </GuestGate>
+        )}
         {tab === 'accessibility' && <AccessibilitySettings />}
       </div>
     </div>
@@ -131,21 +154,28 @@ function Overview() {
   useEffect(() => {
     const redirectError = consumeOAuthRedirectError();
     if (!redirectError) return;
-    const FALLBACK_GUARD_KEY = 'plantain-oauth-fallback-attempted';
     // A link attempt fails server-side whenever this Google identity is already tied to ANY
     // account — including the user's own, from a previous session/browser. Whatever the exact
     // reason, what the user wants by clicking "Sign in with Google" is to end up signed into
     // that Google-linked account, not stuck on a fresh guest — so fall back to a normal sign-in
-    // rather than surfacing the link failure as an error. Guarded to run once per tab so a
-    // sign-in that ALSO genuinely fails (e.g. the provider itself is misconfigured) still
-    // surfaces a real message instead of looping redirects forever.
-    if (!sessionStorage.getItem(FALLBACK_GUARD_KEY)) {
-      sessionStorage.setItem(FALLBACK_GUARD_KEY, '1');
+    // rather than surfacing the link failure as an error. Guarded so a sign-in that ALSO
+    // genuinely fails (e.g. the provider itself is misconfigured) surfaces a real message
+    // instead of looping redirects forever; handleUpgrade resets the guard on each deliberate
+    // click, and signOut() resets it too, so the guard can only ever suppress the fallback
+    // within one uninterrupted attempt.
+    if (!oauthFallbackAttempted()) {
+      markOAuthFallbackAttempted();
       signInWith('google').catch((err) => setOauthError(err instanceof Error ? err.message : 'Sign-in failed'));
       return;
     }
     setOauthError(redirectError.message);
   }, []);
+
+  // Landing here signed in means the flow that set the guard completed; clear it so a later
+  // sign-out → sign-in in this same tab starts from a clean slate.
+  useEffect(() => {
+    if (!isGuest) clearOAuthFallbackGuard();
+  }, [isGuest]);
 
   const nameCheck = validateDisplayName(nameDraft);
   const nameError =
@@ -201,11 +231,24 @@ function Overview() {
 
   async function handleUpgrade(provider: 'google') {
     setOauthError(null);
+    setBusy(true);
+    // A deliberate click is a fresh attempt — never let a guard left over from an earlier one
+    // (it survives the same-tab reload sign-out performs) suppress this attempt's fallback.
+    clearOAuthFallbackGuard();
     try {
-      await upgradeWith(provider);
+      // Linking attaches Google to the CURRENT guest, preserving everything on it — but it fails
+      // outright when that Google account already exists, and recovering costs a SECOND OAuth
+      // round-trip (a second account-picker click). Auth is sessionStorage-scoped, so any new
+      // tab is a brand-new empty guest and "already exists" is the overwhelmingly common case.
+      // Only pay for the link attempt when this guest actually has something to carry over;
+      // otherwise sign in directly, which lands straight in the existing account (or creates one)
+      // in a single prompt and simply abandons the empty guest.
+      if (await guestHasProgress()) await upgradeWith(provider);
+      else await signInWith(provider);
       // On success the browser redirects to the provider; nothing more to do here.
     } catch (err) {
       setOauthError(err instanceof Error ? err.message : 'Upgrade failed');
+      setBusy(false);
     }
   }
 
@@ -350,6 +393,60 @@ function AvatarEditor({ config, onChange }: { config: AvatarConfig; onChange: (c
   );
 }
 
+// --- Guest gate -------------------------------------------------------------
+
+/** Stats and achievements are only kept for linked accounts. A guest still accumulates them
+ * server-side — so linking later reveals a filled-in history rather than an empty one — but a
+ * guest can never sign back in (auth is sessionStorage-scoped, so closing the tab destroys the
+ * session for good) and the 10-day sweep deletes those rows along with the guest. Showing them
+ * as if they were durable would be a lie; this states the deal instead.
+ *
+ * The content stays rendered behind a blurred veil rather than being replaced, so the prompt
+ * reads as "this is yours, claim it" rather than "there is nothing here".
+ *
+ * The children must contain nothing focusable. aria-hidden takes content out of the screen-reader
+ * tree but does NOT remove it from the tab order, so a button behind the veil would still be
+ * reachable by keyboard while invisible; `inert` would fix that but isn't reliable in React 18.
+ * Callers drop their interactive bits instead (see StatsBoard's `locked` prop). */
+function GuestGate({
+  locked,
+  what,
+  children,
+}: {
+  locked: boolean;
+  what: 'stats' | 'achievements';
+  children: React.ReactNode;
+}) {
+  if (!locked) return <>{children}</>;
+  return (
+    <div className="guest-gate">
+      <div className="guest-gate-behind" aria-hidden="true">
+        {children}
+      </div>
+      <div className="guest-gate-veil">
+        <LockGlyph />
+        <p className="guest-gate-copy">Link your account to Google to track {what}</p>
+      </div>
+    </div>
+  );
+}
+
+function LockGlyph() {
+  return (
+    <svg className="guest-gate-lock" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
+      <path
+        d="M7 10V7a5 5 0 0 1 10 0v3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      <rect x="4" y="10" width="16" height="11" rx="2.5" fill="currentColor" />
+      <circle cx="12" cy="15" r="1.6" fill="var(--color-surface)" />
+    </svg>
+  );
+}
+
 // --- Stats ------------------------------------------------------------------
 
 interface StatsBoardProps {
@@ -357,16 +454,19 @@ interface StatsBoardProps {
   streak: { current: number; longest: number } | null;
   filter: StatsFilter;
   onFilterChange: (f: StatsFilter) => void;
+  /** Rendered behind a GuestGate veil: drop the mode selector so nothing focusable sits behind
+   * it. See GuestGate for why that matters more than it looks. */
+  locked?: boolean;
 }
 
-function StatsBoard({ stats, streak, filter, onFilterChange }: StatsBoardProps) {
+function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: StatsBoardProps) {
   const filterOptions: { id: StatsFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'multiplayer', label: 'Multiplayer' },
     { id: 'solo', label: 'Solo' },
   ];
 
-  const modeSelector = (
+  const modeSelector = locked ? null : (
     <div className="segmented">
       {filterOptions.map((o) => (
         <button

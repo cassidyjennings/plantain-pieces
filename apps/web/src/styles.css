@@ -3200,6 +3200,49 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   font-weight: 700;
 }
 
+/* Guest gate — stats/achievements locked behind linking a Google account.
+   The real panel stays rendered underneath so the prompt reads as "claim this", not "nothing
+   here". Nothing inside .guest-gate-behind is focusable (see the GuestGate comment in
+   Profile.tsx), so aria-hidden is enough to keep it off both keyboard and screen-reader paths —
+   pointer-events: none only covers the mouse. */
+.guest-gate {
+  position: relative;
+}
+.guest-gate-behind {
+  filter: blur(5px) saturate(0.6);
+  opacity: 0.4;
+  pointer-events: none;
+  user-select: none;
+}
+.guest-gate-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+.guest-gate-lock {
+  color: var(--color-secondary);
+  flex: none;
+  /* The panel behind is already dimmed; a soft glow keeps the padlock legible over whichever
+     stat tile happens to sit under it without needing a solid backing plate. */
+  filter: drop-shadow(0 2px 10px var(--color-bg));
+}
+.guest-gate-copy {
+  margin: 0;
+  max-width: 26ch;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-small);
+  line-height: 1.35;
+  color: var(--color-text-primary);
+  text-shadow: 0 1px 8px var(--color-bg), 0 1px 3px var(--color-bg);
+}
+
 /* Achievements */
 .achievement-grid {
   display: grid;

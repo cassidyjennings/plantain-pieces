@@ -1,5 +1,11 @@
-import type { AvatarConfig, AchievementType } from '@plantain/shared';
+import {
+  type AvatarConfig,
+  type AchievementType,
+  DEFAULT_AVATAR_CONFIG,
+  normalizeAvatarConfig,
+} from '@plantain/shared';
 import { supabase } from './supabase.js';
+import { fetchMyCustomWordSets } from './dictionaries.js';
 
 /** Owner-scoped reads gated by RLS (no Worker round-trip) — mirrors lib/dictionaries.ts.
  * Writes (update/delete/summary) go through the Worker; see lib/api.ts. */
@@ -125,6 +131,38 @@ export async function fetchMyStats(mode?: GameMode): Promise<ProfileStatsRow | n
   const { data, error } = await supabase.from('profile_stats').select('*').eq('profile_id', id);
   if (error) return null;
   return aggregateStats(data as ProfileStatsRow[]);
+}
+
+/** Same auto-name shape handle_new_user() stamps on every fresh auth user. */
+const AUTO_GUEST_NAME = /^Guest-[0-9a-f]{4}$/i;
+
+/**
+ * Does the current guest hold anything that would be lost by signing in as a different account?
+ *
+ * Drives the sign-in strategy: with progress we attempt an identity LINK (keeps this guest row
+ * and everything on it), which is worth it despite costing a second OAuth round-trip when the
+ * Google account turns out to already exist. Without progress a plain sign-in is strictly
+ * better — one account-picker click, and the empty guest is simply abandoned.
+ *
+ * Reads the SERVER's display_name deliberately, not the store's: the store falls back to an
+ * origin-wide localStorage cache that a returning user carries between tabs, so trusting it
+ * would make nearly every fresh guest look like it had progress and reintroduce the double
+ * prompt this check exists to remove.
+ */
+export async function guestHasProgress(): Promise<boolean> {
+  const [profile, stats, sets] = await Promise.all([
+    fetchMyProfile(),
+    fetchMyStats(),
+    fetchMyCustomWordSets().catch(() => []),
+  ]);
+  if (!profile) return false;
+  if ((stats?.games_played ?? 0) > 0) return true;
+  if (sets.length > 0) return true;
+  if (!AUTO_GUEST_NAME.test(profile.display_name)) return true;
+  const avatar = normalizeAvatarConfig(profile.avatar_config);
+  return (['base', 'hat', 'glasses', 'hair'] as const).some(
+    (slot) => avatar[slot] !== DEFAULT_AVATAR_CONFIG[slot],
+  );
 }
 
 export async function fetchMyAchievements(): Promise<AchievementRow[]> {

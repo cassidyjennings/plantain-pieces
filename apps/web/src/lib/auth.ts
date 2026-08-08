@@ -1,5 +1,6 @@
 import type { UserIdentity } from '@supabase/supabase-js';
 import { supabase, ensureSession } from './supabase.js';
+import { clearCachedDisplayName } from '../store/sessionStore.js';
 
 /** OAuth guest→account upgrade + sign-out helpers. Providers are config-gated in
  * supabase/config.toml — when a provider is disabled (e.g. locally, with no real
@@ -9,10 +10,35 @@ import { supabase, ensureSession } from './supabase.js';
 
 export type UpgradeProvider = 'google';
 
+/** One-shot marker: a link attempt failed server-side and we already spent a fallback sign-in
+ * recovering from it. Lives in sessionStorage (it must survive the OAuth redirect, which is a
+ * real navigation) and so ALSO survives the same-tab reload that sign-out performs — which is
+ * why every deliberate sign-in click and every sign-out has to reset it. Leaving it set turns
+ * the next failed link into a raw "identity already exists" error with no recovery path. */
+const OAUTH_FALLBACK_GUARD_KEY = 'plantain-oauth-fallback-attempted';
+
+export function markOAuthFallbackAttempted(): void {
+  sessionStorage.setItem(OAUTH_FALLBACK_GUARD_KEY, '1');
+}
+
+export function oauthFallbackAttempted(): boolean {
+  return sessionStorage.getItem(OAUTH_FALLBACK_GUARD_KEY) !== null;
+}
+
+export function clearOAuthFallbackGuard(): void {
+  sessionStorage.removeItem(OAUTH_FALLBACK_GUARD_KEY);
+}
+
 /** Sign out the current session, then immediately start a fresh anonymous guest
  * session (the app always requires a session). Returns the new guest's profile id. */
 export async function signOut(): Promise<string> {
   await supabase.auth.signOut();
+  // The next session is a brand-new anonymous guest, so drop every piece of per-origin auth
+  // scratch state that would otherwise be inherited across the identity boundary: the cached
+  // display name (the signed-out account's name showing up on the guest) and the fallback
+  // guard (making the next sign-in attempt dead-end on a raw link error).
+  clearCachedDisplayName();
+  clearOAuthFallbackGuard();
   const session = await ensureSession();
   return session.user.id;
 }

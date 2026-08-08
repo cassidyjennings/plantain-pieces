@@ -62,6 +62,11 @@ type StatsFilter = 'all' | GameMode;
 export default function Profile() {
   const navigate = useNavigate();
   const isGuest = useSessionStore((s) => s.isGuest);
+  const profileHydrated = useSessionStore((s) => s.profileHydrated);
+  // isGuest starts optimistically true until hydrateProfile confirms it from the server; locking
+  // on the raw flag before that resolves would misrepresent a linked account as a guest and hide
+  // their real stats/achievements behind the veil.
+  const guestGateLocked = isGuest && profileHydrated;
   const [tab, setTab] = useState<Tab>('overview');
   const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
   const [stats, setStats] = useState<ProfileStatsRow | null>(null);
@@ -106,18 +111,18 @@ export default function Profile() {
       <div className="profile-content">
         {tab === 'overview' && <Overview />}
         {tab === 'stats' && (
-          <GuestGate locked={isGuest} what="stats">
+          <GuestGate locked={guestGateLocked} what="stats">
             <StatsBoard
               stats={stats}
               streak={streak}
               filter={statsFilter}
               onFilterChange={setStatsFilter}
-              locked={isGuest}
+              locked={guestGateLocked}
             />
           </GuestGate>
         )}
         {tab === 'achievements' && (
-          <GuestGate locked={isGuest} what="achievements">
+          <GuestGate locked={guestGateLocked} what="achievements">
             <AchievementGrid achievements={achievements} />
           </GuestGate>
         )}

@@ -7,6 +7,11 @@ interface SessionState {
   displayName: string;
   avatarConfig: AvatarConfig;
   isGuest: boolean;
+  /** True once hydrateProfile has confirmed isGuest from the server at least once. Gates like
+   * GuestGate must wait for this before locking content — isGuest starts optimistically true,
+   * so locking on it before hydration confirms it would misrepresent a linked account (whose
+   * hydrate call is still in flight, or failed) as a guest and hide their real stats. */
+  profileHydrated: boolean;
   authReady: boolean;
   xtinaRole: 'owner' | 'partner' | null;
   xtinaEnabled: boolean;
@@ -16,7 +21,8 @@ interface SessionState {
   setXtinaEnabled: (enabled: boolean) => void;
   /** Load the persisted profile (name/avatar/guest status) from the server after auth.
    * A returning guest who typed a name last session but whose profile still holds the
-   * auto 'Guest-xxxx' default keeps the locally-cached name. */
+   * auto 'Guest-xxxx' default keeps the locally-cached name. Retries on failure so a transient
+   * fetch error doesn't permanently strand profileHydrated at false. */
   hydrateProfile: () => Promise<void>;
 }
 
@@ -40,6 +46,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   displayName: localStorage.getItem(STORAGE_KEY) ?? '',
   avatarConfig: DEFAULT_AVATAR_CONFIG,
   isGuest: true,
+  profileHydrated: false,
   authReady: false,
   xtinaRole: null,
   xtinaEnabled: false,
@@ -52,7 +59,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setAvatarConfig: (config) => set({ avatarConfig: normalizeAvatarConfig(config) }),
   setXtinaEnabled: (xtinaEnabled) => set({ xtinaEnabled }),
   hydrateProfile: async () => {
-    const profile = await fetchMyProfile();
+    let profile = await fetchMyProfile();
+    for (let attempt = 0; !profile && attempt < 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      profile = await fetchMyProfile();
+    }
     if (!profile) return;
     const cached = get().displayName.trim();
     const serverName = profile.display_name;
@@ -67,6 +78,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       displayName,
       avatarConfig: normalizeAvatarConfig(profile.avatar_config),
       isGuest: profile.is_guest,
+      profileHydrated: true,
       xtinaRole: profile.xtina_role ?? null,
       xtinaEnabled: profile.xtina_enabled ?? false,
     });

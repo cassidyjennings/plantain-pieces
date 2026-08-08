@@ -43,8 +43,8 @@ export interface ProfileStatsRow {
   fastest_peel_ms: number | null;
   rarest_word: string | null;
   rarest_word_score: number;
-  first_letters: string;
-  choke_count: number;
+  best_peel_streak: number;
+  first_letter_counts: Record<string, number>;
 }
 
 export interface AchievementRow {
@@ -67,19 +67,18 @@ export async function fetchMyProfile(): Promise<ProfileRow | null> {
 }
 
 /** Merges multiple per-mode rows into one aggregate: sums the additive counters, min/max the
- * extremal ones, and unions first_letters. Used for the Stats tab's default "All modes" view. */
+ * extremal ones, and unions first_letter_counts. Used for the Stats tab's default "All modes" view. */
 function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
   if (rows.length === 0) return null;
   if (rows.length === 1) return rows[0];
-
-  const letterSet = new Set<string>();
-  for (const r of rows) for (const ch of r.first_letters) letterSet.add(ch);
 
   let longest: ProfileStatsRow['longest_word'] = null;
   let longestLen = 0;
   let rarest: ProfileStatsRow['rarest_word'] = null;
   let rarestScore = 0;
   let fastestPeel: number | null = null;
+  let bestStreak = 0;
+  const letterCounts: Record<string, number> = {};
   for (const r of rows) {
     if (r.longest_word_length > longestLen) {
       longestLen = r.longest_word_length;
@@ -91,6 +90,10 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     }
     if (r.fastest_peel_ms != null && (fastestPeel == null || r.fastest_peel_ms < fastestPeel)) {
       fastestPeel = r.fastest_peel_ms;
+    }
+    bestStreak = Math.max(bestStreak, r.best_peel_streak);
+    for (const [letter, count] of Object.entries(r.first_letter_counts)) {
+      letterCounts[letter] = (letterCounts[letter] ?? 0) + count;
     }
   }
 
@@ -108,8 +111,8 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     fastest_peel_ms: fastestPeel,
     rarest_word: rarest,
     rarest_word_score: rarestScore,
-    first_letters: [...letterSet].sort().join(''),
-    choke_count: rows.reduce((sum, r) => sum + r.choke_count, 0),
+    best_peel_streak: bestStreak,
+    first_letter_counts: letterCounts,
   };
 }
 

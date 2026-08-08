@@ -1846,8 +1846,13 @@ button:disabled {
     linear-gradient(160deg, #ece0be 0, #e0cfa4 55%, #d2bc8e 100%);
   background-size: 200px 200px, cover, cover, cover, cover, cover;
   background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='580' height='640' preserveAspectRatio='none'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013 0.024' numOctaves='4' seed='9' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='16' y='16' width='548' height='608' rx='5' fill='%23fff' filter='url(%23r)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='580' height='640' preserveAspectRatio='none'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013 0.024' numOctaves='4' seed='9' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='16' y='16' width='548' height='608' rx='5' fill='%23fff' filter='url(%23r)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  /* Top inset is 0, not 16 like the other 3 sides: the torn-edge notch there is what let the
+     backdrop peek through as a gap under the tabs (see .journal-tabs below) whenever this box
+     rendered taller than the mask's 640px reference height. Flush to the box's own top edge, the
+     paper can't ever fall short of the tabs — displacement still wiggles the boundary, just
+     bounded so it can't dip below y=0. */
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='580' height='640' preserveAspectRatio='none'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013 0.024' numOctaves='4' seed='9' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='16' y='0' width='548' height='624' rx='5' fill='%23fff' filter='url(%23r)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='580' height='640' preserveAspectRatio='none'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013 0.024' numOctaves='4' seed='9' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='22' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='16' y='0' width='548' height='624' rx='5' fill='%23fff' filter='url(%23r)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 
 /* Binding holes down the torn-off spine edge. */
@@ -2059,6 +2064,14 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   background: #f7eeda;
 }
 
+/* The stepper's number is unstyled elsewhere (--color-text-primary, tuned for the dark jungle
+   surfaces) and reads as near-white on this tan page — same ink-on-parchment gap as the .hint/
+   .field overrides above, just missed because WordLengthStepper is shared with dark-surface
+   screens (Lobby/solo setup) where the default color is correct. */
+.journal-page .length-stepper-value {
+  color: #33280f;
+}
+
 /* The app's danger red is pitched for a near-black background; on tan it needs to go darker
    to stay legible. */
 .journal-page .error,
@@ -2076,6 +2089,16 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
 .journal-section h3:first-child {
   margin-top: 0;
+}
+
+/* WordlistEditor/DictionaryChecklist each wrap their own piece (min length, dictionaries) in a
+   separate .journal-section, nested one after another inside the outer preset-editing section.
+   Each inner h3 is :first-child of ITS OWN section (rule above), so its top margin zeroes out —
+   with no margin on .journal-section itself, adjacent sections collapse straight into each other
+   with no visible gap between them (or after the "Preset name" field above the first one). */
+.journal-section + .journal-section,
+.field + .journal-section {
+  margin-top: var(--space-4);
 }
 
 .journal-readonly-note {
@@ -2339,6 +2362,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
 /* Lobby / solo setup: the "Wordlist Settings" group. A header, an always-visible length

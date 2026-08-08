@@ -8,6 +8,29 @@ Two tiles on the Profile Stats tab (`Choke rate`, `Alphabet letters`) are being 
 more interesting ones: `Best peel streak` and `Favorite starting letter`. This is a stats-content
 change, not a bug fix — unrelated to the same-day `profile_stats.mode` CHECK constraint fix.
 
+## Addendum: bundled fix — `submit_game_summary` must also skip xtina
+
+Discovered while re-reading `archive_game` for this work: `archive_game` is actually a thin
+wrapper (`20260805000002_xtina_deal.sql`) that explicitly early-returns for `mode = 'xtina'`
+rooms — "an xtina game must not touch lifetime stats, the play streak, or achievements" — without
+ever calling `_archive_game_impl`, the function that does the `profile_stats` insert. So the
+constraint violation fixed by `20260808000001` never actually fires from `archive_game`.
+
+It fires from `submit_game_summary` instead, which was **not** updated by the xtina migration and
+still unconditionally does `insert into profile_stats (profile_id, mode, ...) values (..., v_room.mode, ...)`
+with no xtina guard. Now that the constraint accepts `'xtina'` as a value, this function would
+start successfully writing xtina games' word stats (`total_words`, `longest_word`, `first_letters`,
+achievements like `word_nerd`/`alphabet_soup`) into `profile_stats` — while `archive_game` still
+correctly refuses to write anything else for the same game. That's a half-counted row, directly
+contradicting `archive_game`'s documented intent.
+
+**Fix, bundled into this plan**: add the same skip-if-xtina guard to `submit_game_summary` that
+`archive_game` already has — early-return (still marking `room_players.summary_applied = true` so
+it doesn't retry forever) when the room's mode is `'xtina'`, before touching `profile_stats` at
+all. This makes xtina contribute zero stats end-to-end, matching the existing design intent, and
+is a natural fit for this plan since `submit_game_summary` is already being modified here to add
+the first-letter tally.
+
 ## Scope
 
 - `profile_stats` schema: drop `choke_count`, add `best_peel_streak` and `first_letter_counts`.

@@ -220,3 +220,123 @@ begin
   return jsonb_build_object('ok', true, 'roomId', p_room_id, 'alreadyApplied', false);
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 5. submit_game_summary — add the xtina guard archive_game already has (defense-in-depth; the
+--    Worker already skips calling this RPC at all for xtina rooms), and tally first letters into
+--    first_letter_counts alongside the existing first_letters set.
+-- ---------------------------------------------------------------------------
+create or replace function public.submit_game_summary(
+  p_room_id uuid, p_profile uuid, p_summary jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_room public.rooms;
+  v_rp public.room_players;
+  v_words text[];
+  v_invalid text[];
+  v_valid_words text[];
+  v_word_count int;
+  v_total_len bigint;
+  v_longest text;
+  v_longest_len int;
+  v_rarest text;
+  v_rarest_score int;
+  v_new_letters text;
+  v_letter_tally jsonb;
+  v_stat public.profile_stats;
+  v_merged text;
+begin
+  select * into v_room from public.rooms where id = p_room_id;
+  if not found then raise exception 'ROOM_NOT_FOUND' using errcode = 'P0002'; end if;
+
+  if v_room.mode = 'xtina' then
+    update public.room_players set summary_applied = true
+      where room_id = p_room_id and profile_id = p_profile;
+    return jsonb_build_object('ok', true, 'longestWord', null, 'rarestWord', null, 'wordCount', 0);
+  end if;
+
+  select * into v_rp from public.room_players
+    where room_id = p_room_id and profile_id = p_profile
+    for update;
+  if not found then raise exception 'NOT_IN_ROOM' using errcode = 'P0002'; end if;
+
+  select coalesce(array_agg(upper(w)), '{}') into v_words
+    from jsonb_array_elements_text(coalesce(p_summary -> 'words', '[]'::jsonb)) w
+    where upper(w) ~ '^[A-Z]{2,20}$';
+
+  v_invalid := public._find_invalid_words_cfg(coalesce(v_room.dictionary_config, '{}'::jsonb), v_words);
+  select coalesce(array_agg(w), '{}') into v_valid_words
+    from unnest(v_words) w
+    where not (w = any(v_invalid));
+
+  v_word_count := coalesce(array_length(v_valid_words, 1), 0);
+  select coalesce(sum(char_length(x)), 0) into v_total_len from unnest(v_valid_words) x;
+
+  select x into v_longest from unnest(v_valid_words) x order by char_length(x) desc, x limit 1;
+  v_longest_len := coalesce(char_length(v_longest), 0);
+
+  select x, public.word_rarity(x) into v_rarest, v_rarest_score
+    from unnest(v_valid_words) x order by public.word_rarity(x) desc, x limit 1;
+  v_rarest_score := coalesce(v_rarest_score, 0);
+
+  select string_agg(distinct substr(x, 1, 1), '' order by substr(x, 1, 1))
+    into v_new_letters from unnest(v_valid_words) x;
+  v_new_letters := coalesce(v_new_letters, '');
+
+  select coalesce(jsonb_object_agg(letter, cnt), '{}'::jsonb) into v_letter_tally
+    from (
+      select substr(x, 1, 1) as letter, count(*) as cnt
+      from unnest(v_valid_words) x
+      group by substr(x, 1, 1)
+    ) g;
+
+  if not v_rp.summary_applied then
+    select * into v_stat from public.profile_stats
+      where profile_id = p_profile and mode = v_room.mode;
+    if not found then
+      insert into public.profile_stats (profile_id, mode, updated_at)
+      values (p_profile, v_room.mode, now());
+      select * into v_stat from public.profile_stats
+        where profile_id = p_profile and mode = v_room.mode;
+    end if;
+
+    select string_agg(c, '' order by c) into v_merged from (
+      select distinct unnest(string_to_array(coalesce(v_stat.first_letters, '') || v_new_letters, null)) as c
+    ) s where c ~ '^[A-Z]$';
+
+    update public.profile_stats set
+      total_words = v_stat.total_words + v_word_count,
+      total_word_length = v_stat.total_word_length + v_total_len,
+      longest_word = case when v_longest_len > v_stat.longest_word_length then v_longest else v_stat.longest_word end,
+      longest_word_length = greatest(v_stat.longest_word_length, v_longest_len),
+      rarest_word = case when v_rarest_score > v_stat.rarest_word_score then v_rarest else v_stat.rarest_word end,
+      rarest_word_score = greatest(v_stat.rarest_word_score, v_rarest_score),
+      first_letters = coalesce(v_merged, v_stat.first_letters),
+      first_letter_counts = public._merge_letter_counts(v_stat.first_letter_counts, v_letter_tally),
+      updated_at = now()
+    where profile_id = p_profile and mode = v_room.mode;
+
+    update public.room_players set summary_applied = true where id = v_rp.id;
+
+    if exists (select 1 from unnest(v_valid_words) x where public.word_rarity(x) >= 30) then
+      perform public._unlock_achievement(p_profile, 'word_nerd',
+        jsonb_build_object('roomId', p_room_id, 'word', v_rarest, 'score', v_rarest_score));
+    end if;
+    if coalesce(char_length(v_merged), 0) >= 26 then
+      perform public._unlock_achievement(p_profile, 'alphabet_soup', jsonb_build_object('roomId', p_room_id));
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'longestWord', v_longest,
+    'rarestWord', v_rarest,
+    'wordCount', v_word_count
+  );
+end;
+$$;

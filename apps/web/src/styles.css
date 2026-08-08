@@ -545,23 +545,259 @@ button:disabled {
   padding-right: env(safe-area-inset-right);
 }
 
+/* "Module dock" — three physical cards (Bunch / roster or elapsed / actions) floating on the
+   dark ground, replacing the old single wrapping pill row. The bar itself never wraps or
+   scrolls; only the roster card is flexible (flex:1; min-width:0). On narrow screens the cards
+   themselves reflow into two stacked rows via flex-wrap + explicit `order` below — see the
+   `max-width: 600px` block. */
 .game-topbar {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
-  gap: var(--space-6);
-  background: var(--color-surface);
-  padding: 14px 24px;
+  gap: var(--space-3);
+  background: var(--color-bg);
+  padding: 12px 16px;
   /* Clears a notch/Dynamic Island in portrait -- env() resolves to 0 on devices/browsers without
      one, so this is a no-op everywhere else. Longhand after the shorthand so it wins. */
-  padding-top: max(14px, env(safe-area-inset-top));
-  flex-wrap: wrap;
+  padding-top: max(12px, env(safe-area-inset-top));
+  flex-wrap: nowrap;
+}
+
+.topbar-card {
+  background: var(--color-surface);
+  border: 3px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.topbar-bunch-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
 }
 
 .bunch-status {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.topbar-roster-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px 20px;
+}
+
+/* flex-shrink:1 (the default), not 0 — a too-narrow roster (e.g. long real display names on a
+   5-player room) needs to squeeze names down to an ellipsis via .roster-player-name, the same
+   fix as .roster-chip's below, rather than the row silently pushing a player off the edge of
+   .topbar-roster-card's overflow:hidden. */
+.roster-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 14px 4px 4px;
+  min-width: 0;
+}
+
+.roster-player-self {
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-secondary);
+}
+
+.roster-player-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.roster-player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.roster-player-self .roster-player-name {
+  font-weight: 800;
+  color: var(--color-secondary);
+}
+
+.roster-player-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-faintest);
+}
+
+.roster-player-self .roster-player-count {
+  color: var(--color-text-faint);
+}
+
+.roster-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* More than 6 players (desktop chip mode) lays out as exactly 2 rows instead of squeezing every
+   chip down to an ellipsis -- past 6, the single-row shrink read as broken (names AND counts
+   crushed unreadable) rather than merely compact. A plain flex-wrap doesn't guarantee 2 rows —
+   at real (non-mock) name lengths it wrapped to 3-4 short rows instead, since each row only
+   fits however many chips happen to reach the card's width. Grid with a fixed 2-row template
+   and grid-auto-flow:column pins the row count regardless of width; the card scrolls
+   horizontally in the rare case 2 full-size rows still don't fit, rather than 3+ vertical rows
+   or truncated content. */
+.roster-chip-row-wrap {
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  column-gap: 8px;
+  row-gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.roster-chip-row-wrap .roster-chip-name {
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* flex-shrink:1 (the default) so a too-narrow roster (6 or fewer chips) squeezes chips down to
+   `roster-chip-name`'s ellipsis rather than the row's own box shrinking underneath fixed-width
+   chips and clipping the tail of them off entirely -- see the 8-player desktop test that caught
+   this: with flex-shrink:0 here, chips 4-8 simply vanished past .roster-chip-row's
+   overflow:hidden edge. Past 6 players, .roster-chip-row-wrap above takes over instead. */
+.roster-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-inner);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+
+.roster-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 12px;
+}
+
+.roster-chip-count {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.roster-chip-self {
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-secondary);
+  color: var(--color-secondary);
+  font-weight: 800;
+}
+
+.roster-chip-self .roster-chip-count {
+  color: var(--color-text-primary);
+}
+
+.roster-chip-overflow {
+  color: var(--color-text-faintest);
+}
+
+/* Who peeled last — the one bit of cross-player state worth carrying in the top bar, since a
+   peel is the event that just changed everyone's rack. Plain inline text (no pill background)
+   in the module-dock design, unlike the old standalone pill it replaces. */
+.last-peel-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-faintest);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.last-peel-inline strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-secondary);
+}
+
+.topbar-elapsed-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  padding: 8px 20px;
+}
+
+.elapsed-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-faintest);
+}
+
+.elapsed-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+
+.topbar-actions-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  flex-shrink: 0;
+}
+
+.topbar-actions-card button {
+  padding: 12px 20px;
+  font-size: 15px;
+}
+
+/* Mobile roster's meta row: "TILES IN HAND" on the left, last peel on the right. */
+.roster-meta-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.roster-meta-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-faintest);
 }
 
 /* The Bunch meter is a single long, curved plantain — no groove/track, just the fruit sitting
@@ -685,40 +921,6 @@ button:disabled {
     animation: none;
     opacity: 0;
   }
-}
-
-.player-pills {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.player-pill {
-  background: var(--color-surface-inner);
-  border-radius: var(--radius-pill);
-  padding: 6px 14px;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: var(--text-small);
-  color: var(--color-text-muted);
-}
-
-/* The local player's own pill — distinguished from opponents' so it reads as "this one's you"
-   at a glance in a row of otherwise-identical pills. */
-.player-pill-self {
-  background: var(--color-surface-raised);
-  color: var(--color-secondary);
-  border: 1px solid var(--color-secondary);
-}
-
-.game-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.game-actions button {
-  padding: 12px 20px;
-  font-size: 15px;
 }
 
 /* Wraps the board viewport + its floating zoom controls so the controls can anchor to a
@@ -2659,24 +2861,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   border-color: var(--color-danger);
 }
 
-/* Who peeled last — the one bit of cross-player state worth carrying in the top bar, since a
-   peel is the event that just changed everyone's rack. */
-.last-peel-pill {
-  background: var(--color-surface-inner);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 5px 14px;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: var(--text-caption);
-  color: var(--color-text-faint);
-  white-space: nowrap;
-}
-
-.last-peel-pill strong {
-  color: var(--color-secondary);
-}
-
 /* Desktop scale-up: the top bar and tray are sized for compact/mobile viewports by default,
    so give both more breathing room and bigger touch targets once there's room for it. */
 @media (min-width: 1024px) {
@@ -2692,12 +2876,20 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     zoom: 1.3;
   }
 
-  .player-pill {
-    padding: 8px 18px;
+  .roster-player-name {
     font-size: 1rem;
   }
 
-  .game-actions button {
+  .roster-chip {
+    padding: 6px 14px;
+    font-size: 14px;
+  }
+
+  .roster-chip-count {
+    font-size: 17px;
+  }
+
+  .topbar-actions-card button {
     padding: 16px 26px;
     font-size: 17px;
   }
@@ -2742,23 +2934,78 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
    ended up cramped. Text labels hide (not remove: aria-label on the buttons keeps them
    accessible) and tooltips drop entirely, since a touchscreen has no hover to reveal them. */
 @media (max-width: 600px) {
+  /* Two stacked rows instead of one wrapping row: Bunch + actions share row 1 (they keep DOM
+     order via `order`), the roster card is forced to a full-width second row. Cards drop their
+     ambient shadow but keep the 3px border/20px radius. */
   .game-topbar {
-    padding: 8px 12px;
-    padding-top: max(8px, env(safe-area-inset-top));
-    gap: var(--space-2);
+    flex-wrap: wrap;
+    padding: 10px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    gap: 8px;
+  }
+
+  .topbar-card {
+    box-shadow: none;
   }
 
   .bunch-plantain {
     --bunch-w: 130px;
   }
 
-  .game-actions {
-    gap: var(--space-1);
+  .topbar-bunch-card {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 12px;
   }
 
-  .game-actions button {
-    padding: 8px 12px;
+  .topbar-actions-card {
+    order: 2;
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  /* Dump!/Leave must stay >=44px tall as touch targets — grown via padding, not font-size, per
+     the handoff. */
+  .topbar-actions-card button {
+    padding: 16px 12px;
     font-size: 13px;
+  }
+
+  .topbar-roster-card,
+  .topbar-elapsed-card {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .topbar-roster-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .roster-chip-row {
+    gap: 6px;
+  }
+
+  .roster-chip {
+    padding: 4px 10px;
+    gap: 5px;
+    font-size: 12px;
+    flex: 0 0 auto;
+  }
+
+  .roster-chip-count {
+    font-size: 14px;
+  }
+
+  .last-peel-inline {
+    font-size: 11px;
+  }
+
+  .last-peel-inline strong {
+    font-size: 11px;
   }
 
   .rack-dock {
@@ -2788,13 +3035,10 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     flex-shrink: 0;
   }
 
-  /* Was scoped to the TRAY toolbar only, leaving Dump's tooltip (.game-actions .tray-tool-group)
-     exposed -- it relies on :focus-within from a non-form-control span, whose tap-to-focus
-     behavior is inconsistent across mobile browsers, so it could end up effectively
-     unreachable by touch anyway. Same hide-below-mobile treatment as the tray toolbar's own
-     tooltips: Dump's disabled state (no tile selected) already explains itself without it. */
-  .tray-toolbar .info-tooltip,
-  .game-actions .info-tooltip {
+  /* The tray toolbar's own tooltips (Collapse duplicates, Recall invalid) still rely on
+     :focus-within from a non-form-control span, whose tap-to-focus behavior is inconsistent
+     across mobile browsers, so they could end up effectively unreachable by touch anyway. */
+  .tray-toolbar .info-tooltip {
     display: none;
   }
 
@@ -2833,19 +3077,30 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     --bunch-w: 120px;
   }
 
-  .player-pills {
+  .topbar-bunch-card,
+  .topbar-roster-card,
+  .topbar-elapsed-card,
+  .topbar-actions-card {
+    padding: 6px 12px;
+  }
+
+  .topbar-roster-card {
+    gap: 8px;
+  }
+
+  .roster-chip-row {
     gap: 4px;
   }
 
-  .player-pill {
-    padding: 4px 10px;
+  .roster-player {
+    padding: 2px 8px 2px 2px;
   }
 
-  .game-actions {
+  .topbar-actions-card {
     gap: 4px;
   }
 
-  .game-actions button {
+  .topbar-actions-card button {
     padding: 6px 12px;
     font-size: 12px;
   }
@@ -3737,14 +3992,3 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   }
 }
 
-/* Game topbar elapsed-time pill (Timed solo mode) */
-.elapsed-time-pill {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: var(--text-small);
-  background: var(--color-surface-inner);
-  border: 2px solid var(--color-secondary);
-  border-radius: var(--radius-pill);
-  padding: 6px 14px;
-  color: var(--color-text-primary);
-}

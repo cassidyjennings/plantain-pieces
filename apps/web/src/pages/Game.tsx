@@ -42,17 +42,43 @@ import Tray from '../components/Tray.js';
 import DragGhost from '../components/DragGhost.js';
 import BunchGraphic from '../components/BunchGraphic.js';
 import BigCallout from '../components/BigCallout.js';
-import InfoTooltip from '../components/InfoTooltip.js';
+import Avatar from '../components/Avatar.js';
 import ZoomIcon from '../components/ZoomIcon.js';
 import BoardModeIcon from '../components/BoardModeIcon.js';
 import SliceFlyLayer, { type SliceFlyHandle } from '../components/SliceFlyLayer.js';
 
-/** mm:ss for the Timed solo mode elapsed-time pill. */
+/** mm:ss for the Timed solo mode elapsed-time card. */
 function formatElapsed(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Matches the top bar's own `max-width: 600px` breakpoint below — the roster card switches from
+// avatar entries to a full-width chip row at this width, which is different DOM content (a
+// "Tiles in hand" meta line, a +N overflow chip) and can't be done with a pure CSS reflow of the
+// same markup the way the rest of this file's responsive tweaks are.
+const MOBILE_TOPBAR_QUERY = '(max-width: 600px)';
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const handler = () => setMatches(mql.matches);
+    handler();
+    mql.addEventListener('change', handler);
+    // Belt-and-suspenders alongside the 'change' listener above: some embedded/older mobile
+    // webviews don't reliably fire MediaQueryList's 'change' event on a live resize or rotation.
+    window.addEventListener('resize', handler);
+    return () => {
+      mql.removeEventListener('change', handler);
+      window.removeEventListener('resize', handler);
+    };
+  }, [query]);
+  return matches;
 }
 
 const CALLOUT_MS = 900;
@@ -1293,48 +1319,114 @@ export default function Game() {
         ? 'You'
         : (players.find((p) => p.profile_id === lastPeelBy)?.display_name ?? 'Someone');
 
+  // The mobile roster layout always reads as chips (never avatars), regardless of headcount —
+  // it's a distinct DOM shape (a "Tiles in hand" meta line + a capped, overflow-summarized chip
+  // row), not just a smaller version of the desktop one, so it can't be driven by showAvatars.
+  const isMobileTopbar = useMediaQuery(MOBILE_TOPBAR_QUERY);
+  const showAvatars = !isMobileTopbar && activePlayers.length <= 5;
+  const MOBILE_CHIP_LIMIT = 4;
+  const mobileVisiblePlayers = activePlayers.slice(0, MOBILE_CHIP_LIMIT);
+  const mobileOverflowCount = activePlayers.length - mobileVisiblePlayers.length;
+
+  function playerCount(p: PublicPlayer): number {
+    // Self uses the live local count (no debounce lag on your own number); everyone else uses
+    // what THEY last reported, falling back to the raw inventory size (tile_count) until their
+    // client reports at least once this game.
+    return p.profile_id === profileId ? remainingCount : (p.remaining_count ?? p.tile_count);
+  }
+
+  function renderRosterChip(p: PublicPlayer) {
+    const isSelf = p.profile_id === profileId;
+    return (
+      <span key={p.profile_id} className={`roster-chip${isSelf ? ' roster-chip-self' : ''}`}>
+        <span className="roster-chip-name">
+          {isSelf ? 'You' : p.display_name}
+          {!p.connected ? ' (disconnected)' : ''}
+        </span>
+        <span className="roster-chip-count">{playerCount(p)}</span>
+      </span>
+    );
+  }
+
+  const lastPeelInline = (
+    <span className="last-peel-inline">
+      Last peel<strong>{lastPeelName ?? '-'}</strong>
+    </span>
+  );
+
   return (
     <div className="game-layout">
       <div className="game-topbar">
-        {room && (
-          <BunchGraphic
-            ref={plantainCutRef}
-            bunchCount={bunchCount}
-            startingBunchCount={startingBunchCount}
-            flashSignal={flashSignal}
-          />
+        <div className="topbar-card topbar-bunch-card">
+          {room && (
+            <BunchGraphic
+              ref={plantainCutRef}
+              bunchCount={bunchCount}
+              startingBunchCount={startingBunchCount}
+              flashSignal={flashSignal}
+            />
+          )}
+        </div>
+
+        {isSolo ? (
+          isTimed && (
+            <div className="topbar-card topbar-elapsed-card">
+              <span className="elapsed-label">Elapsed</span>
+              <span className="elapsed-value">{formatElapsed(elapsedMs)}</span>
+            </div>
+          )
+        ) : (
+          activePlayers.length > 0 && (
+            <div className="topbar-card topbar-roster-card">
+              {isMobileTopbar ? (
+                <>
+                  <div className="roster-meta-row">
+                    <span className="roster-meta-label">Tiles in hand</span>
+                    {lastPeelInline}
+                  </div>
+                  <div className="roster-chip-row">
+                    {mobileVisiblePlayers.map(renderRosterChip)}
+                    {mobileOverflowCount > 0 && (
+                      <span className="roster-chip roster-chip-overflow">+{mobileOverflowCount}</span>
+                    )}
+                  </div>
+                </>
+              ) : showAvatars ? (
+                <>
+                  {activePlayers.map((p) => {
+                    const isSelf = p.profile_id === profileId;
+                    return (
+                      <div key={p.profile_id} className={`roster-player${isSelf ? ' roster-player-self' : ''}`}>
+                        <Avatar config={p.avatar_config} size={34} />
+                        <div className="roster-player-info">
+                          <span className="roster-player-name">
+                            {isSelf ? 'You' : p.display_name}
+                            {!p.connected ? ' (disconnected)' : ''}
+                          </span>
+                          <span className="roster-player-count">{playerCount(p)} tiles</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {lastPeelInline}
+                </>
+              ) : (
+                <>
+                  <div className={`roster-chip-row${activePlayers.length > 6 ? ' roster-chip-row-wrap' : ''}`}>
+                    {activePlayers.map(renderRosterChip)}
+                  </div>
+                  {lastPeelInline}
+                </>
+              )}
+            </div>
+          )
         )}
-        <span className="last-peel-pill">
-          Last peel: <strong>{lastPeelName ?? '-'}</strong>
-        </span>
-        {isTimed && (
-          <span className="elapsed-time-pill">{formatElapsed(elapsedMs)}</span>
-        )}
-        {activePlayers.length > 0 && (
-          <div className="player-pills">
-            {activePlayers.map((p) => {
-              const isSelf = p.profile_id === profileId;
-              // Self uses the live local count (no debounce lag on your own number); everyone
-              // else uses what THEY last reported, falling back to the raw inventory size
-              // (tile_count) until their client reports at least once this game.
-              const count = isSelf ? remainingCount : (p.remaining_count ?? p.tile_count);
-              return (
-                <span key={p.profile_id} className={`player-pill${isSelf ? ' player-pill-self' : ''}`}>
-                  {isSelf ? 'You' : p.display_name}: {count}
-                  {!p.connected ? ' (disconnected)' : ''}
-                </span>
-              );
-            })}
-          </div>
-        )}
-        <div className="game-actions">
+
+        <div className="topbar-card topbar-actions-card">
           {!isXtina && (
-            <span className="tray-tool-group">
-              <button className="btn-tertiary" disabled={!selectedId} onClick={handleDump}>
-                Dump!
-              </button>
-              <InfoTooltip text="Select a tile in your tray first. Dump returns it to the Bunch face-down and draws you 3 new tiles in exchange." />
-            </span>
+            <button className="btn-tertiary" disabled={!selectedId} onClick={handleDump}>
+              Dump!
+            </button>
           )}
           <button type="button" className="btn-leave" onClick={handleLeave}>
             Leave

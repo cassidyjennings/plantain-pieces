@@ -495,15 +495,16 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
   }
   const avgLen = stats.total_words > 0 ? (stats.total_word_length / stats.total_words).toFixed(1) : '-';
   const winRate = stats.games_played > 0 ? Math.round((stats.games_won / stats.games_played) * 100) : 0;
-  // Solo games always end in a win (the only way not to finish is to leave, which isn't
-  // archived), so choke rate / win rate read as trivial there — the multiplayer-only stats
-  // below (win rate, choke rate) are hidden when filtered to solo.
+  // Peel streak is multiplayer-only by definition (best_peel_streak is never set for solo/xtina
+  // rows), so it's hidden on the solo filter alongside win rate — see the 2026-08-08 spec.
   const showCompetitiveStats = filter !== 'solo';
-  const chokeRate =
-    stats.games_played - stats.games_won > 0
-      ? Math.round((stats.choke_count / (stats.games_played - stats.games_won)) * 100)
-      : 0;
   const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '-';
+
+  const letterEntries = Object.entries(stats.first_letter_counts);
+  const maxLetterCount = letterEntries.reduce((max, [, count]) => Math.max(max, count), 0);
+  const favoriteLetters = maxLetterCount > 0
+    ? letterEntries.filter(([, count]) => count === maxLetterCount).map(([letter]) => letter).sort().join(', ')
+    : '-';
 
   const tiles: { label: string; value: string | number }[] = [
     { label: 'Games played', value: stats.games_played },
@@ -515,8 +516,10 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
     { label: 'Fastest peel', value: fastestPeel },
     { label: 'Tiles peeled', value: stats.total_peels },
     { label: 'Tiles dumped', value: stats.total_dumps },
-    { label: 'Alphabet letters', value: `${stats.first_letters.length}/26` },
-    ...(showCompetitiveStats ? [{ label: 'Choke rate', value: `${chokeRate}%` }] : []),
+    { label: 'Favorite starting letter', value: favoriteLetters },
+    ...(showCompetitiveStats
+      ? [{ label: 'Best peel streak', value: stats.best_peel_streak > 0 ? stats.best_peel_streak : '-' }]
+      : []),
   ];
 
   return (

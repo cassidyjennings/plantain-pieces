@@ -70,7 +70,19 @@ async function main() {
 
   const owner = await makeUser(`owner-${Date.now()}@example.test`);
   const opp = await makeUser(`opp-${Date.now()}@example.test`);
-  const mpRoom = (await client.query(`select public.create_room($1, 'Owner', null) as r`, [owner])).rows[0].r;
+
+  // Create a custom word set for submit_game_summary tests (hermetic, no dependency on seeded dictionary)
+  const wordSet = (await client.query(
+    `select public.create_custom_word_set($1, $2, $3::text[]) as r`,
+    [owner, 'smoke-test-words', ['APPLE', 'ANT', 'BAT', 'ANCHOR']],
+  )).rows[0].r;
+  const setId = wordSet.id;
+  const submitTestConfig = JSON.stringify({
+    minLength: 2, maxLength: null, baseEnabled: false, excludedTopics: [], customSetIds: [setId],
+  });
+
+  // Create mpRoom with the custom dictionary config (for submit_game_summary tests)
+  const mpRoom = (await client.query(`select public.create_room($1, 'Owner', $2::jsonb) as r`, [owner, submitTestConfig])).rows[0].r;
   const mpRoomId = mpRoom.roomId ?? mpRoom.room_id ?? mpRoom.id;
   await client.query(`select public.join_room($1, $2, 'Opp', false)`, [mpRoom.code, opp]);
   await client.query(`select public.start_game($1, $2)`, [mpRoomId, owner]);
@@ -120,7 +132,7 @@ async function main() {
 
   // A second room/game for the same player should ADD to the tally, not overwrite it.
   const opp2 = await makeUser(`opp2-${Date.now()}@example.test`);
-  const mpRoom2 = (await client.query(`select public.create_room($1, 'Owner', null) as r`, [owner])).rows[0].r;
+  const mpRoom2 = (await client.query(`select public.create_room($1, 'Owner', $2::jsonb) as r`, [owner, submitTestConfig])).rows[0].r;
   const mpRoomId2 = mpRoom2.roomId ?? mpRoom2.room_id ?? mpRoom2.id;
   await client.query(`select public.join_room($1, $2, 'Opp2', false)`, [mpRoom2.code, opp2]);
   await client.query(`select public.start_game($1, $2)`, [mpRoomId2, owner]);

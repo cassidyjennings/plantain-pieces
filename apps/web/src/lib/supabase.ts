@@ -23,9 +23,47 @@ if (import.meta.env.DEV) {
 }
 
 /**
- * Guest-first bootstrap: reuse a persisted session if one exists, otherwise
- * sign in anonymously. Called once at app startup.
+ * Holds the bootstrap while it runs, so two concurrent callers share one instead of each
+ * minting their own anonymous user.
  *
+ * React 18's StrictMode double-invokes mount effects in dev, so App's boot effect called
+ * ensureSession() twice in the same tick. Both awaited `INITIAL_SESSION`, both saw `null`,
+ * and both ran `signInAnonymously()` — producing two `auth.users` rows (and two `profiles`
+ * rows) milliseconds apart, with the second session silently replacing the first inside
+ * this module's shared `supabase` client. The visible symptom was three `406 Not
+ * Acceptable` (PGRST116, "The result contains 0 rows") responses on `/profile`:
+ * `fetchMyProfile()` resolves the id via an awaited `getUser()` and then issues the row
+ * query as a separate await, so the filtered id could still be user A while the attached
+ * JWT had already become user B — and `profiles_select_own` (`id = auth.uid()`) then
+ * matches nothing.
+ *
+ * StrictMode made it reproducible, but this is not merely a dev artifact: signOut() also
+ * calls ensureSession(), so any overlap with the boot call raced the same way in prod, and
+ * every extra anonymous user is a real row that only the 10-day guest sweep collects.
+ */
+let inFlightSession: Promise<Session> | null = null;
+
+/**
+ * Guest-first bootstrap: reuse a persisted session if one exists, otherwise sign in
+ * anonymously. Safe to call concurrently — overlapping callers share one bootstrap.
+ */
+export function ensureSession(): Promise<Session> {
+  // Dedupe only while a bootstrap is IN FLIGHT — deliberately not a permanent cache.
+  // signOut() calls this again on purpose to mint a brand-new guest, and that call is
+  // sequential (it awaits supabase.auth.signOut() first), so by then the slot is clear
+  // and it gets a genuine fresh bootstrap. Only truly concurrent callers share.
+  if (!inFlightSession) {
+    inFlightSession = bootstrapSession();
+    // Clear the slot once settled, whether it resolved or threw, so a failed boot can be
+    // retried rather than every later caller inheriting the same rejected promise.
+    void inFlightSession.finally(() => {
+      inFlightSession = null;
+    });
+  }
+  return inFlightSession;
+}
+
+/**
  * Waits for the SDK's own `INITIAL_SESSION` event rather than calling `getSession()`
  * directly. supabase-js processes an OAuth redirect's `#access_token=...` hash
  * asynchronously in the background right after the client is created (via
@@ -35,7 +73,7 @@ if (import.meta.env.DEV) {
  * identity that was just linked. `INITIAL_SESSION` fires exactly once, only after that
  * initial resolution (redirect-hash included) has completed.
  */
-export async function ensureSession(): Promise<Session> {
+async function bootstrapSession(): Promise<Session> {
   const session = await new Promise<Session | null>((resolve) => {
     const {
       data: { subscription },

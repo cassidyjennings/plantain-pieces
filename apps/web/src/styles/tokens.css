@@ -56,6 +56,12 @@
   --color-tile-valid-bg: #cde6b4;
   --color-tile-valid-border: #7fae57;
 
+  /* Bunch meter plantain — the logo's own drawing style */
+  --color-plantain-peel: #a8c94a;
+  --color-plantain-ink: #0f2f1e;
+  --color-plantain-flesh: #f4e79a;
+  --color-plantain-stem: #5c3d1e;
+
   /* Spacing scale (4px base) */
   --space-1: 4px;
   --space-2: 8px;

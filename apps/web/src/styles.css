@@ -604,11 +604,13 @@ button:disabled {
   box-shadow: var(--shadow-card);
 }
 
+/* Vertical padding stays tight here: every pixel this card claims comes straight out of
+   .board-area's flex:1 share, i.e. out of the space available to place tiles. */
 .topbar-bunch-card {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 18px;
+  padding: 4px 18px;
 }
 
 .bunch-status {
@@ -834,36 +836,37 @@ button:disabled {
   color: var(--color-text-faintest);
 }
 
-/* The Bunch meter is a single long, curved plantain — no groove/track, just the fruit sitting
-   directly on the top-bar surface. Height derives from width to preserve the design's 240:76
-   viewBox aspect ratio. */
+/* The Bunch meter is a single fat plantain in the logo's own drawing style, sliced away from the
+   tip as tiles are drawn — no groove/track, just the fruit sitting directly on the top-bar
+   surface. Height derives from width to preserve the ink-tight 232:62 viewBox aspect ratio (see
+   the VB_* constants in BunchPlantain.tsx — keep these two in sync).
+
+   aspect-ratio, NOT height:calc(width * 62/232): as a flex item the graphic can be shrunk below
+   --bunch-w on narrow screens, and a calc'd height stays pinned to the UNSHRUNK width. The box
+   then no longer matches the viewBox, the SVG letterboxes inside it (preserveAspectRatio is
+   deliberately left at its "meet" default here — the old meter stretched the artwork with
+   "none"), and .bunch-plantain-cut — positioned as a % of this box — drifts off the real cut
+   face that SliceFlyLayer launches from. aspect-ratio keeps box and viewBox identical at every
+   width, so the percentage mapping is exact. */
 .bunch-plantain {
-  --bunch-w: 200px;
+  --bunch-w: 176px;
   position: relative;
   width: var(--bunch-w);
-  height: calc(var(--bunch-w) * 76 / 240);
+  aspect-ratio: 232 / 62;
 }
 
-.bunch-plantain-body,
-.bunch-plantain-face {
+.bunch-plantain-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.bunch-plantain-face {
-  pointer-events: none;
-}
-
-.bunch-plantain-segments {
-  opacity: 0.26;
-}
-
-/* Zero-size anchor at the cut end; SliceFlyLayer reads its rect as each slice's launch point. */
+/* Zero-size anchor at the cut face; SliceFlyLayer reads its rect as each slice's launch point.
+   Positioned by the component from the same centreline/thickness math that draws the cut ellipse,
+   so it always sits exactly on the cut instead of a linear approximation. */
 .bunch-plantain-cut {
   position: absolute;
-  top: 50%;
   width: 1px;
   height: 1px;
   transform: translate(-50%, -50%);
@@ -879,6 +882,7 @@ button:disabled {
   background: #fffdf0;
   filter: blur(0.4px);
   pointer-events: none;
+  transform: translate(-50%, -50%);
   animation: cutFlash 320ms ease-out forwards;
 }
 
@@ -891,9 +895,31 @@ button:disabled {
   }
 }
 
-.bunch-label {
-  font-size: 12px;
-  color: var(--color-text-muted);
+.bunch-count-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bunch-count-number {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--color-secondary);
+  -webkit-text-stroke: 2px #0a1e12;
+  paint-order: stroke fill;
+}
+
+.bunch-count-number.is-low {
+  color: var(--color-accent);
+}
+
+.bunch-count-caption {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-text-faint);
 }
 
 /* The flying-slice overlay: fixed, above everything, never intercepts input. Slices are created

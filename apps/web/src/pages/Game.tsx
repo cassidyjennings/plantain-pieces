@@ -1463,7 +1463,7 @@ export default function Game() {
         <div className="zoom-controls">
           <button
             type="button"
-            className={`zoom-btn mode-btn${boardMode === 'select' ? ' active' : ''}`}
+            className={`zoom-btn mode-btn toggle-btn${boardMode === 'select' ? ' active' : ''}`}
             aria-pressed={boardMode === 'select'}
             aria-label={boardMode === 'select' ? 'Switch to move mode' : 'Switch to select mode'}
             title={

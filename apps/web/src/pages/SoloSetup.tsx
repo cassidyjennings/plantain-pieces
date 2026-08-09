@@ -85,7 +85,7 @@ export default function SoloSetup() {
           <div className="tile-row">
             <button
               type="button"
-              className={`choice-tile${!timed ? ' selected' : ''}`}
+              className={`choice-tile toggle-btn${!timed ? ' selected' : ''}`}
               onClick={() => setTimed(false)}
             >
               <span className="t">Zen</span>
@@ -93,7 +93,7 @@ export default function SoloSetup() {
             </button>
             <button
               type="button"
-              className={`choice-tile${timed ? ' selected' : ''}`}
+              className={`choice-tile toggle-btn${timed ? ' selected' : ''}`}
               onClick={() => setTimed(true)}
             >
               <span className="t">Timed</span>
@@ -109,7 +109,7 @@ export default function SoloSetup() {
               <button
                 key={preset.label}
                 type="button"
-                className={`choice-tile${bunchSize === preset.size ? ' selected' : ''}`}
+                className={`choice-tile toggle-btn${bunchSize === preset.size ? ' selected' : ''}`}
                 onClick={() => setBunchSize(preset.size)}
               >
                 <span className="t">{preset.label}</span>

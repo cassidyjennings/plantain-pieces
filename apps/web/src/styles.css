@@ -124,17 +124,51 @@ button:active:not(:disabled) {
    on :active too. Without this, pressing one *gains* an orange bar under it for the duration of
    the click, which reads as the button lighting up in the wrong color a beat before its real
    selected/hover state arrives. The translateY press above is left in place as the feedback. */
-.tray-tool:active:not(:disabled),
-.journal-chip:active:not(:disabled),
+.toggle-btn:active:not(:disabled),
 .journal-icon-btn:active:not(:disabled),
 .journal-close:active:not(:disabled),
 .home-profile-btn:active:not(:disabled),
-.btn-leave:active:not(:disabled),
-.profile-tab:active:not(:disabled),
-.avatar-option:active:not(:disabled),
-.segmented-option:active:not(:disabled),
-.choice-tile:active:not(:disabled) {
+.btn-leave:active:not(:disabled) {
   box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared toggle button ("off" ⇄ "on"), used by every button that stays visibly
+   pressed: .zoom-btn.mode-btn, .tray-tool, .journal-chip, .profile-tab,
+   .avatar-option, .segmented-option, .choice-tile.
+
+   WHY THIS EXISTS. Each of those components also has its own
+   `.X:hover:not(:disabled)` rule for the OFF state. That selector scores
+   (0,3,0) — `:not()` contributes its argument's specificity — which ties or
+   beats a plain `.X.active` at (0,2,0)/(0,3,0). So hovering an ON button ran
+   the OFF hover rule, which resets `background` but NOT `color`, stranding the
+   dark on-accent text on a dark surface. On the board's Move/Select toggle that
+   measured #1c3324 on #1c3a2f — a 1.03:1 contrast ratio, i.e. invisible.
+
+   Five components had each hand-written their own `.X.selected:hover` patch;
+   three had not. One class now covers all of them: the ON-hover selector below
+   scores (0,4,0) and so wins against any component's OFF hover rule no matter
+   where it sits in this file. Add `toggle-btn` to the className and the ON
+   palette is correct by construction — there is nothing left to forget.
+
+   Components keep their own geometry (padding/radius/font) and their own OFF
+   colours; only the ON palette is shared, and it is themeable per component by
+   overriding the `--toggle-on-*` tokens (see tokens.css).
+   --------------------------------------------------------------------------- */
+.toggle-btn.active,
+.toggle-btn.selected {
+  background: var(--toggle-on-bg);
+  border-color: var(--toggle-on-border);
+  color: var(--toggle-on-text);
+}
+
+.toggle-btn.active:hover:not(:disabled),
+.toggle-btn.selected:hover:not(:disabled) {
+  background: var(--toggle-on-bg-hover);
+  border-color: var(--toggle-on-border-hover);
+  /* Re-stating `color` is the actual bug fix — the OFF hover rules only ever
+     touched `background`, so the ON text colour leaked through onto them. */
+  color: var(--toggle-on-text);
 }
 
 button:focus-visible {
@@ -1043,12 +1077,8 @@ button:disabled {
   cursor: move;
 }
 
-/* The active mode reads as "on" rather than as another zoom button. */
-.zoom-btn.mode-btn.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-text-on-accent);
-}
+/* The active mode reads as "on" rather than as another zoom button — the ON palette itself comes
+   from the shared `.toggle-btn` rules near the top of this file. */
 
 /* Part of a valid dictionary word — slightly but noticeably green (retinted by
    colorblind modes via the tokens). A dotted underline gives a non-color cue too. */
@@ -1279,6 +1309,13 @@ button:disabled {
 }
 
 .tray-tool {
+  /* The one toggle in the app whose ON state is yellow rather than orange (it sits on the tray
+     dock, where orange would compete with the Peel/Dump callouts). Only the palette differs —
+     the ON/ON-hover behaviour still comes from `.toggle-btn`. */
+  --toggle-on-bg: var(--color-secondary);
+  --toggle-on-bg-hover: var(--color-secondary-hover);
+  --toggle-on-border: var(--color-secondary);
+  --toggle-on-border-hover: var(--color-secondary-hover);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1293,12 +1330,6 @@ button:disabled {
   color: var(--color-text-muted);
   box-shadow: none;
   border: 2px solid var(--color-border);
-}
-
-.tray-tool.active {
-  background: var(--color-secondary);
-  color: var(--color-text-on-accent);
-  border-color: var(--color-secondary);
 }
 
 .tray-tool:hover:not(:disabled) {
@@ -2133,6 +2164,11 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 
 .journal-chip {
+  /* Active = a circled/highlighted choice in orange ink. Keeps the shared orange ON fill but
+     swaps to the darker shadow tone for the border, which reads as pen on paper against this
+     panel's tan parchment instead of a flat orange-on-orange edge. */
+  --toggle-on-border: var(--color-accent-shadow);
+  --toggle-on-border-hover: var(--color-accent-shadow);
   padding: 8px 16px;
   font-size: var(--text-small);
   border-radius: var(--radius-pill);
@@ -2145,13 +2181,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 .journal-chip:hover:not(:disabled) {
   background: rgba(255, 250, 235, 0.85);
   color: #2c2410;
-}
-
-/* Active = a circled/highlighted choice in orange ink. */
-.journal-chip.active {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-  border-color: var(--color-accent-shadow);
 }
 
 .journal-number {
@@ -3261,13 +3290,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 .profile-tab:hover:not(:disabled) {
   background: var(--color-surface-raised);
 }
-.profile-tab.active {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-}
-.profile-tab.active:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
 .profile-content {
   width: 100%;
   display: flex;
@@ -3438,13 +3460,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 .avatar-option:hover:not(:disabled) {
   background: var(--color-surface-inner);
-}
-.avatar-option.selected {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-}
-.avatar-option.selected:hover:not(:disabled) {
-  background: var(--color-accent-hover);
 }
 .avatar-svg {
   flex-shrink: 0;
@@ -3649,15 +3664,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 .segmented-option:hover:not(:disabled) {
   background: var(--color-surface-raised);
-}
-.segmented-option.selected {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-  border-color: var(--color-accent);
-}
-.segmented-option.selected:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
 }
 
 /* Generic modal (delete confirm) */
@@ -3873,15 +3879,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 .choice-tile:hover:not(:disabled):not(.selected) {
   background: var(--color-surface-raised);
-}
-.choice-tile.selected {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-  border-color: var(--color-accent);
-}
-.choice-tile.selected:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
 }
 .choice-tile .t {
   font-family: var(--font-display);

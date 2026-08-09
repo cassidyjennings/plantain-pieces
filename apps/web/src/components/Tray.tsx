@@ -36,7 +36,7 @@ export default function Tray({
         <span className="tray-tool-group">
           <button
             type="button"
-            className={`tray-tool${collapsed ? ' active' : ''}`}
+            className={`tray-tool toggle-btn${collapsed ? ' active' : ''}`}
             onClick={onToggleCollapse}
             aria-pressed={collapsed}
             aria-label={collapsed ? 'Expand duplicates' : 'Collapse duplicates'}
@@ -57,7 +57,7 @@ export default function Tray({
         <span className="tray-tool-group">
           <button
             type="button"
-            className="tray-tool"
+            className="tray-tool toggle-btn"
             onClick={onRecallInvalid}
             disabled={!canRecall}
             aria-label="Recall invalid"

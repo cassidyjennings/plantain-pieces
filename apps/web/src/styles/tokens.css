@@ -26,6 +26,19 @@
   --color-secondary-shadow: #c9a13f;
   --color-secondary-hover: #ffe9ab;
 
+  /* Toggle ("on"/active/selected) button state — consumed by the shared `.toggle-btn` class in
+     styles.css. Defaults live here on :root rather than on `.toggle-btn` itself so a component
+     with its own palette (e.g. .tray-tool's yellow) can override them on its OWN selector: a
+     custom property set directly on an element always beats an inherited one, regardless of
+     source order or specificity. Setting the defaults on `.toggle-btn` instead would make the
+     override a same-specificity tie decided by file position — the exact fragility this whole
+     class exists to remove. */
+  --toggle-on-bg: var(--color-accent);
+  --toggle-on-bg-hover: var(--color-accent-hover);
+  --toggle-on-border: var(--color-accent);
+  --toggle-on-border-hover: var(--color-accent-hover);
+  --toggle-on-text: var(--color-text-on-accent);
+
   /* Semantic */
   --color-danger: #ff8080;
   --color-success: #9be08a;

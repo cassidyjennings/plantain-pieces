@@ -105,7 +105,7 @@ export default function SoloWordlistModal({ config, onApply, onClose }: SoloWord
                           <button
                             key={preset.id}
                             type="button"
-                            className={`journal-chip${isActive ? ' active' : ''}`}
+                            className={`journal-chip toggle-btn${isActive ? ' active' : ''}`}
                             aria-pressed={isActive}
                             onClick={() => setDraft(preset.config)}
                             disabled={busy}

@@ -38,7 +38,7 @@ function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.id}
-          className={`segmented-option${value === o.id ? ' selected' : ''}`}
+          className={`segmented-option toggle-btn${value === o.id ? ' selected' : ''}`}
           aria-pressed={value === o.id}
           onClick={() => onChange(o.id)}
         >

@@ -100,7 +100,7 @@ export default function Profile() {
             key={t.id}
             role="tab"
             aria-selected={tab === t.id}
-            className={`profile-tab${tab === t.id ? ' active' : ''}`}
+            className={`profile-tab toggle-btn${tab === t.id ? ' active' : ''}`}
             onClick={() => setTab(t.id)}
           >
             {t.label}
@@ -385,7 +385,7 @@ function AvatarEditor({ config, onChange }: { config: AvatarConfig; onChange: (c
             {optionsFor(slot).map((option) => (
               <button
                 key={option}
-                className={`avatar-option${current[slot] === option ? ' selected' : ''}`}
+                className={`avatar-option toggle-btn${current[slot] === option ? ' selected' : ''}`}
                 onClick={() => onChange({ ...current, [slot]: option })}
               >
                 {option}
@@ -476,7 +476,7 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       {filterOptions.map((o) => (
         <button
           key={o.id}
-          className={`segmented-option${filter === o.id ? ' selected' : ''}`}
+          className={`segmented-option toggle-btn${filter === o.id ? ' selected' : ''}`}
           onClick={() => onFilterChange(o.id)}
         >
           {o.label}

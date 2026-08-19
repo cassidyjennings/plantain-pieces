@@ -98,6 +98,14 @@ const SILENT_ACTION_ERRORS = new Set([
   'STALE_ACTION',
 ]);
 
+/**
+ * The two SILENT_ACTION_ERRORS that mean "the client's rack disagrees with the server's,"
+ * rather than "the board just isn't finished yet." runAutoAction resyncs from getMyState on
+ * these instead of leaving the (silent, correct-to-be-silent) rejection sitting there forever —
+ * see applyServerRack/rackVersionRef.
+ */
+const RACK_DESYNC_ERRORS = new Set(['TILES_REMAINING', 'EXTRA_TILES']);
+
 /** How long an error banner stays up before dismissing itself. */
 const ERROR_BANNER_MS = 6000;
 
@@ -219,6 +227,16 @@ export default function Game() {
   const dragRef = useRef<DragData | null>(null);
   const busyRef = useRef(false);
   const autoSigRef = useRef<string | null>(null);
+  // The rack's server-side version (room_players.rack_version). Own peel/dump responses and a
+  // foreign-peel getMyState refetch all write the WHOLE rack, unordered -- without this, an
+  // older response that happens to resolve last silently overwrites a newer one and the client
+  // permanently forgets a tile it actually has. Every write to `rack` state goes through
+  // applyServerRack below, which drops anything not newer than what's already applied.
+  const rackVersionRef = useRef(-1);
+  // Guards the debounced word-validation fetch the same way: an in-flight request whose timer
+  // was superseded by a newer grid must not let its (stale) response win the race and overwrite
+  // validCells/wordsPending set by the newer one.
+  const validateSeqRef = useRef(0);
   const centeredRef = useRef(false);
   // Active touch pointers on the board, keyed by pointerId -> last known {x, y}. Only used to
   // detect a second finger landing (promoting whatever single-pointer gesture was in progress to
@@ -366,6 +384,24 @@ export default function Game() {
     });
   }, [rack, collapsed, revealChip]);
 
+  /** Apply a server-authoritative rack, but only if it's not older than the last one we
+   * applied. See rackVersionRef above for why this exists: own-action responses and a foreign
+   * peel's getMyState refetch race, unordered, and both write the whole rack. */
+  const applyServerRack = useCallback(
+    (
+      newRack: string[],
+      newVersion: number,
+      grid: GridState,
+      justDrawnLetters: string[] = [],
+      prevTiles: RackTile[] = [],
+    ) => {
+      if (newVersion < rackVersionRef.current) return;
+      rackVersionRef.current = newVersion;
+      setRack(computeUnplaced(newRack, grid, justDrawnLetters, prevTiles));
+    },
+    [],
+  );
+
   const loadState = useCallback(async () => {
     if (!roomId) return;
     const [state, roomData, playerList, lastPeel] = await Promise.all([
@@ -375,6 +411,8 @@ export default function Game() {
       fetchLastPeelActor(roomId),
     ]);
     setGrid(state.grid);
+    // The initial load always wins -- it's a fresh mount, nothing else has applied a rack yet.
+    rackVersionRef.current = state.rackVersion;
     setRack(computeUnplaced(state.rack, state.grid));
     setPlayers(playerList);
     setLastPeelBy(lastPeel);
@@ -539,7 +577,7 @@ export default function Game() {
         api.getMyState(roomId).then((state) => {
           const priorRack = [...rackRef.current.map((t) => t.letter), ...Object.values(gridRef.current)];
           const newLetters = diffNewLetters(priorRack, state.rack);
-          setRack(computeUnplaced(state.rack, gridRef.current, newLetters, rackRef.current));
+          applyServerRack(state.rack, state.rackVersion, gridRef.current, newLetters, rackRef.current);
         });
       }
     }
@@ -1034,10 +1072,16 @@ export default function Game() {
     // so there's no window where wordsPending reads false while validCells is still stale for
     // the current grid — that gap is exactly what let auto-Peel fire on unchecked words before.
     setWordsPending(true);
+    const seq = ++validateSeqRef.current;
     const handle = setTimeout(async () => {
       try {
         const unique = [...new Set(words.map((w) => w.word))];
         const { invalidWords } = await api.validate(roomId, unique);
+        // A later request's timer already fired (grid changed again after this one started) —
+        // if THIS response is slower and arrives last anyway, applying it would overwrite the
+        // newer, correct validCells with a stale answer for an old grid. Drop it; the newer
+        // request's own response (or its finally-block) owns wordsPending from here.
+        if (seq !== validateSeqRef.current) return;
         const invalid = new Set(invalidWords);
         // A cell at the intersection of two words (one across, one down) must only tint
         // green/count as valid if BOTH words through it are valid. Adding a word's cells
@@ -1057,7 +1101,7 @@ export default function Game() {
       } catch {
         /* transient — leave previous highlight */
       } finally {
-        setWordsPending(false);
+        if (seq === validateSeqRef.current) setWordsPending(false);
       }
     }, 350);
     return () => clearTimeout(handle);
@@ -1121,7 +1165,7 @@ export default function Game() {
         ];
         const result = await api.peel(roomId, submittedGrid);
         const newLetters = diffNewLetters(priorRack, result.rack);
-        setRack(computeUnplaced(result.rack, submittedGrid, newLetters, rackRef.current));
+        applyServerRack(result.rack, result.rackVersion, submittedGrid, newLetters, rackRef.current);
         setBunchCount(result.bunchCount);
         fireCallout('PEEL!');
       } else {
@@ -1148,13 +1192,27 @@ export default function Game() {
         } catch (err2) {
           reportActionError(err2);
         }
+      } else if (err instanceof ApiError && RACK_DESYNC_ERRORS.has(err.message)) {
+        // The server rejected this as an incomplete/over-full rack, but the client's own
+        // structural check (built from its own possibly-stale rack) said the grid was done —
+        // almost always a rack that fell behind from the peel/dump race applyServerRack now
+        // guards against. Resync from the server and clear the latch so the auto-fire effect
+        // re-evaluates the grid instead of silently sitting on a board that looks complete but
+        // the server disagrees with, forever.
+        try {
+          const state = await api.getMyState(roomId);
+          applyServerRack(state.rack, state.rackVersion, gridRef.current, [], rackRef.current);
+          autoSigRef.current = null;
+        } catch {
+          /* transient — the next foreign peel's getMyState will resync anyway */
+        }
       } else {
         reportActionError(err);
       }
     } finally {
       busyRef.current = false;
     }
-  }, [roomId, navigate, isXtinaPartner]);
+  }, [roomId, navigate, isXtinaPartner, applyServerRack]);
 
   /** Drop an error banner over the board, and clear it on its own so it can't linger. */
   function showError(text: string) {
@@ -1262,7 +1320,7 @@ export default function Game() {
       const result = await api.dump(roomId, tile.letter);
       moveTracker.recordDump(tile.letter);
       const newLetters = diffNewLetters(priorRack, result.rack);
-      setRack(computeUnplaced(result.rack, grid, newLetters, rack));
+      applyServerRack(result.rack, result.rackVersion, grid, newLetters, rack);
       setBunchCount(result.bunchCount);
       setSelectedId(null);
       fireCallout('DUMP!');

@@ -55,6 +55,7 @@ export interface JoinRoomResult {
 
 export interface MyState {
   rack: string[];
+  rackVersion: number;
   grid: GridState;
   seat: number;
   tileCount: number;
@@ -63,12 +64,14 @@ export interface MyState {
 export interface PeelResult {
   ok: true;
   rack: string[];
+  rackVersion: number;
   bunchCount: number;
 }
 
 export interface DumpResult {
   ok: true;
   rack: string[];
+  rackVersion: number;
   bunchCount: number;
 }
 

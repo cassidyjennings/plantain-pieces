@@ -9,7 +9,7 @@ import {
   type AvatarConfig,
   type AccessorySlot,
 } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import {
   fetchMyStats,
@@ -200,7 +200,7 @@ function Overview() {
       setDisplayName(res.displayName);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save');
+      setError(getErrorMessage(err, 'Failed to save'));
     } finally {
       setBusy(false);
     }
@@ -268,7 +268,7 @@ function Overview() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Export failed');
+      setError(getErrorMessage(err, 'Export failed'));
     }
   }
 
@@ -279,7 +279,7 @@ function Overview() {
       await signOut();
       window.location.href = '/';
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Delete failed');
+      setError(getErrorMessage(err, 'Delete failed'));
       setBusy(false);
       setShowDelete(false);
     }

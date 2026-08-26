@@ -13,7 +13,7 @@ import {
   xtinaHintCells,
   type GridState,
 } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, ApiError, getErrorMessage } from '../lib/api.js';
 import {
   fetchLastPeelActor,
   fetchPlayers,
@@ -1325,7 +1325,7 @@ export default function Game() {
       setSelectedId(null);
       fireCallout('DUMP!');
     } catch (err) {
-      setMessage(err instanceof ApiError ? `Dump failed: ${err.message}` : 'Dump failed');
+      setMessage(`Dump failed: ${getErrorMessage(err, 'unknown error')}`);
     } finally {
       busyRef.current = false;
     }

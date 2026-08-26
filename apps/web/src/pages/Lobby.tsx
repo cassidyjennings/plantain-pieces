@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WORD_LENGTH_MAX } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import { fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyDictionaryPresets, getDictionaryButtonLabel, type DictionaryPresetRow } from '../lib/dictionaries.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
@@ -97,7 +97,7 @@ export default function Lobby() {
     try {
       await api.setReady(roomId, !me.is_ready);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to update ready state');
+      setError(getErrorMessage(err, 'Failed to update ready state'));
     } finally {
       setBusy(false);
     }
@@ -110,7 +110,7 @@ export default function Lobby() {
     try {
       await api.startGame(roomId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to start game');
+      setError(getErrorMessage(err, 'Failed to start game'));
     } finally {
       setBusy(false);
     }
@@ -131,7 +131,7 @@ export default function Lobby() {
       const result = await api.setDictionaryConfig(roomId, { ...room.dictionary_config, minLength });
       setRoom((r) => (r ? { ...r, dictionary_config: result.config } : r));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to update word length');
+      setError(getErrorMessage(err, 'Failed to update word length'));
     }
   }
 

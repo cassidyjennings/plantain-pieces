@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 
 /**
@@ -26,7 +26,7 @@ export default function XtinaToggle() {
       setEnabled(res.enabled);
     } catch (err) {
       setEnabled(!next); // roll back
-      setError(err instanceof ApiError ? err.message : 'Failed to save');
+      setError(getErrorMessage(err, 'Failed to save'));
     } finally {
       setBusy(false);
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DEFAULT_DICTIONARY_CONFIG, BUNCH_SIZE_PRESETS, WORD_LENGTH_MAX, type DictionaryConfig } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
@@ -66,7 +66,7 @@ export default function SoloSetup() {
       // The room is already active by the time this returns, so skip a Lobby entirely.
       navigate(`/room/${room.roomId}/game`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to start solo game');
+      setError(getErrorMessage(err, 'Failed to start solo game'));
       setBusy(false);
     }
   }

@@ -6,7 +6,7 @@ import { fetchMyAchievements } from '../lib/profile.js';
 import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/boards.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
-import { api, ApiError } from '../lib/api.js';
+import { api, ApiError, getErrorMessage } from '../lib/api.js';
 import BoardPreview from '../components/BoardPreview.js';
 
 export default function Results() {
@@ -134,7 +134,7 @@ export default function Results() {
           /* fall through to the error message below */
         }
       }
-      setRematchError(err instanceof ApiError ? err.message : 'Failed to start a new game');
+      setRematchError(getErrorMessage(err, 'Failed to start a new game'));
       setRematching(false);
     }
   }

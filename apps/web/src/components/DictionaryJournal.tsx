@@ -5,7 +5,7 @@ import {
   MAX_PRESET_NAME_LENGTH,
   type DictionaryConfig,
 } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import {
   STANDARD_DICTIONARY_LABEL,
   fetchMyCustomWordSets,
@@ -97,7 +97,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
       await refreshMySets();
       setEditingSet(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save dictionary');
+      setError(getErrorMessage(err, 'Failed to save dictionary'));
     } finally {
       setBusy(false);
     }
@@ -110,7 +110,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
       await api.deleteWordSet(id);
       await refreshMySets();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to delete dictionary');
+      setError(getErrorMessage(err, 'Failed to delete dictionary'));
     } finally {
       setBusy(false);
     }
@@ -125,7 +125,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
       await refreshPresets();
       setEditingPreset(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save preset');
+      setError(getErrorMessage(err, 'Failed to save preset'));
     } finally {
       setBusy(false);
     }
@@ -138,7 +138,7 @@ export default function DictionaryJournal({ onClose }: DictionaryJournalProps) {
       await api.deletePreset(id);
       await refreshPresets();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to delete preset');
+      setError(getErrorMessage(err, 'Failed to delete preset'));
     } finally {
       setBusy(false);
     }

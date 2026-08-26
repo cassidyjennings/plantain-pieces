@@ -13,22 +13,41 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('No active session');
+/** The real error message for an error-banner fallback: `ApiError`/`Error` messages (server
+ * rejection text, or the browser's own "Failed to fetch"/"Load failed"/"NetworkError...") are
+ * far more diagnosable than a hardcoded "Failed to X" — use the real one whenever there is one. */
+export function getErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
 
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-  const body = await res.json();
+async function call<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const { data, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw new Error(`Could not read session: ${sessionError.message}`);
+  const token = data.session?.access_token;
+  if (!token) throw new Error('No active session — guest sign-in may have failed or been blocked');
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+  } catch (err) {
+    throw new Error(`Could not reach server: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new ApiError(`Server returned an invalid response (status ${res.status})`, res.status, null);
+  }
   if (!res.ok) {
-    throw new ApiError((body as { error?: string }).error ?? 'REQUEST_FAILED', res.status, body);
+    throw new ApiError((body as { error?: string }).error ?? `Request failed (status ${res.status})`, res.status, body);
   }
   return body as T;
 }

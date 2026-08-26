@@ -5,7 +5,7 @@ import {
   MAX_PRESET_NAME_LENGTH,
   type DictionaryConfig,
 } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
@@ -75,7 +75,7 @@ export default function SoloWordlistModal({ config, onApply, onClose }: SoloWord
       setShowSavePreset(false);
       setNotice('Saved to your presets.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save preset');
+      setError(getErrorMessage(err, 'Failed to save preset'));
     } finally {
       setBusy(false);
     }

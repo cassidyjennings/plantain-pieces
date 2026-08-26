@@ -5,7 +5,7 @@ import {
   MAX_PRESET_NAME_LENGTH,
   type DictionaryConfig,
 } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
   fetchMyDictionaryPresets,
@@ -92,7 +92,7 @@ export default function WordlistModal({
       onApplied?.(result.config);
       setNotice('Applied to the game.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to apply the wordlist');
+      setError(getErrorMessage(err, 'Failed to apply the wordlist'));
     } finally {
       setBusy(false);
     }
@@ -109,7 +109,7 @@ export default function WordlistModal({
       setShowSavePreset(false);
       setNotice('Saved to your presets.');
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to save preset';
+      const message = getErrorMessage(err, 'Failed to save preset');
       // The wordlist can reference dictionaries owned by whoever set it up; you can't save a
       // preset pointing at word lists that aren't yours.
       setError(

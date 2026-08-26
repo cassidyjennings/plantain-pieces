@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { validateDisplayName } from '@plantain/shared';
-import { api, ApiError } from '../lib/api.js';
+import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import Logo from '../components/Logo.js';
 import Avatar from '../components/Avatar.js';
@@ -35,7 +35,7 @@ export default function Home() {
       const room = await api.createRoom(name);
       navigate(`/room/${room.roomId}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create room');
+      setError(getErrorMessage(err, 'Failed to create room'));
     } finally {
       setBusy(false);
     }
@@ -50,7 +50,7 @@ export default function Home() {
       const room = await api.joinRoom(joinCode.trim().toUpperCase(), name);
       navigate(`/room/${room.roomId}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to join room');
+      setError(getErrorMessage(err, 'Failed to join room'));
     } finally {
       setBusy(false);
     }

@@ -19,7 +19,8 @@
     "db:start": "npm run docker:up && npx supabase start",
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
-    "db:seed": "node scripts/seed-dictionary.mjs"
+    "db:seed": "node scripts/seed-dictionary.mjs",
+    "db:score-words": "node scripts/score-word-frequency.mjs"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

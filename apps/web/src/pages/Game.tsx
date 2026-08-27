@@ -384,9 +384,21 @@ export default function Game() {
     });
   }, [rack, collapsed, revealChip]);
 
-  /** Apply a server-authoritative rack, but only if it's not older than the last one we
+  /** Apply a server-authoritative rack, but only if it's strictly newer than the last one we
    * applied. See rackVersionRef above for why this exists: own-action responses and a foreign
-   * peel's getMyState refetch race, unordered, and both write the whole rack. */
+   * peel's getMyState refetch race, unordered, and both write the whole rack.
+   *
+   * Must reject an EQUAL version too, not just an older one. Two peels landing close together
+   * (normal in a fast multiplayer game) each fire their own getMyState refetch for a bystander;
+   * both can resolve against the same current server rack before React has re-rendered (setRack
+   * doesn't commit synchronously inside a promise continuation), so both calls compute the same
+   * "newly drawn" letters and pass the same version. computeUnplaced mints a FRESH id for every
+   * justDrawn letter regardless of `<=` vs `<`, so letting the redundant call through remounts
+   * the just-delivered tile under a new id — re-firing its slice-fly draw animation a second
+   * time (reads as "two tiles delivered for one Peel") and briefly re-adding its reserved-space
+   * `.pending` tray slot, which is exactly the kind of extra DOM churn the game-layout 100dvh
+   * fix (styles.css) already flags as what nudges a mobile browser's address bar to show/hide,
+   * seen as the bottom panel shifting. */
   const applyServerRack = useCallback(
     (
       newRack: string[],
@@ -395,7 +407,7 @@ export default function Game() {
       justDrawnLetters: string[] = [],
       prevTiles: RackTile[] = [],
     ) => {
-      if (newVersion < rackVersionRef.current) return;
+      if (newVersion <= rackVersionRef.current) return;
       rackVersionRef.current = newVersion;
       setRack(computeUnplaced(newRack, grid, justDrawnLetters, prevTiles));
     },

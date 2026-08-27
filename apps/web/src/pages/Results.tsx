@@ -39,9 +39,16 @@ export default function Results() {
   useEffect(() => {
     if (!roomId) return;
     let cancelled = false;
+    // `cancelled` only guards post-unmount updates -- it does nothing to order the immediate call
+    // against the delayed one below. If the immediate call is slow (>1500ms) it can resolve AFTER
+    // the delayed one already applied the complete achievement list, and silently revert it to an
+    // earlier, incomplete snapshot. `latestSeq` tracks which of the two was issued last so a
+    // slower, earlier-issued response can't overwrite a result that's already newer.
+    let latestSeq = 0;
     async function load() {
+      const seq = ++latestSeq;
       const [players, achievements] = await Promise.all([fetchPlayers(roomId!), fetchMyAchievements()]);
-      if (cancelled) return;
+      if (cancelled || seq !== latestSeq) return;
       setMe(players.find((p) => p.profile_id === profileId) ?? null);
       setEarned(
         achievements
@@ -63,16 +70,21 @@ export default function Results() {
   useEffect(() => {
     if (!roomId) return;
     let cancelled = false;
+    // Same ordering guard as the achievements effect above -- without it a slow immediate load()
+    // can resolve after the delayed one and revert myBoard/boardCount/longestWord to an earlier,
+    // less-complete snapshot right after the correct one was already shown.
+    let latestSeq = 0;
     async function load() {
+      const seq = ++latestSeq;
       const rows = await fetchRoomBoards(roomId!);
-      if (cancelled) return;
+      if (cancelled || seq !== latestSeq) return;
       setBoardCount(rows.length);
       const mine = rows.find((r) => r.profile_id === profileId) ?? null;
       setMyBoard(mine);
       // Longest word is derived from the board rather than read back from a stored record.
       if (mine) {
         const { words } = await resolveBoardWords(roomId!, mine.grid_state);
-        if (cancelled) return;
+        if (cancelled || seq !== latestSeq) return;
         setLongestWord(
           words.reduce<string | null>((best, w) => (!best || w.length > best.length ? w : best), null),
         );

@@ -38,7 +38,7 @@ export default function XtinaToggle() {
       <p className="hint">When this is on, your next two-player game becomes the scripted one.</p>
       <button
         type="button"
-        className={`btn-secondary${enabled ? ' active' : ''}`}
+        className={`btn-secondary toggle-btn${enabled ? ' active' : ''}`}
         aria-pressed={enabled}
         disabled={busy}
         onClick={toggle}

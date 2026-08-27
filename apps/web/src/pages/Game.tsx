@@ -237,6 +237,13 @@ export default function Game() {
   // was superseded by a newer grid must not let its (stale) response win the race and overwrite
   // validCells/wordsPending set by the newer one.
   const validateSeqRef = useRef(0);
+  // Same shape again for the room_events handler's own refetches (fetchPlayers/fetchRoom below):
+  // peel/dump/progress events can arrive close together, each firing its own async refetch, and
+  // an earlier-issued one that resolves last would otherwise silently revert players/room to a
+  // stale snapshot. One counter per refetched piece of state, bumped before each request, applied
+  // only if still current.
+  const playersSeqRef = useRef(0);
+  const roomSeqRef = useRef(0);
   const centeredRef = useRef(false);
   // Active touch pointers on the board, keyed by pointerId -> last known {x, y}. Only used to
   // detect a second finger landing (promoting whatever single-pointer gesture was in progress to
@@ -414,6 +421,22 @@ export default function Game() {
     [],
   );
 
+  /** Apply a server-reported bunchCount, but only if it can't be a stale, out-of-order response.
+   * bunchCount is written from four independent async call sites (this initial load, the
+   * room_events peel/dump/game_started broadcast, and each of this player's own peel/dump
+   * responses) with no shared request/version counter tying them together. Rather than thread one
+   * through all four, this enforces the actual domain invariant instead: the Bunch only ever
+   * shrinks during an active game, and only resets (can go back up) at game_started (a fresh deal,
+   * including a rematch). A response reporting a HIGHER count outside a reset is therefore
+   * necessarily an earlier peel/dump's result resolving late — drop it, don't let it overwrite a
+   * fresher, lower count (which also directly gates canPeel in runAutoAction below). */
+  const bunchAppliedRef = useRef(144);
+  const applyBunchCount = useCallback((next: number, isReset = false) => {
+    if (!isReset && next > bunchAppliedRef.current) return;
+    bunchAppliedRef.current = next;
+    setBunchCount(next);
+  }, []);
+
   const loadState = useCallback(async () => {
     if (!roomId) return;
     const [state, roomData, playerList, lastPeel] = await Promise.all([
@@ -429,10 +452,12 @@ export default function Game() {
     setPlayers(playerList);
     setLastPeelBy(lastPeel);
     if (roomData) {
-      setBunchCount(roomData.bunch_count);
+      // The initial load always wins, same reasoning as rackVersionRef above -- nothing else has
+      // applied a bunchCount yet.
+      applyBunchCount(roomData.bunch_count, true);
       setRoom(roomData);
     }
-  }, [roomId]);
+  }, [roomId, applyBunchCount]);
 
   // --- Xtina mode ------------------------------------------------------------
   // Everything here is presentation over an otherwise ordinary game: the server already dealt
@@ -559,8 +584,19 @@ export default function Game() {
       // no-ops for them, which is correct; they only need the player-list refetch below so an
       // opponent's pill picks up their new remaining_count.
       const payload = event.payload as { bunchCount?: number };
-      if (typeof payload.bunchCount === 'number') setBunchCount(payload.bunchCount);
-      if (roomId) fetchPlayers(roomId).then(setPlayers);
+      if (typeof payload.bunchCount === 'number') {
+        applyBunchCount(payload.bunchCount, event.type === 'game_started');
+      }
+      // Two of these events can land close together (e.g. two peels in quick succession); each
+      // fires its own fetchPlayers call, unordered. playersSeqRef drops a response once a newer
+      // request has been issued, so an earlier-issued-but-later-resolving fetch can't revert the
+      // roster to a stale snapshot.
+      if (roomId) {
+        const seq = ++playersSeqRef.current;
+        fetchPlayers(roomId).then((p) => {
+          if (seq === playersSeqRef.current) setPlayers(p);
+        });
+      }
     }
     if (event.type === 'peel') {
       // The room row itself changes on a Peel in xtina mode: the RPC increments
@@ -569,7 +605,14 @@ export default function Game() {
       // and the placement gate keeps comparing word 2..10 against word 1's target, which can
       // never match. That's a silent soft-lock: no peel, no error, no way forward. Runs for
       // every player and every mode; for a non-xtina room it's just a cheap row refresh.
-      if (roomId) fetchRoom(roomId).then((r) => r && setRoom(r));
+      // Same ordering guard as fetchPlayers above -- two close-together peels must not let an
+      // earlier-issued fetchRoom regress mode_config.step after a later one already advanced it.
+      if (roomId) {
+        const seq = ++roomSeqRef.current;
+        fetchRoom(roomId).then((r) => {
+          if (r && seq === roomSeqRef.current) setRoom(r);
+        });
+      }
       const payload = event.payload as { actor?: string };
       if (payload.actor) setLastPeelBy(payload.actor);
       if (payload.actor && payload.actor !== profileId && roomId) {
@@ -921,16 +964,32 @@ export default function Game() {
     [abortTileDrag],
   );
 
+  // A touch the OS reclaims mid-gesture (tab backgrounded, a system gesture/notification stealing
+  // it) doesn't reliably fire pointercancel -- the pointer would otherwise stay in pointersRef
+  // forever, and the next single-finger touch would see size hit 2 and wrongly promote to a
+  // pinch, computing startDist/anchor from that frozen stale point. Going hidden is the
+  // observable proxy for "a touch may have just been lost that way": clear all tracked pointers
+  // and abort whatever gesture was live, the same as a real pointercancel would.
+  const handleVisibilityHidden = useCallback(() => {
+    if (document.visibilityState !== 'hidden') return;
+    if (pointersRef.current.size === 0 && !dragRef.current) return;
+    pointersRef.current.clear();
+    abortTileDrag(dragRef.current);
+    dragRef.current = null;
+  }, [abortTileDrag]);
+
   useEffect(() => {
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
     window.addEventListener('pointercancel', handlePointerCancel);
+    document.addEventListener('visibilitychange', handleVisibilityHidden);
     return () => {
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
+      document.removeEventListener('visibilitychange', handleVisibilityHidden);
     };
-  }, [handleMove, handleUp, handlePointerCancel]);
+  }, [handleMove, handleUp, handlePointerCancel, handleVisibilityHidden]);
 
   /** Capture-phase pointerdown on the board viewport (wired via GameBoard's
    * onViewportPointerDownCapture) — this is what makes a second finger reliably promote to a
@@ -1178,7 +1237,7 @@ export default function Game() {
         const result = await api.peel(roomId, submittedGrid);
         const newLetters = diffNewLetters(priorRack, result.rack);
         applyServerRack(result.rack, result.rackVersion, submittedGrid, newLetters, rackRef.current);
-        setBunchCount(result.bunchCount);
+        applyBunchCount(result.bunchCount);
         fireCallout('PEEL!');
       } else {
         await api.plantains(roomId, submittedGrid);
@@ -1200,7 +1259,14 @@ export default function Game() {
           await api.plantains(roomId, submittedGrid);
           submitSummaryOnce();
           fireCallout('PLANTAINS!');
-          setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
+          // Same isXtinaPartner branch as the primary Plantains path above — this recovery path
+          // was missing it, so a bunch-race Plantains for her force-navigated to Results instead
+          // of holding the finished board on screen.
+          if (isXtinaPartner) {
+            setXtinaFinished(true);
+          } else {
+            setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
+          }
         } catch (err2) {
           reportActionError(err2);
         }
@@ -1224,7 +1290,7 @@ export default function Game() {
     } finally {
       busyRef.current = false;
     }
-  }, [roomId, navigate, isXtinaPartner, applyServerRack]);
+  }, [roomId, navigate, isXtinaPartner, applyServerRack, applyBunchCount]);
 
   /** Drop an error banner over the board, and clear it on its own so it can't linger. */
   function showError(text: string) {
@@ -1333,11 +1399,14 @@ export default function Game() {
       moveTracker.recordDump(tile.letter);
       const newLetters = diffNewLetters(priorRack, result.rack);
       applyServerRack(result.rack, result.rackVersion, grid, newLetters, rack);
-      setBunchCount(result.bunchCount);
+      applyBunchCount(result.bunchCount);
       setSelectedId(null);
       fireCallout('DUMP!');
     } catch (err) {
-      setMessage(`Dump failed: ${getErrorMessage(err, 'unknown error')}`);
+      // Route through showError, not a direct setMessage -- it's the only setter that also arms
+      // messageIsError (the banner's error styling) and the auto-dismiss timer; a direct
+      // setMessage here left a Dump failure sitting on screen forever, unstyled.
+      showError(`Dump failed: ${getErrorMessage(err, 'unknown error')}`);
     } finally {
       busyRef.current = false;
     }

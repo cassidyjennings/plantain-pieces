@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WORD_LENGTH_MAX } from '@plantain/shared';
 import { api, getErrorMessage } from '../lib/api.js';
@@ -35,9 +35,18 @@ export default function Lobby() {
     fetchMyDictionaryPresets().then(setPresets);
   }, []);
 
+  // refresh() is called unconditionally on every room_event (see useRoomEvents below), so two
+  // calls can easily be in flight together -- an earlier one that happens to resolve later would
+  // otherwise clobber fresher state, or worse, fire a stale navigate() after the player has
+  // already left (see refreshSeqRef in handleLeave). Same ordering guard shape as Game.tsx's
+  // validateSeqRef: bump the sequence before the request, drop the response if a newer call (or
+  // an explicit leave) has since superseded it.
+  const refreshSeqRef = useRef(0);
   const refresh = useCallback(async () => {
     if (!roomId) return;
+    const seq = ++refreshSeqRef.current;
     const [r, p] = await Promise.all([fetchRoom(roomId), fetchPlayers(roomId)]);
+    if (seq !== refreshSeqRef.current) return;
     setRoom(r);
     setPlayers(p);
     if (r?.status === 'active') navigate(`/room/${roomId}/game`, { replace: true });
@@ -149,6 +158,10 @@ export default function Lobby() {
   async function handleLeave() {
     if (!roomId) return;
     setBusy(true);
+    // Invalidate any refresh() already in flight -- without this, a stale response that resolves
+    // after we've navigated away can itself call navigate() (e.g. to /game, if the host started
+    // the game in that same window) and drag the player right back into the room they just left.
+    refreshSeqRef.current += 1;
     try {
       await api.leaveRoom(roomId);
     } catch {

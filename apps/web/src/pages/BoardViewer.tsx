@@ -50,9 +50,15 @@ export default function BoardViewer() {
   useEffect(() => {
     if (!roomId) return;
     let cancelled = false;
+    // `cancelled` only guards post-unmount updates -- it doesn't order the immediate call against
+    // the delayed one. Without `latestSeq`, a slow immediate load() resolving after the delayed
+    // one (which picked up a straggler's board) would revert setBoards to the shorter list,
+    // making a player's tab disappear right after it appeared.
+    let latestSeq = 0;
     async function load() {
+      const seq = ++latestSeq;
       const rows = await fetchRoomBoards(roomId!);
-      if (cancelled) return;
+      if (cancelled || seq !== latestSeq) return;
       setBoards(rows);
       setLoading(false);
     }

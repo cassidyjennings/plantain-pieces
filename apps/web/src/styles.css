@@ -4039,125 +4039,88 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   }
 }
 
-/* =========================================================
-   Daily puzzle — Home button, landing page, streak UI
-   ========================================================= */
+/* ===========================================================================
+   Daily puzzle — landing page and streak UI
+   =========================================================================== */
 
-.btn-daily {
-  display: block;
-  width: 100%;
-  padding: 14px 20px;
-  background: var(--accent);
-  color: #1a0a00;
-  font-family: var(--font-body);
-  font-weight: 800;
-  font-size: 15px;
-  border: none;
-  border-radius: var(--r-md);
-  cursor: pointer;
-  text-align: center;
-  transition: filter 150ms ease, transform 120ms ease;
-  margin-bottom: 8px;
-}
-.btn-daily:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-}
-.btn-daily:active {
-  transform: translateY(0);
+.daily-screen {
+  gap: var(--space-6);
 }
 
-.btn-back-link {
-  background: none;
-  border: none;
-  color: var(--text-faint);
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 12px;
-  align-self: flex-start;
-}
-.btn-back-link:hover {
-  color: var(--text);
-}
-
-.daily-page-title {
+.daily-title {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(28px, 6vw, 40px);
-  color: var(--accent);
-  -webkit-text-stroke: 1px #c46f1f;
-  margin-bottom: 2px;
+  font-size: clamp(32px, 10vw, 48px);
+  color: var(--color-text-primary);
+  text-shadow: 0 5px 0 #0a1e12;
+  -webkit-text-stroke: 2px #0f2f1e;
+  margin: 0;
 }
 
-.daily-page-date {
+/* Title, date and streak badge read as one unit — their own column, so they
+   aren't pushed apart by .centered's 32px inter-child gap. */
+.daily-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.daily-date {
   font-family: var(--font-body);
-  font-size: 14px;
-  color: var(--text-faint);
-  margin: 0 0 14px;
+  font-size: var(--text-small);
+  color: var(--color-text-faint);
+  margin: 0;
 }
 
 .daily-streak-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: linear-gradient(135deg, #1d3a1a 0%, #162e1e 100%);
-  border: 1.5px solid var(--secondary);
-  border-radius: 20px;
-  padding: 6px 14px;
+  gap: var(--space-1);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-secondary);
   font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--secondary);
-  margin-bottom: 18px;
+  font-weight: 800;
+  font-size: var(--text-small);
+  color: var(--color-secondary);
 }
 
-.daily-loading,
-.daily-unavailable {
-  color: var(--text-faint);
-  font-size: 14px;
-  margin: 12px 0;
-}
-
-.daily-tagline {
-  color: var(--text-faint);
-  font-size: 14px;
-  margin: 0 0 16px;
-}
-
-.daily-solved-panel {
+.daily-note {
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  color: var(--color-text-faint);
   text-align: center;
-  margin-bottom: 12px;
+  margin: 0;
+}
+
+/* Children stay stretched (the .panel default) so .results-stat-row keeps full
+   width — centering them here shrink-wraps the row and word-breaks long words. */
+.daily-solved-panel {
+  gap: var(--space-4);
 }
 
 .daily-solved-label {
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--text);
-  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-heading);
+  color: var(--color-secondary);
+  text-align: center;
+  margin: 0;
 }
 
-.daily-comeback {
-  font-size: 13px;
-  color: var(--text-faint);
-  margin: 10px 0 0;
-}
-
-/* Results page daily additions */
+/* Results page — streak confirmation after a daily solve. */
 .daily-streak-update {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: linear-gradient(135deg, #1d3a1a 0%, #162e1e 100%);
-  border: 1.5px solid var(--secondary);
-  border-radius: 20px;
-  padding: 8px 18px;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--secondary);
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-secondary);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-body);
+  color: var(--color-secondary);
 }

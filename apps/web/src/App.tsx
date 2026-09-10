@@ -11,6 +11,7 @@ import Game from './pages/Game.js';
 import Results from './pages/Results.js';
 import BoardViewer from './pages/BoardViewer.js';
 import Profile from './pages/Profile.js';
+import DailyPage from './pages/DailyPage.js';
 
 export default function App() {
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/daily" element={<DailyPage />} />
         <Route path="/solo" element={<SoloSetup />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/room/:roomId" element={<Lobby />} />

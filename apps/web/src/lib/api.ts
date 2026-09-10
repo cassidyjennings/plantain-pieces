@@ -65,6 +65,19 @@ export interface CreateSoloRoomResult {
   status: 'active';
 }
 
+export interface CreateDailyRoomResult {
+  roomId: string;
+  code: string;
+  seat: number;
+  puzzleId: string;
+  scheduledDate: string;
+}
+
+export interface DailyTodayResult {
+  hasDaily: boolean;
+  puzzleDate: string | null;
+}
+
 export interface JoinRoomResult {
   roomId: string;
   code: string;
@@ -126,6 +139,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ displayName, dictionaryConfig, modeConfig }),
     }),
+
+  createDailyRoom: (displayName: string) =>
+    call<CreateDailyRoomResult>('/rooms/daily', {
+      method: 'POST',
+      body: JSON.stringify({ displayName }),
+    }),
+
+  getDailyToday: () => call<DailyTodayResult>('/daily/today'),
 
   joinRoom: (code: string, displayName: string, spectator = false) =>
     call<JoinRoomResult>('/rooms/join', {

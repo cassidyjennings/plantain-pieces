@@ -551,19 +551,20 @@ export default function Game() {
   // Timed solo mode: a live elapsed-time ticker from the room's started_at. Zen mode and
   // multiplayer show nothing (mode_config.timed is only ever true for solo).
   const isTimed = room?.mode === 'solo' && (room.mode_config as { timed?: boolean }).timed === true;
+  const isDaily = room?.mode === 'daily';
   // The Bunch meter fills against the room's OWN starting size -- a solo player's smaller chosen
   // Bunch (as low as 54) must still read as a whole, full plantain at the start, just one that
   // empties faster, not a plantain that's already partly eaten before a single tile is drawn.
   const startingBunchCount =
     room?.mode === 'solo' ? ((room.mode_config as { bunchSize?: number }).bunchSize ?? bunchCount) : undefined;
   useEffect(() => {
-    if (!isTimed || !room?.started_at) return;
+    if ((!isTimed && !isDaily) || !room?.started_at) return;
     const startedAt = new Date(room.started_at).getTime();
     const tick = () => setElapsedMs(Date.now() - startedAt);
     tick();
     const handle = setInterval(tick, 1000);
     return () => clearInterval(handle);
-  }, [isTimed, room?.started_at]);
+  }, [isTimed, isDaily, room?.started_at]);
 
   useEffect(() => {
     loadState();
@@ -1522,9 +1523,11 @@ export default function Game() {
 
   async function handleLeave() {
     if (!roomId) return;
-    const confirmMsg = isSolo
-      ? "Leave this game? Your progress won't be saved."
-      : 'Leave this game? Your tiles go back into the Bunch.';
+    const confirmMsg = isDaily
+      ? "Leave this puzzle? Your progress won't be saved."
+      : isSolo
+        ? "Leave this game? Your progress won't be saved."
+        : 'Leave this game? Your tiles go back into the Bunch.';
     if (!window.confirm(confirmMsg)) return;
     try {
       await api.leaveRoom(roomId);
@@ -1590,8 +1593,8 @@ export default function Game() {
           )}
         </div>
 
-        {isSolo ? (
-          isTimed && (
+        {isSolo || isDaily ? (
+          (isTimed || isDaily) && (
             <div className="topbar-card topbar-elapsed-card">
               <span className="elapsed-label">Elapsed</span>
               <span className="elapsed-value">{formatElapsed(elapsedMs)}</span>
@@ -1645,7 +1648,7 @@ export default function Game() {
         )}
 
         <div className="topbar-card topbar-actions-card">
-          {!isXtina && (
+          {!isXtina && !isDaily && (
             <button className="btn-tertiary" disabled={!selectedId} onClick={handleDump}>
               Dump!
             </button>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { currentStreak } from '../lib/dailyStreak.js';
 import { validateDisplayName } from '@plantain/shared';
 import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
@@ -16,6 +17,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const streak = currentStreak();
 
   const name = displayName.trim() || 'Guest';
 
@@ -95,6 +97,17 @@ export default function Home() {
 
         {error && <p className="error">{error}</p>}
       </div>
+
+      <button
+        type="button"
+        className="btn-daily"
+        onClick={() => {
+          persistName();
+          navigate('/daily');
+        }}
+      >
+        {streak > 0 ? `🔥 Daily Puzzle — ${streak}-day streak` : 'Daily Puzzle'}
+      </button>
 
       <button
         type="button"

@@ -4039,3 +4039,125 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   }
 }
 
+/* =========================================================
+   Daily puzzle — Home button, landing page, streak UI
+   ========================================================= */
+
+.btn-daily {
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
+  background: var(--accent);
+  color: #1a0a00;
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 15px;
+  border: none;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: center;
+  transition: filter 150ms ease, transform 120ms ease;
+  margin-bottom: 8px;
+}
+.btn-daily:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.btn-daily:active {
+  transform: translateY(0);
+}
+
+.btn-back-link {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 12px;
+  align-self: flex-start;
+}
+.btn-back-link:hover {
+  color: var(--text);
+}
+
+.daily-page-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(28px, 6vw, 40px);
+  color: var(--accent);
+  -webkit-text-stroke: 1px #c46f1f;
+  margin-bottom: 2px;
+}
+
+.daily-page-date {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-faint);
+  margin: 0 0 14px;
+}
+
+.daily-streak-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #1d3a1a 0%, #162e1e 100%);
+  border: 1.5px solid var(--secondary);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--secondary);
+  margin-bottom: 18px;
+}
+
+.daily-loading,
+.daily-unavailable {
+  color: var(--text-faint);
+  font-size: 14px;
+  margin: 12px 0;
+}
+
+.daily-tagline {
+  color: var(--text-faint);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.daily-solved-panel {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.daily-solved-label {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.daily-comeback {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 10px 0 0;
+}
+
+/* Results page daily additions */
+.daily-streak-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #1d3a1a 0%, #162e1e 100%);
+  border: 1.5px solid var(--secondary);
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--secondary);
+  margin-bottom: 16px;
+}

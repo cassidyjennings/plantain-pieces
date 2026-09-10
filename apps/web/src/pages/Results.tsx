@@ -177,29 +177,23 @@ export default function Results() {
 
   const streak = isDaily ? currentStreak() : 0;
 
-  function buildShareText(): string {
-    const date = room.mode_config && (room.mode_config as { scheduledDate?: string }).scheduledDate
-      ? new Date((room.mode_config as { scheduledDate: string }).scheduledDate + 'T00:00:00')
-          .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      : new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const timeStr = durationMs != null
+  const scheduledDate = (room.mode_config as { scheduledDate?: string }).scheduledDate;
+  const shareDate = new Date(scheduledDate ? `${scheduledDate}T00:00:00` : Date.now())
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const shareText = [
+    'Plantain Pieces Daily Puzzle',
+    `📅 ${shareDate}`,
+    durationMs != null
       ? `⏱ ${Math.floor(durationMs / 60000)}:${Math.floor((durationMs % 60000) / 1000).toString().padStart(2, '0')}`
-      : '';
-    const streakStr = streak > 0 ? `🔥 ${streak}-day streak` : '';
-    return [
-      `Plantain Pieces Daily Puzzle`,
-      `📅 ${date}`,
-      timeStr,
-      streakStr,
-      longestWord ? `📝 ${longestWord}` : '',
-      `plantainpieces.com`,
-    ].filter(Boolean).join('\n');
-  }
+      : '',
+    streak > 0 ? `🔥 ${streak}-day streak` : '',
+    longestWord ? `📝 ${longestWord}` : '',
+    'plantainpieces.com',
+  ].filter(Boolean).join('\n');
 
   async function handleShare() {
-    const text = buildShareText();
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(shareText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

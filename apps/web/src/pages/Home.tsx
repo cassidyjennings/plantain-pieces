@@ -100,13 +100,12 @@ export default function Home() {
 
       <button
         type="button"
-        className="btn-daily"
         onClick={() => {
           persistName();
           navigate('/daily');
         }}
       >
-        {streak > 0 ? `🔥 Daily Puzzle — ${streak}-day streak` : 'Daily Puzzle'}
+        {streak > 0 ? `Daily Puzzle 🔥${streak}` : 'Daily Puzzle'}
       </button>
 
       <button

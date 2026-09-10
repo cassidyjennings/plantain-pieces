@@ -46,22 +46,19 @@ export default function DailyPage() {
     : null;
 
   return (
-    <div className="centered">
-      <button type="button" className="btn-back-link" onClick={() => navigate('/')}>
-        ← Back
+    <div className="centered daily-screen">
+      <button type="button" className="solo-back" disabled={playing} onClick={() => navigate('/')}>
+        ← <span className="solo-back-full">Back to </span>Menu
       </button>
 
-      <h1 className="daily-page-title">Daily Puzzle</h1>
-      {dateLabel && <p className="daily-page-date">{dateLabel}</p>}
-
-      {streak > 0 && (
-        <div className="daily-streak-badge">
-          🔥 {streak}-day streak
-        </div>
-      )}
+      <div className="daily-header">
+        <h1 className="daily-title">Daily Puzzle</h1>
+        {dateLabel && <p className="daily-date">{dateLabel}</p>}
+        {streak > 0 && <div className="daily-streak-badge">🔥 {streak}-day streak</div>}
+      </div>
 
       {hasDaily === null ? (
-        <p className="daily-loading">Checking today's puzzle…</p>
+        <p className="daily-note">Checking today's puzzle…</p>
       ) : alreadySolved ? (
         <div className="panel daily-solved-panel">
           <p className="daily-solved-label">Solved today!</p>
@@ -81,23 +78,19 @@ export default function DailyPage() {
               )}
             </div>
           )}
-          <p className="daily-comeback">Come back tomorrow for the next puzzle.</p>
+          <p className="daily-note">Come back tomorrow for the next puzzle.</p>
         </div>
       ) : !hasDaily ? (
-        <p className="daily-unavailable">No puzzle today — check back soon!</p>
+        <p className="daily-note">No puzzle today — check back soon!</p>
       ) : (
         <>
-          <p className="daily-tagline">Clear all the tiles to win!</p>
+          <p className="daily-note">Clear all the tiles to win!</p>
           {error && <p className="error">{error}</p>}
           <button disabled={playing} onClick={handlePlay}>
             {playing ? 'Starting…' : "Play Today's Puzzle"}
           </button>
         </>
       )}
-
-      <button className="btn-secondary" onClick={() => navigate('/')}>
-        Back to Home
-      </button>
     </div>
   );
 }

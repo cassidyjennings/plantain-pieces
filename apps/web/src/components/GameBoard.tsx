@@ -1,4 +1,4 @@
-import { forwardRef, type PointerEvent } from 'react';
+import { forwardRef, memo, type PointerEvent } from 'react';
 import { parseKey, type GridState } from '@plantain/shared';
 import { CELL, WORLD } from '../lib/board.js';
 
@@ -127,4 +127,11 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
   );
 });
 
-export default GameBoard;
+/**
+ * Memoized because Game re-renders on every pointermove of a drag (it tracks the pointer in state
+ * to position the drag ghost), while this component's own props change only when the board really
+ * changes — on a lift, a drop, a pan/zoom. Without it, every placed tile div and its onPointerDown
+ * closure were rebuilt dozens of times a second for a board that hadn't changed, which is exactly
+ * the work a slower machine can't absorb.
+ */
+export default memo(GameBoard);

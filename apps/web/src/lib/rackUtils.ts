@@ -22,15 +22,27 @@ function freshId(): string {
  * which meant React unmounted and remounted the *entire* tray on every single draw — a lot of
  * unnecessary DOM churn that also risked transient rendering artifacts around the tiles that
  * genuinely were mid reveal-animation. Reusing ids keeps identity stable for anything that isn't
- * actually new. */
+ * actually new.
+ *
+ * `heldLetters` are tiles the player owns that are in NEITHER the grid nor the tray right now:
+ * a board tile lifted mid-drag lives only in the drag state until it's dropped (see Game.tsx's
+ * handleMove, which deletes it from the grid the moment the drag passes its threshold). Without
+ * counting them here, "inventory minus grid" wrongly concludes such a tile is still in hand and
+ * materializes a SECOND copy of it in the tray — which the drop then re-adds to the board too.
+ * That's the "a stray letter duplicates when an opponent Peels" bug: any server-rack recompute
+ * landing mid-drag (a foreign peel's getMyState refetch, a Dump response) hit it. */
 export function computeUnplaced(
   fullRack: Letter[],
   grid: GridState,
   justDrawnLetters: Letter[] = [],
   prevTiles: RackTile[] = [],
+  heldLetters: Letter[] = [],
 ): RackTile[] {
   const remaining = letterMultiset(fullRack);
   for (const letter of Object.values(grid)) {
+    remaining[letter] = (remaining[letter] ?? 0) - 1;
+  }
+  for (const letter of heldLetters) {
     remaining[letter] = (remaining[letter] ?? 0) - 1;
   }
   const justDrawnCounts = letterMultiset(justDrawnLetters);

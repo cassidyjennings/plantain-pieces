@@ -1,4 +1,4 @@
-import { type PointerEvent } from 'react';
+import { memo, type PointerEvent } from 'react';
 import type { TrayItem } from '../lib/rackUtils.js';
 import InfoTooltip from './InfoTooltip.js';
 
@@ -18,7 +18,7 @@ interface Props {
   onTilePointerDown: (id: string, e: PointerEvent) => void;
 }
 
-export default function Tray({
+function Tray({
   items,
   selectedId,
   collapsed,
@@ -101,3 +101,10 @@ export default function Tray({
     </div>
   );
 }
+
+/**
+ * Memoized for the same reason as GameBoard: Game re-renders on every pointermove during a drag,
+ * but the tray's own inputs (items/selection/pending reveals) don't change frame to frame. Its
+ * handler props are stable useCallbacks in Game so this actually takes effect.
+ */
+export default memo(Tray);

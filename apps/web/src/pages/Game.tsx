@@ -237,6 +237,12 @@ export default function Game() {
   // was superseded by a newer grid must not let its (stale) response win the race and overwrite
   // validCells/wordsPending set by the newer one.
   const validateSeqRef = useRef(0);
+  // word -> is it valid under THIS room's dictionary config. That config is fixed for the whole
+  // game (the host can only change it in the lobby), so a verdict never expires and every repeat
+  // question is answerable locally. Without this, nudging a single tile re-sent every word on the
+  // board and made the player wait out a debounce plus a full round trip for an answer the client
+  // already had -- most visibly right at the end, when auto-Peel is waiting on it.
+  const wordVerdictsRef = useRef<Map<string, boolean>>(new Map());
   // Same shape again for the room_events handler's own refetches (fetchPlayers/fetchRoom below):
   // peel/dump/progress events can arrive close together, each firing its own async refetch, and
   // an earlier-issued one that resolves last would otherwise silently revert players/room to a
@@ -391,6 +397,34 @@ export default function Game() {
     });
   }, [rack, collapsed, revealChip]);
 
+  /**
+   * Letters the player owns that are currently in neither the grid nor the tray: a board tile
+   * lifted mid-drag (handleMove deletes it from the grid once the drag passes its threshold; it
+   * lives only in dragRef until handleUp puts it back on the board or into the tray).
+   *
+   * A tray-sourced drag is NOT included — those tiles stay in `rack` for the whole drag and are
+   * only removed on a successful drop, so they're already accounted for. Neither is a
+   * move-selection drag: it previews via selectionOffset and doesn't touch the grid until commit.
+   */
+  const heldDragLetters = useCallback((): string[] => {
+    const d = dragRef.current;
+    return d?.kind === 'tile' && d.source === 'board' && d.moved ? [d.letter] : [];
+  }, []);
+
+  /**
+   * The single way in-game grid mutations happen. Writes gridRef synchronously as well as
+   * scheduling the render, because React only refreshes a ref during render — so between a
+   * setGrid and its commit, anything reading gridRef.current (every async response handler, all
+   * the window-level pointer handlers) saw a grid that was one edit behind. For the rack
+   * recompute that stale read is not cosmetic: it decides which tiles are "still in hand," so a
+   * peel/dump response landing in that window could duplicate or drop the tile just moved.
+   */
+  const updateGrid = useCallback((updater: (g: GridState) => GridState) => {
+    const next = updater(gridRef.current);
+    gridRef.current = next;
+    setGrid(next);
+  }, []);
+
   /** Apply a server-authoritative rack, but only if it's strictly newer than the last one we
    * applied. See rackVersionRef above for why this exists: own-action responses and a foreign
    * peel's getMyState refetch race, unordered, and both write the whole rack.
@@ -407,16 +441,19 @@ export default function Game() {
    * fix (styles.css) already flags as what nudges a mobile browser's address bar to show/hide,
    * seen as the bottom panel shifting. */
   const applyServerRack = useCallback(
-    (
-      newRack: string[],
-      newVersion: number,
-      grid: GridState,
-      justDrawnLetters: string[] = [],
-      prevTiles: RackTile[] = [],
-    ) => {
+    (newRack: string[], newVersion: number, opts: { animateDraws?: boolean } = {}) => {
       if (newVersion <= rackVersionRef.current) return;
       rackVersionRef.current = newVersion;
-      setRack(computeUnplaced(newRack, grid, justDrawnLetters, prevTiles));
+      // Everything below reads LIVE state (refs), never a snapshot captured before the request
+      // went out. Callers used to pass their own `grid`/`prevTiles`/`justDrawnLetters`, which
+      // meant each one could be — and one was — stale by the time its response landed: a grid
+      // captured before a round trip doesn't include tiles the player moved during it, and
+      // "inventory minus a stale grid" duplicates or drops tiles accordingly.
+      const grid = gridRef.current;
+      const held = heldDragLetters();
+      const prior = [...rackRef.current.map((t) => t.letter), ...Object.values(grid), ...held];
+      const justDrawn = opts.animateDraws === false ? [] : diffNewLetters(prior, newRack);
+      setRack(computeUnplaced(newRack, grid, justDrawn, rackRef.current, held));
     },
     [],
   );
@@ -445,7 +482,9 @@ export default function Game() {
       fetchPlayers(roomId),
       fetchLastPeelActor(roomId),
     ]);
-    setGrid(state.grid);
+    // Through updateGrid like every other grid write, so gridRef is never left one step behind
+    // the state it mirrors -- this is the only other writer, and it runs at mount.
+    updateGrid(() => state.grid);
     // The initial load always wins -- it's a fresh mount, nothing else has applied a rack yet.
     rackVersionRef.current = state.rackVersion;
     setRack(computeUnplaced(state.rack, state.grid));
@@ -457,7 +496,7 @@ export default function Game() {
       applyBunchCount(roomData.bunch_count, true);
       setRoom(roomData);
     }
-  }, [roomId, applyBunchCount]);
+  }, [roomId, applyBunchCount, updateGrid]);
 
   // --- Xtina mode ------------------------------------------------------------
   // Everything here is presentation over an otherwise ordinary game: the server already dealt
@@ -630,9 +669,7 @@ export default function Game() {
         // draw animation fired for them, and their now-stale rack went on to fail the
         // server's authoritative rack check on their next Peel/Plantains attempt.
         api.getMyState(roomId).then((state) => {
-          const priorRack = [...rackRef.current.map((t) => t.letter), ...Object.values(gridRef.current)];
-          const newLetters = diffNewLetters(priorRack, state.rack);
-          applyServerRack(state.rack, state.rackVersion, gridRef.current, newLetters, rackRef.current);
+          applyServerRack(state.rack, state.rackVersion);
         });
       }
     }
@@ -721,7 +758,7 @@ export default function Game() {
    * "put the tile back" logic can't drift out of sync between them. */
   const abortTileDrag = useCallback((d: DragData | null) => {
     if (d?.kind === 'tile' && d.moved && d.source === 'board' && d.originKey) {
-      setGrid((g) => ({ ...g, [d.originKey!]: d.letter }));
+      updateGrid((g) => ({ ...g, [d.originKey!]: d.letter }));
     }
     // A marquee or selection-move interrupted by a second finger is abandoned, not committed —
     // the gesture became a pinch, so the player never released on a chosen result.
@@ -821,7 +858,7 @@ export default function Game() {
       if (d.source === 'tray' && d.id) setDraggingId(d.id);
       // Lift a board tile out of the grid so it follows the pointer.
       if (d.source === 'board' && d.originKey) {
-        setGrid((g) => {
+        updateGrid((g) => {
           const next = { ...g };
           delete next[d.originKey!];
           return next;
@@ -888,7 +925,7 @@ export default function Game() {
           return;
         }
 
-        setGrid((prev) => {
+        updateGrid((prev) => {
           const next = { ...prev };
           for (const key of d.keys) delete next[key];
           for (const t of targets) next[makeKey(t.x, t.y)] = prev[t.from];
@@ -904,7 +941,7 @@ export default function Game() {
           setSelectedId((s) => (s === d.id ? null : d.id!));
         } else if (d.source === 'board' && d.originKey) {
           // Pick the tile up back into the tray.
-          setGrid((g) => {
+          updateGrid((g) => {
             const next = { ...g };
             delete next[d.originKey!];
             return next;
@@ -919,7 +956,7 @@ export default function Game() {
         const key = makeKey(cell.x, cell.y);
         const occupied = !!gridRef.current[key];
         if (!occupied) {
-          setGrid((g) => ({ ...g, [key]: d.letter }));
+          updateGrid((g) => ({ ...g, [key]: d.letter }));
           if (d.source === 'tray' && d.id) setRack((r) => r.filter((t) => t.id !== d.id));
           setSelectedId(null);
           return;
@@ -942,7 +979,7 @@ export default function Game() {
 
       // Dropped in limbo → return to origin.
       if (d.source === 'board' && d.originKey) {
-        setGrid((g) => ({ ...g, [d.originKey!]: d.letter }));
+        updateGrid((g) => ({ ...g, [d.originKey!]: d.letter }));
       }
     },
     [screenToCell],
@@ -998,14 +1035,21 @@ export default function Game() {
    * from ever seeing the event; capture runs top-down before the event reaches the tile at all,
    * so it can't be blocked that way. Scoped to the board viewport only — a second finger landing
    * on the tray while dragging on the board (or vice versa) isn't treated as a pinch. */
-  function onViewportPointerDownCapture(e: PointerEvent) {
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointersRef.current.size === 2) beginPinch();
-  }
+  const onViewportPointerDownCapture = useCallback(
+    (e: PointerEvent) => {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointersRef.current.size === 2) beginPinch();
+    },
+    [beginPinch],
+  );
 
-  function onTrayPointerDown(id: string, e: PointerEvent) {
+  // These three are useCallbacks reading refs rather than closures over state, so their identity
+  // is stable across renders -- that's what lets GameBoard/Tray below be React.memo'd. They only
+  // ever run from a real pointerdown, never in the same tick as a state update, so a ref read is
+  // always current (same rationale as the window-level pointer handlers above).
+  const onTrayPointerDown = useCallback((id: string, e: PointerEvent) => {
     if (pointersRef.current.size >= 2) return; // a pinch already owns this gesture
-    const tile = rack.find((t) => t.id === id);
+    const tile = rackRef.current.find((t) => t.id === id);
     if (!tile) return;
     e.preventDefault();
     dragRef.current = {
@@ -1017,25 +1061,25 @@ export default function Game() {
       startY: e.clientY,
       moved: false,
     };
-  }
+  }, []);
 
-  function onBoardTilePointerDown(key: string, e: PointerEvent) {
+  const onBoardTilePointerDown = useCallback((key: string, e: PointerEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (pointersRef.current.size >= 2) return; // onViewportPointerDownCapture already started a pinch
-    const letter = grid[key];
+    const letter = gridRef.current[key];
     if (!letter) return;
 
-    if (boardMode === 'select') {
+    if (boardModeRef.current === 'select') {
       // Grabbing a tile that's part of the selection moves the whole set. Grabbing one outside
       // it means the player is after that tile specifically, so drop the old selection and fall
       // through to the ordinary single-tile drag.
-      if (selectedKeys.has(key)) {
+      if (selectedKeysRef.current.has(key)) {
         dragRef.current = {
           kind: 'move-selection',
           startX: e.clientX,
           startY: e.clientY,
-          keys: [...selectedKeys],
+          keys: [...selectedKeysRef.current],
           moved: false,
         };
         return;
@@ -1052,19 +1096,19 @@ export default function Game() {
       startY: e.clientY,
       moved: false,
     };
-  }
+  }, []);
 
-  function onBackgroundPointerDown(e: PointerEvent) {
+  const onBackgroundPointerDown = useCallback((e: PointerEvent) => {
     if (pointersRef.current.size >= 2) return; // onViewportPointerDownCapture already started a pinch
-    if (boardMode === 'select') {
+    if (boardModeRef.current === 'select') {
       // In select mode this gesture draws a box instead of panning. The view stays put —
       // zoom buttons, wheel and pinch still work, only drag-to-pan is taken over.
       // The existing selection is deliberately NOT cleared here; see handleUp.
       dragRef.current = { kind: 'marquee', startX: e.clientX, startY: e.clientY, moved: false };
       return;
     }
-    dragRef.current = { kind: 'pan', startX: e.clientX, startY: e.clientY, startPan: pan };
-  }
+    dragRef.current = { kind: 'pan', startX: e.clientX, startY: e.clientY, startPan: panRef.current };
+  }, []);
 
   /** Zoom by `factor`, keeping the world point under (anchorClientX, anchorClientY) fixed on
    * screen. Shared by wheel-zoom, ctrl+wheel-zoom, and the +/- buttons (anchored at the
@@ -1139,44 +1183,72 @@ export default function Game() {
       setWordsPending(false);
       return;
     }
+
+    /** A cell at the intersection of two words (one across, one down) must only tint
+     * green/count as valid if BOTH words through it are valid. Adding a word's cells
+     * whenever that word alone was valid let an invalid word's cells slip through
+     * whenever every one of them happened to also belong to a separate valid word
+     * crossing it -- masking the bad word entirely and letting auto-Peel/Plantains fire
+     * on a grid that still had a real invalid word on it. */
+    const cellsFromVerdicts = (isValid: (word: string) => boolean) => {
+      const badCells = new Set<string>();
+      for (const w of words) {
+        if (!isValid(w.word)) for (const c of w.cells) badCells.add(c);
+      }
+      const cells = new Set<string>();
+      for (const w of words) {
+        if (isValid(w.word)) for (const c of w.cells) if (!badCells.has(c)) cells.add(c);
+      }
+      return cells;
+    };
+
+    // Only ask the server about words it hasn't already answered for THIS room's dictionary
+    // config (which can't change mid-game). Validity of a given word under a fixed config is a
+    // constant, so re-asking is pure latency: a player nudging one tile around re-forms the same
+    // handful of words over and over, and the old code re-sent every word on the board each time.
+    const unique = [...new Set(words.map((w) => w.word))];
+    const cache = wordVerdictsRef.current;
+    const unknown = unique.filter((w) => !cache.has(w));
+
+    // Everything on the board is already known: answer synchronously. No debounce wait, no round
+    // trip, no pending state for auto-Peel to sit behind.
+    if (unknown.length === 0) {
+      validateSeqRef.current += 1; // supersede any in-flight request; this answer is authoritative
+      setValidCells(cellsFromVerdicts((w) => cache.get(w) === true));
+      setWordsPending(false);
+      return;
+    }
+
     // Flip to "pending" synchronously, in the same effect that (re)starts the debounce timer,
     // so there's no window where wordsPending reads false while validCells is still stale for
     // the current grid — that gap is exactly what let auto-Peel fire on unchecked words before.
     setWordsPending(true);
     const seq = ++validateSeqRef.current;
+    // The debounce exists to avoid hammering the server while tiles are actively being moved.
+    // Once the tray is empty the player has placed everything and is waiting on exactly this
+    // request to decide whether to auto-Peel — the moment latency is most visible — so skip the
+    // wait there and fire immediately.
+    const settled = rack.length === 0 && heldDragLetters().length === 0;
     const handle = setTimeout(async () => {
       try {
-        const unique = [...new Set(words.map((w) => w.word))];
-        const { invalidWords } = await api.validate(roomId, unique);
+        const { invalidWords } = await api.validate(roomId, unknown);
+        const invalid = new Set(invalidWords);
+        for (const w of unknown) cache.set(w, !invalid.has(w));
         // A later request's timer already fired (grid changed again after this one started) —
         // if THIS response is slower and arrives last anyway, applying it would overwrite the
         // newer, correct validCells with a stale answer for an old grid. Drop it; the newer
-        // request's own response (or its finally-block) owns wordsPending from here.
+        // request's own response (or its finally-block) owns wordsPending from here. The cache
+        // write above still happens: those verdicts are true regardless of which grid asked.
         if (seq !== validateSeqRef.current) return;
-        const invalid = new Set(invalidWords);
-        // A cell at the intersection of two words (one across, one down) must only tint
-        // green/count as valid if BOTH words through it are valid. Adding a word's cells
-        // whenever that word alone was valid let an invalid word's cells slip through
-        // whenever every one of them happened to also belong to a separate valid word
-        // crossing it -- masking the bad word entirely and letting auto-Peel/Plantains fire
-        // on a grid that still had a real invalid word on it.
-        const badCells = new Set<string>();
-        for (const w of words) {
-          if (invalid.has(w.word)) for (const c of w.cells) badCells.add(c);
-        }
-        const cells = new Set<string>();
-        for (const w of words) {
-          if (!invalid.has(w.word)) for (const c of w.cells) if (!badCells.has(c)) cells.add(c);
-        }
-        setValidCells(cells);
+        setValidCells(cellsFromVerdicts((w) => cache.get(w) === true));
       } catch {
         /* transient — leave previous highlight */
       } finally {
         if (seq === validateSeqRef.current) setWordsPending(false);
       }
-    }, 350);
+    }, settled ? 0 : 350);
     return () => clearTimeout(handle);
-  }, [grid, roomId, wordValidationEnabled]);
+  }, [grid, rack, roomId, wordValidationEnabled, heldDragLetters]);
 
   // Drop selected cells that no longer hold a tile — recalling invalid tiles, or dragging one
   // out of the group individually, can empty a cell that's still selected. A stale key would
@@ -1230,13 +1302,8 @@ export default function Game() {
     setMessage(null);
     try {
       if (canPeel) {
-        const priorRack = [
-          ...rackRef.current.map((t) => t.letter),
-          ...Object.values(submittedGrid),
-        ];
         const result = await api.peel(roomId, submittedGrid);
-        const newLetters = diffNewLetters(priorRack, result.rack);
-        applyServerRack(result.rack, result.rackVersion, submittedGrid, newLetters, rackRef.current);
+        applyServerRack(result.rack, result.rackVersion);
         applyBunchCount(result.bunchCount);
         fireCallout('PEEL!');
       } else {
@@ -1279,7 +1346,7 @@ export default function Game() {
         // the server disagrees with, forever.
         try {
           const state = await api.getMyState(roomId);
-          applyServerRack(state.rack, state.rackVersion, gridRef.current, [], rackRef.current);
+          applyServerRack(state.rack, state.rackVersion, { animateDraws: false });
           autoSigRef.current = null;
         } catch {
           /* transient — the next foreign peel's getMyState will resync anyway */
@@ -1330,7 +1397,12 @@ export default function Game() {
     // the word she's actually building unhinted. She still has a real, unwinnable board; it just
     // never triggers a server action.
     if (isXtina && !isXtinaPartner) return;
-    const fullRack = [...rack.map((t) => t.letter), ...Object.values(grid)];
+    // heldDragLetters keeps a tile that's mid-drag in the inventory. Without it, lifting the last
+    // stray tile off an otherwise-complete board makes the grid look finished (the held tile is
+    // in neither rack nor grid), so auto-fire would Peel with a grid the server knows is missing
+    // a tile — an instant, silent TILES_REMAINING rejection. Counting it means auto-fire simply
+    // waits until the tile is actually put down, which is what a player expects anyway.
+    const fullRack = [...rack.map((t) => t.letter), ...Object.values(grid), ...heldDragLetters()];
     const res = validateStructure(grid, fullRack);
     if (!res.valid) {
       autoSigRef.current = null;
@@ -1393,12 +1465,10 @@ export default function Game() {
     if (!tile) return;
     busyRef.current = true;
     setMessage(null);
-    const priorRack = [...rack.map((t) => t.letter), ...Object.values(grid)];
     try {
       const result = await api.dump(roomId, tile.letter);
       moveTracker.recordDump(tile.letter);
-      const newLetters = diffNewLetters(priorRack, result.rack);
-      applyServerRack(result.rack, result.rackVersion, grid, newLetters, rack);
+      applyServerRack(result.rack, result.rackVersion);
       applyBunchCount(result.bunchCount);
       setSelectedId(null);
       fireCallout('DUMP!');
@@ -1412,28 +1482,41 @@ export default function Game() {
     }
   }
 
+  /** Stable identity so Tray stays memoized across a drag's pointermove renders. */
+  const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
+
   /** Pull every placed tile that isn't part of a valid word back into the tray. */
-  function handleRecallInvalid() {
+  const handleRecallInvalid = useCallback(() => {
     // cellIsGood, not validCells — otherwise this button rips the xtina partner's scripted
     // accent words (YOURE/MY/LOVE) straight back off the board, since they're not dictionary words.
-    const toRecall = Object.keys(grid).filter((k) => !cellIsGood(k));
+    const toRecall = Object.keys(gridRef.current).filter((k) => !cellIsGood(k));
     if (toRecall.length === 0) return;
-    const recalledTiles = toRecall.map((k) => newRackTile(grid[k]));
-    setGrid((g) => {
+    const recalledTiles = toRecall.map((k) => newRackTile(gridRef.current[k]));
+    updateGrid((g) => {
       const next = { ...g };
       for (const k of toRecall) delete next[k];
       return next;
     });
     setRack((r) => [...r, ...recalledTiles]);
     setSelectedId(null);
-  }
+  }, [cellIsGood, updateGrid]);
 
   // Every non-spectator, self first — replaces the old opponents-only list so the local player
   // sees their own progress alongside everyone else's, not just opponents'.
-  const activePlayers = [...players.filter((p) => !p.is_spectator)].sort((a, b) =>
-    a.profile_id === profileId ? -1 : b.profile_id === profileId ? 1 : 0,
+  // These two are memoized because Game re-renders on every pointermove of a drag or pan
+  // (setPointer/setPan), and neither depends on the pointer -- recomputing a sort and a full
+  // tray rebuild dozens of times a second was pure waste on a slower machine.
+  const activePlayers = useMemo(
+    () =>
+      [...players.filter((p) => !p.is_spectator)].sort((a, b) =>
+        a.profile_id === profileId ? -1 : b.profile_id === profileId ? 1 : 0,
+      ),
+    [players, profileId],
   );
-  const items = trayItems(rack, collapsed, pendingReveal);
+  const items = useMemo(
+    () => trayItems(rack, collapsed, pendingReveal),
+    [rack, collapsed, pendingReveal],
+  );
 
   const isSolo = room?.mode === 'solo';
 
@@ -1656,7 +1739,7 @@ export default function Game() {
         canRecall={invalidPlacedCount > 0}
         pendingIds={pendingReveal}
         sliceRevealedIds={sliceRevealed}
-        onToggleCollapse={() => setCollapsed((c) => !c)}
+        onToggleCollapse={toggleCollapsed}
         onRecallInvalid={handleRecallInvalid}
         onTilePointerDown={onTrayPointerDown}
       />

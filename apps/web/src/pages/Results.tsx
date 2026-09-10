@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
 import { fetchDisplayName, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
@@ -7,6 +7,7 @@ import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/bo
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError, getErrorMessage } from '../lib/api.js';
+import { recordSolved, recordDailyResult, currentStreak } from '../lib/dailyStreak.js';
 import BoardPreview from '../components/BoardPreview.js';
 
 export default function Results() {
@@ -23,6 +24,8 @@ export default function Results() {
   const [rematchError, setRematchError] = useState<string | null>(null);
   const [myBoard, setMyBoard] = useState<RoomBoardRow | null>(null);
   const [boardCount, setBoardCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const dailySavedRef = useRef(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -98,6 +101,20 @@ export default function Results() {
     };
   }, [roomId, profileId]);
 
+  // Record daily puzzle completion in localStorage once longestWord resolves. The
+  // dailySavedRef guard prevents double-recording on the second delayed fetch.
+  useEffect(() => {
+    if (!room || room.mode !== 'daily' || dailySavedRef.current) return;
+    if (longestWord === null && myBoard === null) return;
+    dailySavedRef.current = true;
+    const dur =
+      room.started_at && room.finished_at
+        ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
+        : 0;
+    recordSolved();
+    recordDailyResult(dur, longestWord);
+  }, [room, longestWord, myBoard]);
+
   // A rematch resets THIS room back to a lobby, so everyone still on the results screen has to
   // follow it there — otherwise only the player who clicked would move and the others would sit
   // on a results screen for a game that no longer exists.
@@ -109,13 +126,20 @@ export default function Results() {
 
   const won = room.winner_id === profileId;
   const isSolo = room.mode === 'solo';
+  const isDaily = room.mode === 'daily';
   const isTimed = isSolo && (room.mode_config as { timed?: boolean }).timed === true;
   // Derived from the room's own timestamps rather than a stored duration_ms.
   const durationMs =
     room.started_at && room.finished_at
       ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
       : null;
-  const headline = isSolo ? 'You cleared the Bunch!' : won ? 'You take the win!' : `${winnerName} takes the win!`;
+  const headline = isDaily
+    ? 'You solved it!'
+    : isSolo
+      ? 'You cleared the Bunch!'
+      : won
+        ? 'You take the win!'
+        : `${winnerName} takes the win!`;
   const name = displayName.trim() || 'Guest';
 
   async function handlePlayAgain() {
@@ -151,30 +175,70 @@ export default function Results() {
     }
   }
 
+  const streak = isDaily ? currentStreak() : 0;
+
+  function buildShareText(): string {
+    const date = room.mode_config && (room.mode_config as { scheduledDate?: string }).scheduledDate
+      ? new Date((room.mode_config as { scheduledDate: string }).scheduledDate + 'T00:00:00')
+          .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = durationMs != null
+      ? `⏱ ${Math.floor(durationMs / 60000)}:${Math.floor((durationMs % 60000) / 1000).toString().padStart(2, '0')}`
+      : '';
+    const streakStr = streak > 0 ? `🔥 ${streak}-day streak` : '';
+    return [
+      `Plantain Pieces Daily Puzzle`,
+      `📅 ${date}`,
+      timeStr,
+      streakStr,
+      longestWord ? `📝 ${longestWord}` : '',
+      `plantainpieces.com`,
+    ].filter(Boolean).join('\n');
+  }
+
+  async function handleShare() {
+    const text = buildShareText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard blocked — ignore
+    }
+  }
+
   return (
     <div className="centered">
       <h1 className="results-callout">PLANTAINS!</h1>
       <p className="winner-line">{headline}</p>
 
+      {isDaily && streak > 0 && (
+        <div className="daily-streak-update">
+          🔥 {streak}-day streak!
+        </div>
+      )}
+
       {me && (
         <div className="panel results-earned">
           <h3>Your game</h3>
           <div className="results-stat-row">
-            {!isSolo && (
+            {!isSolo && !isDaily && (
               <div className="stat-tile">
                 <span className="stat-value">{won ? 'Win' : 'Loss'}</span>
                 <span className="stat-label">Result</span>
               </div>
             )}
-            <div className="stat-tile">
-              <span className="stat-value">{me.tile_count}</span>
-              <span className="stat-label">Tiles</span>
-            </div>
+            {!isDaily && (
+              <div className="stat-tile">
+                <span className="stat-value">{me.tile_count}</span>
+                <span className="stat-label">Tiles</span>
+              </div>
+            )}
             <div className="stat-tile">
               <span className="stat-value">{longestWord ?? '-'}</span>
               <span className="stat-label">Longest word</span>
             </div>
-            {isTimed && durationMs != null && (
+            {(isTimed || isDaily) && durationMs != null && (
               <div className="stat-tile">
                 <span className="stat-value">
                   {Math.floor(durationMs / 60000)}:
@@ -209,10 +273,10 @@ export default function Results() {
         >
           <span className="results-board-window-head">
             <span className="results-board-window-title">
-              {isSolo ? 'Your board' : "Everyone's boards"}
+              {isSolo || isDaily ? 'Your board' : "Everyone's boards"}
             </span>
             <span className="results-board-window-hint">
-              {isSolo || boardCount <= 1 ? 'Take a look' : `Compare all ${boardCount} →`}
+              {isSolo || isDaily || boardCount <= 1 ? 'Take a look' : `Compare all ${boardCount} →`}
             </span>
           </span>
           <span className="results-board-window-frame">
@@ -227,12 +291,25 @@ export default function Results() {
 
       {rematchError && <p className="error">{rematchError}</p>}
 
-      <button disabled={rematching} onClick={handlePlayAgain}>
-        {rematching ? 'Starting…' : isSolo ? 'Play Again' : 'Rematch'}
-      </button>
-      <button className="btn-secondary" disabled={rematching} onClick={() => navigate('/')}>
-        Back to Home
-      </button>
+      {isDaily ? (
+        <>
+          <button type="button" onClick={handleShare}>
+            {copied ? 'Copied!' : 'Share Result'}
+          </button>
+          <button className="btn-secondary" onClick={() => navigate('/')}>
+            Back to Home
+          </button>
+        </>
+      ) : (
+        <>
+          <button disabled={rematching} onClick={handlePlayAgain}>
+            {rematching ? 'Starting…' : isSolo ? 'Play Again' : 'Rematch'}
+          </button>
+          <button className="btn-secondary" disabled={rematching} onClick={() => navigate('/')}>
+            Back to Home
+          </button>
+        </>
+      )}
     </div>
   );
 }

@@ -17,9 +17,10 @@ export const ACCESSORY_SETS = {
   // 'stina base' + 'stina hair' + 'stina glasses' are Stina's pieces (skin tone incl. her
   // mouth/eyes, hairstyle, glasses) — each an ordinary option in its slot rather than one
   // monolithic character, so she can mix them with the rest of the generic accessories. The
-  // space in each id renders as two words via the option button's CSS capitalize. Access to
-  // these three ids is gated client-side to the xtina partner role
-  // (apps/web/src/pages/Profile.tsx) — hers alone.
+  // space in each id renders as two words via the option button's CSS capitalize. These three
+  // ids are hers alone: the editor hides them from other accounts (apps/web/src/pages/Profile.tsx)
+  // and update_profile rejects them for anyone without xtina_role = 'partner'. Any new option
+  // must also be added to update_profile's allow-list, or saving it fails.
   base: ['ripe', 'green', 'golden', 'speckled', 'stina base'],
   hat: ['none', 'straw', 'party', 'crown', 'beanie', 'trucker'],
   glasses: ['none', 'round', 'shades', 'star', 'monocle', 'stina glasses'],

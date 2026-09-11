@@ -207,11 +207,16 @@ function Overview() {
   }
 
   async function saveAvatar(config: AvatarConfig) {
+    const previous = avatarConfig;
     setAvatarConfig(config); // optimistic
+    setError(null);
     try {
       await api.updateProfile({ avatarConfig: config });
-    } catch {
-      /* best-effort; local state already reflects the choice */
+    } catch (err) {
+      // Revert: keeping a rejected choice made it look saved here while every lobby, game, and
+      // other device kept showing the old avatar.
+      setAvatarConfig(previous);
+      setError(getErrorMessage(err, "Couldn't save your avatar"));
     }
   }
 

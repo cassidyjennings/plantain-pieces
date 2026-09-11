@@ -76,6 +76,8 @@ export interface CreateDailyRoomResult {
 export interface DailyTodayResult {
   hasDaily: boolean;
   puzzleDate: string | null;
+  tileCount: number | null;
+  minLength: number | null;
 }
 
 export interface JoinRoomResult {

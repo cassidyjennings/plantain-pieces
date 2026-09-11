@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { currentStreak } from '../lib/dailyStreak.js';
+import { currentStreak, solvedTodayRoomId } from '../lib/dailyStreak.js';
 import { validateDisplayName } from '@plantain/shared';
 import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
@@ -98,26 +98,30 @@ export default function Home() {
         {error && <p className="error">{error}</p>}
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          persistName();
-          navigate('/daily');
-        }}
-      >
-        {streak > 0 ? `Daily Puzzle 🔥${streak}` : 'Daily Puzzle'}
-      </button>
-
-      <button
-        type="button"
-        className="btn-secondary"
-        onClick={() => {
-          persistName();
-          navigate('/solo');
-        }}
-      >
-        Play Solo
-      </button>
+      <div className="home-modes">
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => {
+            persistName();
+            const solvedRoom = solvedTodayRoomId();
+            navigate(solvedRoom ? `/room/${solvedRoom}/results` : '/daily');
+          }}
+        >
+          Daily Puzzle
+          {streak > 0 && <span className="home-mode-streak">🔥{streak}</span>}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => {
+            persistName();
+            navigate('/solo');
+          }}
+        >
+          Play Solo
+        </button>
+      </div>
 
       <div className="home-links">
         <button type="button" className="home-profile-btn" onClick={() => navigate('/profile')}>

@@ -85,20 +85,30 @@ app.post('/rooms/solo', async (c) => {
   return c.json(data);
 });
 
-// Return whether today's daily puzzle exists. The client uses this to show or hide
-// the "Play Today's Puzzle" button without exposing the puzzle contents.
+// Whether today's daily puzzle exists, plus the tile count and minimum word length the landing
+// page shows. Neither reveals the solution; the letters and grid never leave the server.
 app.get('/daily/today', async (c) => {
   const admin = createAdminClient(c.env);
   const today = new Date().toISOString().slice(0, 10);
   const { data } = await admin
     .from('daily_puzzles')
-    .select('id, scheduled_date')
+    .select('scheduled_date, letter_multiset, dictionary_config')
     .eq('status', 'scheduled')
     .eq('scheduled_date', today)
     .eq('language', 'en')
     .maybeSingle();
-  if (!data) return c.json({ hasDaily: false, puzzleDate: null });
-  return c.json({ hasDaily: true, puzzleDate: (data as { scheduled_date: string }).scheduled_date });
+  if (!data) return c.json({ hasDaily: false, puzzleDate: null, tileCount: null, minLength: null });
+  const puzzle = data as {
+    scheduled_date: string;
+    letter_multiset: string;
+    dictionary_config: DictionaryConfig;
+  };
+  return c.json({
+    hasDaily: true,
+    puzzleDate: puzzle.scheduled_date,
+    tileCount: puzzle.letter_multiset.length,
+    minLength: puzzle.dictionary_config.minLength,
+  });
 });
 
 // Daily mode: creates the room, seeds the puzzle's exact letter set, deals the

@@ -1,19 +1,51 @@
-import { createClient, type Session } from '@supabase/supabase-js';
+import { createClient, type Session, type SupportedStorage } from '@supabase/supabase-js';
 
 /**
- * `sessionStorage`, not the default `localStorage`: a guest's anonymous session must stay
- * scoped to one browser tab. With `localStorage` (shared across all tabs of the same origin),
- * opening a second tab to join a room you just created in the first tab silently resumes the
- * SAME guest identity — "Join" just re-associates you with your own host seat instead of
- * adding a second player, which looks like joining does nothing. `sessionStorage` still
- * persists a reload within a tab, but a new tab always starts a fresh anonymous session.
+ * Hybrid storage: `sessionStorage` per tab (so a guest's anonymous session stays tab-scoped —
+ * see below) MIRRORED into `localStorage` only for a linked (non-anonymous) account, so a real
+ * sign-in survives closing the tab/browser. Reads prefer this tab's own sessionStorage entry
+ * (a guest it already minted) and fall back to localStorage (a previously linked account) —
+ * that's what lets a brand-new tab resume your Google-linked session instead of starting a
+ * fresh guest.
+ *
+ * Why not plain `localStorage` for everything: a guest's anonymous session must stay scoped to
+ * one browser tab. With `localStorage` (shared across all tabs of the same origin), opening a
+ * second tab to join a room you just created in the first tab would silently resume the SAME
+ * guest identity — "Join" just re-associates you with your own host seat instead of adding a
+ * second player, which looks like joining does nothing.
  */
+function createHybridAuthStorage(): SupportedStorage {
+  return {
+    getItem(key) {
+      return window.sessionStorage.getItem(key) ?? window.localStorage.getItem(key);
+    },
+    setItem(key, value) {
+      window.sessionStorage.setItem(key, value);
+      let isAnonymous = true;
+      try {
+        isAnonymous = (JSON.parse(value)?.user?.is_anonymous ?? true) === true;
+      } catch {
+        // malformed value — treat as anonymous, don't persist it
+      }
+      if (isAnonymous) {
+        window.localStorage.removeItem(key);
+      } else {
+        window.localStorage.setItem(key, value);
+      }
+    },
+    removeItem(key) {
+      window.sessionStorage.removeItem(key);
+      window.localStorage.removeItem(key);
+    },
+  };
+}
+
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY,
   {
     auth: {
-      storage: window.sessionStorage,
+      storage: createHybridAuthStorage(),
     },
   },
 );

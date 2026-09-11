@@ -26,12 +26,27 @@ export function letterMultiset(letters: Letter[]): Record<Letter, number> {
 }
 
 function multisetsEqual(a: Record<Letter, number>, b: Record<Letter, number>): number {
-  // Returns 0 if equal, <0 if `a` has fewer total than `b` (tiles remaining),
-  // >0 if `a` has more (extra/unknown tiles).
+  // Returns 0 if the two multisets are IDENTICAL, <0 if `a` is short of `b` somewhere (tiles
+  // remaining), >0 if `a` has something `b` doesn't (extra/unknown tiles).
+  //
+  // Compared per letter, never by summing the differences. Summing let a surplus of one letter
+  // cancel a shortfall of another, so a grid built from letters the player does not own scored
+  // 0 and passed as valid -- e.g. rack C A T D O G laid out as CAT/DOT (an extra T, no G).
+  // This is the ONLY letter-identity check anywhere on the write path: the Worker runs it for
+  // both Peel and Plantains, and the RPCs below it only ever compare tile_count. A shortfall
+  // is reported in preference to a surplus, so a genuinely unfinished board still reads as
+  // TILES_REMAINING (the silent, expected case) rather than the louder EXTRA_TILES.
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  let diff = 0;
-  for (const k of keys) diff += (a[k] ?? 0) - (b[k] ?? 0);
-  return diff;
+  let short = false;
+  let over = false;
+  for (const k of keys) {
+    const d = (a[k] ?? 0) - (b[k] ?? 0);
+    if (d < 0) short = true;
+    else if (d > 0) over = true;
+  }
+  if (short) return -1;
+  if (over) return 1;
+  return 0;
 }
 
 /**

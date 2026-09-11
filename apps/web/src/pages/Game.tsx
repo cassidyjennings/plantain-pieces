@@ -109,6 +109,15 @@ const RACK_DESYNC_ERRORS = new Set(['TILES_REMAINING', 'EXTRA_TILES']);
 /** How long an error banner stays up before dismissing itself. */
 const ERROR_BANNER_MS = 6000;
 
+/** Backoff for a failed /validate: a word check that never comes back leaves the auto-Peel gate
+ * shut, so it has to retry itself — the player has finished their board and has no reason to
+ * touch another tile, and nothing else would ever re-fire the effect. */
+const VALIDATE_RETRY_BASE_MS = 1500;
+const VALIDATE_RETRY_MAX_MS = 15000;
+/** Consecutive failures before we stop being quiet about it. One blip is noise; three in a row
+ * with a finished board on screen is indistinguishable from the game having frozen. */
+const VALIDATE_FAIL_BANNER_AT = 3;
+
 /** How many slices SliceFlyLayer flies at once (its MAX_ACTIVE) — bursts queue in waves of this. */
 const SLICE_WAVE = 4;
 /** One slice's full flight: ~750ms leg A + ~1050ms leg B. */
@@ -196,6 +205,8 @@ export default function Game() {
   const [callout, setCallout] = useState<string | null>(null);
   const [validCells, setValidCells] = useState<Set<string>>(new Set());
   const [wordsPending, setWordsPending] = useState(false);
+  /** Bumped by the retry timer below to re-fire the validation effect after a failed request. */
+  const [validateNonce, setValidateNonce] = useState(0);
   /** Whether the current banner is a real failure (louder styling) rather than a neutral note. */
   const [messageIsError, setMessageIsError] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,6 +248,9 @@ export default function Game() {
   // was superseded by a newer grid must not let its (stale) response win the race and overwrite
   // validCells/wordsPending set by the newer one.
   const validateSeqRef = useRef(0);
+  /** Consecutive /validate failures, for backoff and for deciding when to surface a banner.
+   * Reset on any successful response. */
+  const validateFailsRef = useRef(0);
   // word -> is it valid under THIS room's dictionary config. That config is fixed for the whole
   // game (the host can only change it in the lobby), so a verdict never expires and every repeat
   // question is answerable locally. Without this, nudging a single tile re-sent every word on the
@@ -425,6 +439,26 @@ export default function Game() {
     setGrid(next);
   }, []);
 
+  /** The rack's twin of updateGrid, and it exists for the same reason. rackRef was refreshed
+   * only during render, so between a setRack and its commit every async handler read a rack one
+   * edit behind — and applyServerRack below builds its "what did I just draw?" diff out of
+   * exactly that ref. Drop a board tile into the tray and a peel/dump response landing in that
+   * window sees the letter in neither the grid (already removed, synchronously) nor the rack
+   * (not added yet) nor the drag (already released), concludes it was freshly drawn, mints a new
+   * id for it and flies a second slice — the "two tiles for one Peel" symptom, by a different
+   * door than the rackVersion one. The tray-to-board direction is the mirror: a genuine draw of
+   * that same letter gets swallowed and never animates.
+   *
+   * Anything that mutates the rack must go through this. A bare setRack reopens the gap. */
+  const updateRack = useCallback(
+    (updater: RackTile[] | ((r: RackTile[]) => RackTile[])) => {
+      const next = typeof updater === 'function' ? updater(rackRef.current) : updater;
+      rackRef.current = next;
+      setRack(next);
+    },
+    [],
+  );
+
   /** Apply a server-authoritative rack, but only if it's strictly newer than the last one we
    * applied. See rackVersionRef above for why this exists: own-action responses and a foreign
    * peel's getMyState refetch race, unordered, and both write the whole rack.
@@ -453,24 +487,40 @@ export default function Game() {
       const held = heldDragLetters();
       const prior = [...rackRef.current.map((t) => t.letter), ...Object.values(grid), ...held];
       const justDrawn = opts.animateDraws === false ? [] : diffNewLetters(prior, newRack);
-      setRack(computeUnplaced(newRack, grid, justDrawn, rackRef.current, held));
+      updateRack(computeUnplaced(newRack, grid, justDrawn, rackRef.current, held));
     },
     [],
   );
 
-  /** Apply a server-reported bunchCount, but only if it can't be a stale, out-of-order response.
+  /** Apply a server-reported bunchCount, ordered by the room's own state_version.
+   *
    * bunchCount is written from four independent async call sites (this initial load, the
-   * room_events peel/dump/game_started broadcast, and each of this player's own peel/dump
-   * responses) with no shared request/version counter tying them together. Rather than thread one
-   * through all four, this enforces the actual domain invariant instead: the Bunch only ever
-   * shrinks during an active game, and only resets (can go back up) at game_started (a fresh deal,
-   * including a rematch). A response reporting a HIGHER count outside a reset is therefore
-   * necessarily an earlier peel/dump's result resolving late — drop it, don't let it overwrite a
-   * fresher, lower count (which also directly gates canPeel in runAutoAction below). */
-  const bunchAppliedRef = useRef(144);
-  const applyBunchCount = useCallback((next: number, isReset = false) => {
-    if (!isReset && next > bunchAppliedRef.current) return;
-    bunchAppliedRef.current = next;
+   * room_events peel/dump/game_started/player_left broadcast, and each of this player's own
+   * peel/dump responses) with nothing sequencing them against each other. This used to enforce
+   * "the Bunch only ever shrinks (except at game_started)" as a stand-in for that ordering —
+   * which is simply false: leave_room returns a departing player's whole rack to the Bunch, so
+   * `player_left` legitimately reports a HIGHER count. Dropping it froze the meter for the rest
+   * of the game (every later peel/dump report was above the frozen value too, so those were
+   * dropped as well), and left canPeel below reading a too-low number — a completed board then
+   * fired Plantains instead of Peel and got BUNCH_NOT_LOW, which is not silent and is latched by
+   * autoSigRef. A finished board that could neither peel nor win.
+   *
+   * rooms.state_version (migration 20260910000001) is bumped by a trigger on every change to
+   * bunch_count and stamped onto every room_event, so ordering is now carried explicitly rather
+   * than inferred from the value. */
+  const bunchVersionRef = useRef(-1);
+  const applyBunchCount = useCallback((next: number, version?: number | null) => {
+    if (typeof version === 'number') {
+      if (version < bunchVersionRef.current) return; // an older write resolving late
+      bunchVersionRef.current = version;
+      setBunchCount(next);
+      return;
+    }
+    // No version available. That means an API/DB pair older than the migration — the web app
+    // auto-deploys on push while migrations are run by hand, so this window is real. Take the
+    // value rather than freeze the meter, but never let an unversioned report overwrite a
+    // versioned one.
+    if (bunchVersionRef.current >= 0) return;
     setBunchCount(next);
   }, []);
 
@@ -487,13 +537,11 @@ export default function Game() {
     updateGrid(() => state.grid);
     // The initial load always wins -- it's a fresh mount, nothing else has applied a rack yet.
     rackVersionRef.current = state.rackVersion;
-    setRack(computeUnplaced(state.rack, state.grid));
+    updateRack(computeUnplaced(state.rack, state.grid));
     setPlayers(playerList);
     setLastPeelBy(lastPeel);
     if (roomData) {
-      // The initial load always wins, same reasoning as rackVersionRef above -- nothing else has
-      // applied a bunchCount yet.
-      applyBunchCount(roomData.bunch_count, true);
+      applyBunchCount(roomData.bunch_count, roomData.state_version);
       setRoom(roomData);
     }
   }, [roomId, applyBunchCount, updateGrid]);
@@ -598,89 +646,116 @@ export default function Game() {
     api.persistFinalGrid(roomId, gridRef.current).catch(() => {});
   }
 
-  useRoomEvents(roomId, (event) => {
-    if (event.type === 'game_over') {
-      submitSummaryOnce();
-      // room_events are delivered to the actor too (see the actor !== profileId guard on `peel`
-      // below), so the partner receives this broadcast right after her own Plantains response
-      // already set xtinaFinished. Navigating here would yank her straight off the held board
-      // and its "View the board" button — the entire point of the mode — a fraction of a second
-      // after it appeared. Hold the board instead; she leaves it on her own.
-      if (isXtinaPartner) {
-        setXtinaFinished(true);
+  // presenceId opts this screen into the channel's presence set — see below for why the DB's
+  // `connected` column can't answer this.
+  const { onlineIds } = useRoomEvents(
+    roomId,
+    (event) => {
+      if (event.type === 'game_over') {
+        submitSummaryOnce();
+        // room_events are delivered to the actor too (see the actor !== profileId guard on `peel`
+        // below), so the partner receives this broadcast right after her own Plantains response
+        // already set xtinaFinished. Navigating here would yank her straight off the held board
+        // and its "View the board" button — the entire point of the mode — a fraction of a second
+        // after it appeared. Hold the board instead; she leaves it on her own.
+        if (isXtinaPartner) {
+          setXtinaFinished(true);
+          return;
+        }
+        navigate(`/room/${roomId}/results`, { replace: true });
         return;
       }
-      navigate(`/room/${roomId}/results`, { replace: true });
-      return;
-    }
-    if (
-      event.type === 'peel' ||
-      event.type === 'dump' ||
-      event.type === 'game_started' ||
-      event.type === 'player_left' ||
-      event.type === 'progress'
-    ) {
-      // progress events carry no bunchCount (just profileId/remaining) — this guard simply
-      // no-ops for them, which is correct; they only need the player-list refetch below so an
-      // opponent's pill picks up their new remaining_count.
-      const payload = event.payload as { bunchCount?: number };
-      if (typeof payload.bunchCount === 'number') {
-        applyBunchCount(payload.bunchCount, event.type === 'game_started');
+      if (
+        event.type === 'peel' ||
+        event.type === 'dump' ||
+        event.type === 'game_started' ||
+        event.type === 'player_left' ||
+        event.type === 'progress'
+      ) {
+        // progress events carry no bunchCount (just profileId/remaining) — this guard simply
+        // no-ops for them, which is correct; they only need the player-list refetch below so an
+        // opponent's pill picks up their new remaining_count. stateVersion IS stamped on every
+        // event (see the room_events trigger), including those, and is simply unused here.
+        const payload = event.payload as { bunchCount?: number; stateVersion?: number };
+        if (typeof payload.bunchCount === 'number') {
+          applyBunchCount(payload.bunchCount, payload.stateVersion);
+        }
+        // Two of these events can land close together (e.g. two peels in quick succession); each
+        // fires its own fetchPlayers call, unordered. playersSeqRef drops a response once a newer
+        // request has been issued, so an earlier-issued-but-later-resolving fetch can't revert the
+        // roster to a stale snapshot.
+        if (roomId) {
+          const seq = ++playersSeqRef.current;
+          fetchPlayers(roomId).then((p) => {
+            if (seq === playersSeqRef.current) setPlayers(p);
+          });
+        }
       }
-      // Two of these events can land close together (e.g. two peels in quick succession); each
-      // fires its own fetchPlayers call, unordered. playersSeqRef drops a response once a newer
-      // request has been issued, so an earlier-issued-but-later-resolving fetch can't revert the
-      // roster to a stale snapshot.
-      if (roomId) {
-        const seq = ++playersSeqRef.current;
-        fetchPlayers(roomId).then((p) => {
-          if (seq === playersSeqRef.current) setPlayers(p);
-        });
+      if (event.type === 'peel') {
+        // The room row itself changes on a Peel in xtina mode: the RPC increments
+        // mode_config.step. `room` is otherwise fetched exactly once (loadState), so without this
+        // the client's step freezes at 1 forever — hints stay pinned to word 1's now-filled cells
+        // and the placement gate keeps comparing word 2..10 against word 1's target, which can
+        // never match. That's a silent soft-lock: no peel, no error, no way forward. Runs for
+        // every player and every mode; for a non-xtina room it's just a cheap row refresh.
+        // Same ordering guard as fetchPlayers above -- two close-together peels must not let an
+        // earlier-issued fetchRoom regress mode_config.step after a later one already advanced it.
+        if (roomId) {
+          const seq = ++roomSeqRef.current;
+          fetchRoom(roomId).then((r) => {
+            if (r && seq === roomSeqRef.current) setRoom(r);
+          });
+        }
+        const payload = event.payload as { actor?: string };
+        if (payload.actor) setLastPeelBy(payload.actor);
+        if (payload.actor && payload.actor !== profileId && roomId) {
+          // A Peel deals a tile to EVERYONE, so everyone gets the callout — it's the signal that
+          // your own rack just changed, not a notification about who did it. Deliberately no actor
+          // name: the "Last peel" pill already answers that, and a name would make the string long
+          // enough to overflow a phone. Guarded on actor !== self because the peeler already fired
+          // this locally from runAutoAction; without the guard they'd get two.
+          fireCallout('PEEL!');
+          // Peel deals a new tile to EVERY player, not just whoever called it. The peeler's own
+          // client already applied its updated rack from the API response directly; everyone
+          // else only learns a peel happened via this broadcast (which is public-safe and
+          // carries no private rack data), so pull our own state to pick up the tile we were
+          // just dealt. Without this, a bystander's tray silently never got their new tile: no
+          // draw animation fired for them, and their now-stale rack went on to fail the
+          // server's authoritative rack check on their next Peel/Plantains attempt.
+          api.getMyState(roomId)
+            .then((state) => {
+              applyServerRack(state.rack, state.rackVersion);
+            })
+            .catch(() => {
+              // Unhandled otherwise. Not worth a banner: the rack heals either way — the next
+              // auto-fire attempt gets TILES_REMAINING and resyncs (RACK_DESYNC_ERRORS), and a
+              // reconnect replays this event via useRoomEvents' catch-up.
+            });
+        }
       }
-    }
-    if (event.type === 'peel') {
-      // The room row itself changes on a Peel in xtina mode: the RPC increments
-      // mode_config.step. `room` is otherwise fetched exactly once (loadState), so without this
-      // the client's step freezes at 1 forever — hints stay pinned to word 1's now-filled cells
-      // and the placement gate keeps comparing word 2..10 against word 1's target, which can
-      // never match. That's a silent soft-lock: no peel, no error, no way forward. Runs for
-      // every player and every mode; for a non-xtina room it's just a cheap row refresh.
-      // Same ordering guard as fetchPlayers above -- two close-together peels must not let an
-      // earlier-issued fetchRoom regress mode_config.step after a later one already advanced it.
-      if (roomId) {
-        const seq = ++roomSeqRef.current;
-        fetchRoom(roomId).then((r) => {
-          if (r && seq === roomSeqRef.current) setRoom(r);
-        });
+      if (event.type === 'plantains_rejected') {
+        const payload = event.payload as { actor: string; reason: string };
+        if (payload.actor !== profileId) {
+          showBanner(`Someone's Plantains! call was rejected (${payload.reason}). Keep playing.`, false);
+        }
       }
-      const payload = event.payload as { actor?: string };
-      if (payload.actor) setLastPeelBy(payload.actor);
-      if (payload.actor && payload.actor !== profileId && roomId) {
-        // A Peel deals a tile to EVERYONE, so everyone gets the callout — it's the signal that
-        // your own rack just changed, not a notification about who did it. Deliberately no actor
-        // name: the "Last peel" pill already answers that, and a name would make the string long
-        // enough to overflow a phone. Guarded on actor !== self because the peeler already fired
-        // this locally from runAutoAction; without the guard they'd get two.
-        fireCallout('PEEL!');
-        // Peel deals a new tile to EVERY player, not just whoever called it. The peeler's own
-        // client already applied its updated rack from the API response directly; everyone
-        // else only learns a peel happened via this broadcast (which is public-safe and
-        // carries no private rack data), so pull our own state to pick up the tile we were
-        // just dealt. Without this, a bystander's tray silently never got their new tile: no
-        // draw animation fired for them, and their now-stale rack went on to fail the
-        // server's authoritative rack check on their next Peel/Plantains attempt.
-        api.getMyState(roomId).then((state) => {
-          applyServerRack(state.rack, state.rackVersion);
-        });
-      }
-    }
-    if (event.type === 'plantains_rejected') {
-      const payload = event.payload as { actor: string; reason: string };
-      if (payload.actor !== profileId) {
-        setMessage(`Someone's Plantains! call was rejected (${payload.reason}). Keep playing.`);
-      }
-    }
-  });
+    },
+    { presenceId: profileId ?? undefined },
+  );
+
+  /**
+   * Is this player still here? Read from the room channel's presence set, NOT from
+   * room_players.connected — that column defaults to true and is written by nothing, anywhere
+   * in the codebase, so the "(disconnected)" marker below could never appear no matter who quit.
+   *
+   * An empty set means presence hasn't synced yet (it always contains at least ourselves once it
+   * has), so everyone reads as present until it does — briefly labelling the whole roster
+   * disconnected on mount would be worse than the bug being fixed.
+   */
+  const isOnline = useCallback(
+    (p: PublicPlayer) => onlineIds.size === 0 || onlineIds.has(p.profile_id),
+    [onlineIds],
+  );
 
   // --- Coordinate helpers ----------------------------------------------------
 
@@ -947,7 +1022,7 @@ export default function Game() {
             delete next[d.originKey!];
             return next;
           });
-          setRack((r) => [...r, newRackTile(d.letter)]);
+          updateRack((r) => [...r, newRackTile(d.letter)]);
         }
         return;
       }
@@ -958,7 +1033,7 @@ export default function Game() {
         const occupied = !!gridRef.current[key];
         if (!occupied) {
           updateGrid((g) => ({ ...g, [key]: d.letter }));
-          if (d.source === 'tray' && d.id) setRack((r) => r.filter((t) => t.id !== d.id));
+          if (d.source === 'tray' && d.id) updateRack((r) => r.filter((t) => t.id !== d.id));
           setSelectedId(null);
           return;
         }
@@ -969,9 +1044,9 @@ export default function Game() {
         const idx = trayIndexAt(e.clientX, d.id);
         if (d.source === 'board') {
           const tile = newRackTile(d.letter);
-          setRack((r) => (collapsedRef.current ? [...r, tile] : insertRackTile(r, tile, idx)));
+          updateRack((r) => (collapsedRef.current ? [...r, tile] : insertRackTile(r, tile, idx)));
         } else if (d.source === 'tray' && d.id) {
-          setRack((r) =>
+          updateRack((r) =>
             collapsedRef.current ? moveRackLetterGroup(r, d.letter, idx) : moveRackTile(r, d.id!, idx),
           );
         }
@@ -1230,6 +1305,7 @@ export default function Game() {
     // request to decide whether to auto-Peel — the moment latency is most visible — so skip the
     // wait there and fire immediately.
     const settled = rack.length === 0 && heldDragLetters().length === 0;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     const handle = setTimeout(async () => {
       try {
         const { invalidWords } = await api.validate(roomId, unknown);
@@ -1238,18 +1314,34 @@ export default function Game() {
         // A later request's timer already fired (grid changed again after this one started) —
         // if THIS response is slower and arrives last anyway, applying it would overwrite the
         // newer, correct validCells with a stale answer for an old grid. Drop it; the newer
-        // request's own response (or its finally-block) owns wordsPending from here. The cache
-        // write above still happens: those verdicts are true regardless of which grid asked.
+        // request owns wordsPending from here. The cache write above still happens: those
+        // verdicts are true regardless of which grid asked.
         if (seq !== validateSeqRef.current) return;
+        validateFailsRef.current = 0;
         setValidCells(cellsFromVerdicts((w) => cache.get(w) === true));
+        setWordsPending(false);
       } catch {
-        /* transient — leave previous highlight */
-      } finally {
-        if (seq === validateSeqRef.current) setWordsPending(false);
+        if (seq !== validateSeqRef.current) return;
+        // wordsPending deliberately stays TRUE. It used to be cleared here, which handed
+        // auto-fire a green light while validCells still described an OLDER grid — the gate
+        // then failed on the cells it didn't know about, and, because a player who has just
+        // placed their last tile has no reason to touch the board again, nothing ever re-ran
+        // this effect. A finished, correct board with no Peel and no explanation.
+        const attempt = (validateFailsRef.current += 1);
+        if (attempt === VALIDATE_FAIL_BANNER_AT) {
+          showError("Can't check words right now — still trying. Your tiles are safe.");
+        }
+        retry = setTimeout(
+          () => setValidateNonce((n) => n + 1),
+          Math.min(VALIDATE_RETRY_BASE_MS * 2 ** (attempt - 1), VALIDATE_RETRY_MAX_MS),
+        );
       }
     }, settled ? 0 : 350);
-    return () => clearTimeout(handle);
-  }, [grid, rack, roomId, wordValidationEnabled, heldDragLetters]);
+    return () => {
+      clearTimeout(handle);
+      if (retry) clearTimeout(retry);
+    };
+  }, [grid, rack, roomId, wordValidationEnabled, heldDragLetters, validateNonce]);
 
   // Drop selected cells that no longer hold a tile — recalling invalid tiles, or dragging one
   // out of the group individually, can empty a cell that's still selected. A stale key would
@@ -1300,12 +1392,12 @@ export default function Game() {
     const activeCount = playersRef.current.filter((p) => !p.is_spectator).length || 1;
     const canPeel = bunchRef.current >= activeCount;
     busyRef.current = true;
-    setMessage(null);
+    clearMessage();
     try {
       if (canPeel) {
         const result = await api.peel(roomId, submittedGrid);
         applyServerRack(result.rack, result.rackVersion);
-        applyBunchCount(result.bunchCount);
+        applyBunchCount(result.bunchCount, result.stateVersion);
         fireCallout('PEEL!');
       } else {
         await api.plantains(roomId, submittedGrid);
@@ -1360,15 +1452,33 @@ export default function Game() {
     }
   }, [roomId, navigate, isXtinaPartner, applyServerRack, applyBunchCount]);
 
-  /** Drop an error banner over the board, and clear it on its own so it can't linger. */
-  function showError(text: string) {
+  /** Take the banner down now, timer and error styling included. A bare setMessage(null) left
+   * messageIsError armed, so the next neutral note inherited the loud red styling, and left a
+   * pending dismiss timer that would fire over whatever replaced it. */
+  function clearMessage() {
     if (errorTimer.current) clearTimeout(errorTimer.current);
-    setMessageIsError(true);
+    errorTimer.current = null;
+    setMessage(null);
+    setMessageIsError(false);
+  }
+
+  /** Drop a banner over the board, and clear it on its own so it can't linger. `isError` only
+   * picks the styling — every banner self-dismisses, including neutral ones. A neutral note used
+   * to go through a bare setMessage with no timer at all, so e.g. the "someone's Plantains! was
+   * rejected" notice sat over the board indefinitely (that banner is an overlay, not in flow)
+   * until some other action happened to replace it. */
+  function showBanner(text: string, isError: boolean) {
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    setMessageIsError(isError);
     setMessage(text);
     errorTimer.current = setTimeout(() => {
       setMessage(null);
       setMessageIsError(false);
     }, ERROR_BANNER_MS);
+  }
+
+  function showError(text: string) {
+    showBanner(text, true);
   }
 
   function reportActionError(err: unknown) {
@@ -1465,12 +1575,12 @@ export default function Game() {
     const tile = rack.find((t) => t.id === selectedId);
     if (!tile) return;
     busyRef.current = true;
-    setMessage(null);
+    clearMessage();
     try {
       const result = await api.dump(roomId, tile.letter);
       moveTracker.recordDump(tile.letter);
       applyServerRack(result.rack, result.rackVersion);
-      applyBunchCount(result.bunchCount);
+      applyBunchCount(result.bunchCount, result.stateVersion);
       setSelectedId(null);
       fireCallout('DUMP!');
     } catch (err) {
@@ -1498,7 +1608,7 @@ export default function Game() {
       for (const k of toRecall) delete next[k];
       return next;
     });
-    setRack((r) => [...r, ...recalledTiles]);
+    updateRack((r) => [...r, ...recalledTiles]);
     setSelectedId(null);
   }, [cellIsGood, updateGrid]);
 
@@ -1566,7 +1676,7 @@ export default function Game() {
       <span key={p.profile_id} className={`roster-chip${isSelf ? ' roster-chip-self' : ''}`}>
         <span className="roster-chip-name">
           {isSelf ? 'You' : p.display_name}
-          {!p.connected ? ' (disconnected)' : ''}
+          {!isOnline(p) ? ' (disconnected)' : ''}
         </span>
         <span className="roster-chip-count">{playerCount(p)}</span>
       </span>
@@ -1626,7 +1736,7 @@ export default function Game() {
                         <div className="roster-player-info">
                           <span className="roster-player-name">
                             {isSelf ? 'You' : p.display_name}
-                            {!p.connected ? ' (disconnected)' : ''}
+                            {!isOnline(p) ? ' (disconnected)' : ''}
                           </span>
                           <span className="roster-player-count">{playerCount(p)} tiles</span>
                         </div>

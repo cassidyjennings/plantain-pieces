@@ -102,6 +102,20 @@ describe('validateStructure', () => {
     expect(res.reason).toBe('EXTRA_TILES');
   });
 
+  it('rejects a grid built from letters the player does not own, even when the totals match', () => {
+    // The bug this pins: the multiset comparison used to SUM the per-letter differences, so a
+    // surplus of one letter cancelled a shortfall of another and the grid scored 0 = "equal".
+    // Rack is C A T D O G; the grid spells CAT/DOT — one T too many, and no G at all. Same
+    // tile COUNT, different tiles. This is the only letter-identity check on the write path
+    // (the Worker runs it for both Peel and Plantains), so a pass here was a real cheat hole.
+    const g = grid([
+      'CAT',
+      'DOT',
+    ]);
+    const res = validateStructure(g, ['C', 'A', 'T', 'D', 'O', 'G']);
+    expect(res.valid).toBe(false);
+  });
+
   it('fails on a disconnected grid', () => {
     const g = grid(['CA...TA']); // uses C,A,T,A but split — but multiset differs
     const res = validateStructure(g, ['C', 'A', 'T', 'A']);

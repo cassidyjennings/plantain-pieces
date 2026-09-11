@@ -24,6 +24,12 @@ export interface PublicRoom {
   mode_config: SoloModeConfig | XtinaModeConfig | DailyModeConfig | Record<string, never>;
   started_at: string | null;
   finished_at: string | null;
+  /** Monotonic counter, bumped by a DB trigger whenever bunch_count changes (migration
+   * 20260910000001). The client applies a reported bunchCount only if it carries a version at
+   * least as new as the last one applied — four independent async writers report that number
+   * and nothing else orders them. Optional so a web deploy that lands before the migration is
+   * run degrades to the old behaviour instead of freezing the Bunch meter at its initial value. */
+  state_version?: number;
 }
 
 export interface PublicPlayer {

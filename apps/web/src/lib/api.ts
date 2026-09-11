@@ -100,6 +100,10 @@ export interface PeelResult {
   rack: string[];
   rackVersion: number;
   bunchCount: number;
+  /** See PublicRoom.state_version. The Worker reads bunchCount and this together from one row,
+   * so the pair is consistent; absent only if that read failed, in which case the client leaves
+   * the Bunch meter to the room_event broadcast (which carries its own stamped version). */
+  stateVersion?: number;
 }
 
 export interface DumpResult {
@@ -107,6 +111,8 @@ export interface DumpResult {
   rack: string[];
   rackVersion: number;
   bunchCount: number;
+  /** See PeelResult.stateVersion. */
+  stateVersion?: number;
 }
 
 export interface WordSetResult {

@@ -33,6 +33,46 @@ app.use('/profile/*', requireAuth);
 
 app.get('/', (c) => c.json({ ok: true, service: 'plantain-pieces-api' }));
 
+/** Is this profile actually in this room? Every other in-game route answers this implicitly by
+ * scoping its work to the caller's own room_players row; the read-only routes have to ask. */
+async function isRoomMember(
+  admin: ReturnType<typeof createAdminClient>,
+  roomId: string,
+  profileId: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from('room_players')
+    .select('id')
+    .eq('room_id', roomId)
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  return !!data;
+}
+
+/** The room's Bunch size together with the state_version it belongs to, read in ONE row so the
+ * pair is always internally consistent. Peel and Dump return this instead of the count their own
+ * RPC computed: if a concurrent action has already moved the Bunch on, reporting the newer pair
+ * is both correct and fresher, whereas pairing an old count with a newly-read version would
+ * make the client apply a stale count and then reject the real one.
+ *
+ * Returns null if the read fails — the caller then omits stateVersion entirely and the client
+ * falls back to the room_event broadcast, which carries its own stamped version. */
+async function readBunchState(
+  admin: ReturnType<typeof createAdminClient>,
+  roomId: string,
+): Promise<{ bunchCount: number; stateVersion: number } | null> {
+  const { data } = await admin
+    .from('rooms')
+    .select('bunch_count, state_version')
+    .eq('id', roomId)
+    .maybeSingle();
+  const row = data as { bunch_count?: number; state_version?: number } | null;
+  if (!row || typeof row.bunch_count !== 'number' || typeof row.state_version !== 'number') {
+    return null;
+  }
+  return { bunchCount: row.bunch_count, stateVersion: row.state_version };
+}
+
 /** A room's mode, for the handful of routes that must behave differently in xtina mode.
  * Returns null when the room is missing — callers treat that as "not xtina" and let the RPC
  * below them raise the real ROOM_NOT_FOUND. */
@@ -251,8 +291,16 @@ app.post('/rooms/:roomId/peel', async (c) => {
   });
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
 
-  await admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid });
-  return c.json(data);
+  // Reconnect-only snapshot; a failure here must not fail the Peel that already committed, but
+  // it should not vanish either — a player who reloads would silently get an older board back.
+  const { error: persistError } = await admin.rpc('persist_grid', {
+    p_room_id: roomId,
+    p_profile: profileId,
+    p_grid: body.grid,
+  });
+  if (persistError) console.error('persist_grid after peel failed', persistError.message);
+
+  return c.json({ ...(data as object), ...((await readBunchState(admin, roomId)) ?? {}) });
 });
 
 // Final board, for the post-game viewer. Persisted onto room_players.grid_state, which is
@@ -298,11 +346,21 @@ app.post('/rooms/:roomId/progress', async (c) => {
 // Live validation: which of the submitted words are NOT in the room's dictionary.
 // Used by the client for green-highlighting valid words during play (read-only, no mutation).
 app.post('/rooms/:roomId/validate', async (c) => {
+  const profileId = c.get('profileId');
   const roomId = c.req.param('roomId');
   const body = await c.req.json<{ words: string[] }>();
   const admin = createAdminClient(c.env);
   const words = Array.isArray(body.words) ? body.words : [];
   if (words.length === 0) return c.json({ invalidWords: [] });
+
+  // find_invalid_words is SECURITY DEFINER, so it reads straight past the words table's RLS
+  // split (base rows world-readable, custom rows owner-only). Without this gate any signed-in
+  // account holding a room id could probe that room's dictionary — including other people's
+  // private custom word sets — one word at a time. Every other in-game route is scoped to the
+  // caller's own row and so was never exposed this way; this one takes no caller identity at all.
+  if (!(await isRoomMember(admin, roomId, profileId))) {
+    return c.json({ error: 'NOT_A_PLAYER' }, 403);
+  }
   const { data, error } = await admin.rpc('find_invalid_words', {
     p_room_id: roomId,
     p_words: words,
@@ -331,7 +389,7 @@ app.post('/rooms/:roomId/dump', async (c) => {
     p_tile: body.tile,
   });
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
-  return c.json(data);
+  return c.json({ ...(data as object), ...((await readBunchState(admin, roomId)) ?? {}) });
 });
 
 // Plantains!: full structural + dictionary validation, then end the game.

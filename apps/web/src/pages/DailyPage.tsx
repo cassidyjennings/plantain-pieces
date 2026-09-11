@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getErrorMessage, type DailyTodayResult } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
+import { useLocalDate } from '../hooks/useLocalDate.js';
 import {
   isSolvedToday,
   currentStreak,
@@ -17,29 +18,41 @@ function fmtMs(ms: number): string {
 export default function DailyPage() {
   const navigate = useNavigate();
   const displayName = useSessionStore((s) => s.displayName);
-  const [today, setToday] = useState<DailyTodayResult | null>(null);
+  const today = useLocalDate();
+  const [daily, setDaily] = useState<DailyTodayResult | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const alreadySolved = isSolvedToday();
   const lastResult = getLastResult();
-  const todaysResult =
-    alreadySolved && lastResult?.date === new Date().toISOString().slice(0, 10) ? lastResult : null;
+  const todaysResult = alreadySolved && lastResult?.date === today ? lastResult : null;
   const name = displayName.trim() || 'Guest';
 
+  // Refetched when the local date rolls over, so a page left open past midnight moves on to the
+  // new day's puzzle.
   useEffect(() => {
+    let cancelled = false;
+    setDaily(null);
+    setLoadError(null);
     api
-      .getDailyToday()
-      .then(setToday)
-      .catch((err) => setLoadError(getErrorMessage(err, "Couldn't load today's puzzle")));
-  }, []);
+      .getDailyToday(today)
+      .then((r) => {
+        if (!cancelled) setDaily(r);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(getErrorMessage(err, "Couldn't load today's puzzle"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [today]);
 
   async function handlePlay() {
     setPlaying(true);
     setError(null);
     try {
-      const room = await api.createDailyRoom(name);
+      const room = await api.createDailyRoom(name, today);
       navigate(`/room/${room.roomId}/game`);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to start daily puzzle'));
@@ -47,8 +60,8 @@ export default function DailyPage() {
     }
   }
 
-  const dateLabel = today?.puzzleDate
-    ? new Date(`${today.puzzleDate}T00:00:00`).toLocaleDateString('en-US', {
+  const dateLabel = daily?.puzzleDate
+    ? new Date(`${daily.puzzleDate}T00:00:00`).toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -62,15 +75,15 @@ export default function DailyPage() {
   ];
 
   const rules = [
-    { label: 'Tiles', value: today?.tileCount ?? '–' },
-    { label: 'Min. word length', value: today?.minLength ? `${today.minLength}+` : '–' },
+    { label: 'Tiles', value: daily?.tileCount ?? '–' },
+    { label: 'Min. word length', value: daily?.minLength ? `${daily.minLength}+` : '–' },
     { label: 'Dump', value: 'Off' },
   ];
 
   let status;
   if (loadError) {
     status = <p className="error">{loadError}</p>;
-  } else if (!today) {
+  } else if (!daily) {
     status = <p className="daily-note">Checking today's puzzle…</p>;
   } else if (alreadySolved) {
     status = (
@@ -95,7 +108,7 @@ export default function DailyPage() {
         <p className="daily-note">Come back tomorrow for the next puzzle.</p>
       </>
     );
-  } else if (!today.hasDaily) {
+  } else if (!daily.hasDaily) {
     status = <p className="daily-note">No puzzle today — check back soon!</p>;
   } else {
     status = (

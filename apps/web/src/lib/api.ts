@@ -142,13 +142,15 @@ export const api = {
       body: JSON.stringify({ displayName, dictionaryConfig, modeConfig }),
     }),
 
-  createDailyRoom: (displayName: string) =>
+  /** `date` is the player's local YYYY-MM-DD, so the puzzle rolls over at their own midnight. */
+  createDailyRoom: (displayName: string, date: string) =>
     call<CreateDailyRoomResult>('/rooms/daily', {
       method: 'POST',
-      body: JSON.stringify({ displayName }),
+      body: JSON.stringify({ displayName, date }),
     }),
 
-  getDailyToday: () => call<DailyTodayResult>('/daily/today'),
+  getDailyToday: (date: string) =>
+    call<DailyTodayResult>(`/daily/today?date=${encodeURIComponent(date)}`),
 
   joinRoom: (code: string, displayName: string, spectator = false) =>
     call<JoinRoomResult>('/rooms/join', {

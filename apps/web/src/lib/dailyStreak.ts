@@ -1,21 +1,23 @@
 const STORAGE_KEY = 'daily-streak';
 
 interface StreakState {
-  dates: string[]; // UTC dates (YYYY-MM-DD) solved, sorted ascending
+  dates: string[]; // puzzle dates (YYYY-MM-DD) solved, sorted ascending
   lastResult?: {
-    date: string;
+    date: string; // the puzzle's date, not the clock's
     roomId?: string;
     durationMs: number;
     longestWord: string | null;
   };
 }
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+/** The player's own calendar date. The daily puzzle rolls over at their local midnight. */
+export function localDateISO(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// UTC arithmetic to match todayISO() and the server's scheduled_date; a local-midnight parse
-// shifts the day for anyone east of UTC and silently breaks their streak.
+// Pure calendar arithmetic on a YYYY-MM-DD string. Parsed as UTC only so a DST change can't land
+// the result on the wrong day; the string itself is already a local date.
 function prevDay(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - 1);
@@ -45,14 +47,14 @@ function sortedDates(): string[] {
 }
 
 export function isSolvedToday(): boolean {
-  return load().dates.includes(todayISO());
+  return load().dates.includes(localDateISO());
 }
 
 /** Consecutive days ending at today (or yesterday if today's not solved yet). */
 export function currentStreak(): number {
   const dates = sortedDates();
   const last = dates[dates.length - 1];
-  const today = todayISO();
+  const today = localDateISO();
   if (!last || (last !== today && last !== prevDay(today))) return 0;
   let count = 1;
   for (let i = dates.length - 2; i >= 0 && dates[i] === prevDay(dates[i + 1]); i--) count++;
@@ -74,19 +76,27 @@ export function totalSolved(): number {
   return sortedDates().length;
 }
 
-export function recordSolved(): void {
+/** Records a solve under the puzzle's own date rather than the clock's, so a puzzle started
+ * before midnight and finished after still counts for the day it belongs to. */
+export function recordSolved(puzzleDate: string): void {
   const state = load();
-  const today = todayISO();
-  if (!state.dates.includes(today)) {
-    state.dates.push(today);
+  if (!state.dates.includes(puzzleDate)) {
+    state.dates.push(puzzleDate);
     state.dates.sort();
   }
   save(state);
 }
 
-export function recordDailyResult(roomId: string, durationMs: number, longestWord: string | null): void {
+export function recordDailyResult(
+  puzzleDate: string,
+  roomId: string,
+  durationMs: number,
+  longestWord: string | null,
+): void {
   const state = load();
-  state.lastResult = { date: todayISO(), roomId, durationMs, longestWord };
+  // Reopening an older daily room's results must not replace a newer day's.
+  if (state.lastResult && state.lastResult.date > puzzleDate) return;
+  state.lastResult = { date: puzzleDate, roomId, durationMs, longestWord };
   save(state);
 }
 
@@ -97,6 +107,6 @@ export function getLastResult(): StreakState['lastResult'] {
 /** The room today's solve happened in, so Home can reopen its results. */
 export function solvedTodayRoomId(): string | null {
   const { dates, lastResult } = load();
-  const today = todayISO();
+  const today = localDateISO();
   return dates.includes(today) && lastResult?.date === today ? (lastResult.roomId ?? null) : null;
 }

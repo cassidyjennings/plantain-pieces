@@ -85,16 +85,30 @@ app.post('/rooms/solo', async (c) => {
   return c.json(data);
 });
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The puzzle day to serve: the player's own local date when the client sends one (so the puzzle
+ * rolls over at their midnight), else the UTC date. Every real timezone's local date is within a
+ * day of UTC, so anything further out is refused rather than opening a future puzzle early. */
+function dailyDate(requested: string | undefined): string | null {
+  const utcToday = new Date().toISOString().slice(0, 10);
+  if (requested === undefined) return utcToday;
+  if (!DATE_PATTERN.test(requested)) return null;
+  const days = (Date.parse(`${requested}T00:00:00Z`) - Date.parse(`${utcToday}T00:00:00Z`)) / 86_400_000;
+  return Math.abs(days) <= 1 ? requested : null;
+}
+
 // Whether today's daily puzzle exists, plus the tile count and minimum word length the landing
 // page shows. Neither reveals the solution; the letters and grid never leave the server.
 app.get('/daily/today', async (c) => {
+  const date = dailyDate(c.req.query('date'));
+  if (!date) return c.json({ error: 'INVALID_DAILY_DATE' }, 400);
   const admin = createAdminClient(c.env);
-  const today = new Date().toISOString().slice(0, 10);
   const { data } = await admin
     .from('daily_puzzles')
     .select('scheduled_date, letter_multiset, dictionary_config')
     .eq('status', 'scheduled')
-    .eq('scheduled_date', today)
+    .eq('scheduled_date', date)
     .eq('language', 'en')
     .maybeSingle();
   if (!data) return c.json({ hasDaily: false, puzzleDate: null, tileCount: null, minLength: null });
@@ -115,11 +129,14 @@ app.get('/daily/today', async (c) => {
 // opening hand, and marks it active — all in one RPC call.
 app.post('/rooms/daily', async (c) => {
   const profileId = c.get('profileId');
-  const body = await c.req.json<{ displayName: string }>();
+  const body = await c.req.json<{ displayName: string; date?: string }>();
+  const date = dailyDate(body.date);
+  if (!date) return c.json({ error: 'INVALID_DAILY_DATE' }, 400);
   const admin = createAdminClient(c.env);
   const { data, error } = await admin.rpc('create_daily_room', {
     p_host: profileId,
     p_display_name: body.displayName,
+    p_date: date,
   });
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
   return c.json(data);

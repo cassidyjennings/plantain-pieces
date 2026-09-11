@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { currentStreak, solvedTodayRoomId } from '../lib/dailyStreak.js';
+import { useLocalDate } from '../hooks/useLocalDate.js';
 import { validateDisplayName } from '@plantain/shared';
 import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
@@ -17,6 +18,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  // Re-renders at local midnight so the streak badge and the Daily button's target roll over.
+  useLocalDate();
   const streak = currentStreak();
 
   const name = displayName.trim() || 'Guest';

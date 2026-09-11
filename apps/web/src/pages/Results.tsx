@@ -104,20 +104,20 @@ export default function Results() {
     };
   }, [roomId, profileId]);
 
-  // Record today's daily solve. Re-runs when longestWord resolves: recording once, as soon as the
-  // board row arrived, saved the null it holds before the board's words load. Both writes are
-  // idempotent. Today's puzzle only — reopening an older daily room after midnight must not mark
-  // the new day solved.
+  // Record the daily solve under the puzzle's own date. Re-runs when longestWord resolves:
+  // recording once, as soon as the board row arrived, saved the null it holds before the board's
+  // words load. Keyed by puzzle date, so a puzzle finished after midnight still counts for its
+  // day, and reopening an older room can only re-record that older day.
   useEffect(() => {
     if (!room || room.mode !== 'daily' || room.status !== 'finished') return;
     const scheduled = (room.mode_config as { scheduledDate?: string }).scheduledDate;
-    if (scheduled !== new Date().toISOString().slice(0, 10)) return;
+    if (!scheduled) return;
     const dur =
       room.started_at && room.finished_at
         ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
         : 0;
-    recordSolved();
-    recordDailyResult(room.id, dur, longestWord);
+    recordSolved(scheduled);
+    recordDailyResult(scheduled, room.id, dur, longestWord);
     // State, not a render-time read: recording happens after render, so reading localStorage
     // during render showed the pre-solve streak until some unrelated state change re-rendered.
     setStreak(currentStreak());

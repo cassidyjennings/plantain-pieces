@@ -3220,6 +3220,43 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
    =========================================================================== */
 
 /* Home entry points */
+/* Same outer width and side padding as .panel, so the two halves line up exactly with
+   Create Room and the join row above them. */
+.home-modes {
+  display: flex;
+  gap: var(--space-3);
+  width: 420px;
+  max-width: 100%;
+  padding: 0 var(--space-4);
+}
+@media (min-width: 480px) {
+  .home-modes {
+    padding: 0 40px;
+  }
+}
+.home-modes > button {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding-inline: var(--space-3);
+}
+/* A corner chip rather than inline text: inline, the streak wrapped the half-width button onto
+   two lines on phones. */
+.home-mode-streak {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: var(--text-caption);
+  line-height: 1.4;
+  box-shadow: 0 2px 0 var(--color-accent-shadow);
+}
+
 .home-links {
   display: flex;
   gap: var(--space-3);
@@ -4043,22 +4080,8 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
    Daily puzzle — landing page and streak UI
    =========================================================================== */
 
-.daily-screen {
-  gap: var(--space-6);
-}
-
-.daily-title {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(32px, 10vw, 48px);
-  color: var(--color-text-primary);
-  text-shadow: 0 5px 0 #0a1e12;
-  -webkit-text-stroke: 2px #0f2f1e;
-  margin: 0;
-}
-
-/* Title, date and streak badge read as one unit — their own column, so they
-   aren't pushed apart by .centered's 32px inter-child gap. */
+/* Title and date read as one unit — their own column, so they aren't pushed apart by the
+   screen's inter-child gap. */
 .daily-header {
   display: flex;
   flex-direction: column;
@@ -4073,18 +4096,25 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   margin: 0;
 }
 
-.daily-streak-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 6px var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-raised);
-  border: 2px solid var(--color-secondary);
-  font-family: var(--font-body);
+/* The streak section opens the panel, so it takes no divider above it. */
+.daily-panel .solo-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.daily-rule-value {
+  font-family: var(--font-display);
   font-weight: 800;
-  font-size: var(--text-small);
-  color: var(--color-secondary);
+  font-size: var(--text-heading);
+  color: var(--color-text-primary);
+}
+
+/* Children stay stretched so .results-stat-row keeps full width — centering them
+   shrink-wraps the row and word-breaks long words. */
+.daily-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .daily-note {
@@ -4095,10 +4125,41 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   margin: 0;
 }
 
-/* Children stay stretched (the .panel default) so .results-stat-row keeps full
-   width — centering them here shrink-wraps the row and word-breaks long words. */
-.daily-solved-panel {
-  gap: var(--space-4);
+/* Revisited from Home long after the win, so no celebratory pop. */
+.daily-solved-callout {
+  animation: none;
+}
+
+.daily-share-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(420px, 100%);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.daily-share-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-small);
+  color: var(--color-text-primary);
+}
+
+.daily-share-text {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-inner);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  user-select: text;
 }
 
 .daily-solved-label {

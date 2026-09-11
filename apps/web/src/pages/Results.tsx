@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
 import { fetchDisplayName, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyAchievements } from '../lib/profile.js';
@@ -7,7 +7,7 @@ import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/bo
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError, getErrorMessage } from '../lib/api.js';
-import { recordSolved, recordDailyResult, currentStreak } from '../lib/dailyStreak.js';
+import { recordSolved, recordDailyResult, currentStreak, getLastResult } from '../lib/dailyStreak.js';
 import BoardPreview from '../components/BoardPreview.js';
 
 export default function Results() {
@@ -25,12 +25,15 @@ export default function Results() {
   const [myBoard, setMyBoard] = useState<RoomBoardRow | null>(null);
   const [boardCount, setBoardCount] = useState(0);
   const [copied, setCopied] = useState(false);
-  const dailySavedRef = useRef(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [roomMissing, setRoomMissing] = useState(false);
 
   useEffect(() => {
     if (!roomId) return;
     fetchRoom(roomId).then(async (r) => {
       setRoom(r);
+      setRoomMissing(r === null);
       if (r?.winner_id) setWinnerName(await fetchDisplayName(r.winner_id));
     });
   }, [roomId]);
@@ -101,19 +104,24 @@ export default function Results() {
     };
   }, [roomId, profileId]);
 
-  // Record daily puzzle completion in localStorage once longestWord resolves. The
-  // dailySavedRef guard prevents double-recording on the second delayed fetch.
+  // Record today's daily solve. Re-runs when longestWord resolves: recording once, as soon as the
+  // board row arrived, saved the null it holds before the board's words load. Both writes are
+  // idempotent. Today's puzzle only — reopening an older daily room after midnight must not mark
+  // the new day solved.
   useEffect(() => {
-    if (!room || room.mode !== 'daily' || dailySavedRef.current) return;
-    if (longestWord === null && myBoard === null) return;
-    dailySavedRef.current = true;
+    if (!room || room.mode !== 'daily' || room.status !== 'finished') return;
+    const scheduled = (room.mode_config as { scheduledDate?: string }).scheduledDate;
+    if (scheduled !== new Date().toISOString().slice(0, 10)) return;
     const dur =
       room.started_at && room.finished_at
         ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
         : 0;
     recordSolved();
-    recordDailyResult(dur, longestWord);
-  }, [room, longestWord, myBoard]);
+    recordDailyResult(room.id, dur, longestWord);
+    // State, not a render-time read: recording happens after render, so reading localStorage
+    // during render showed the pre-solve streak until some unrelated state change re-rendered.
+    setStreak(currentStreak());
+  }, [room, longestWord]);
 
   // A rematch resets THIS room back to a lobby, so everyone still on the results screen has to
   // follow it there — otherwise only the player who clicked would move and the others would sit
@@ -122,7 +130,12 @@ export default function Results() {
     if (event.type === 'rematch') navigate(`/room/${roomId}`, { replace: true });
   });
 
-  if (!room) return <div className="centered">Loading results...</div>;
+  if (!room) {
+    // Home reopens today's daily results by room id; once the room is cleaned up there's nothing
+    // to load, so fall back to the daily page's own solved view instead of loading forever.
+    if (roomMissing && getLastResult()?.roomId === roomId) return <Navigate to="/daily" replace />;
+    return <div className="centered">Loading results...</div>;
+  }
 
   const won = room.winner_id === profileId;
   const isSolo = room.mode === 'solo';
@@ -133,8 +146,15 @@ export default function Results() {
     room.started_at && room.finished_at
       ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
       : null;
+  const scheduledDate = (room.mode_config as { scheduledDate?: string }).scheduledDate;
   const headline = isDaily
-    ? 'You solved it!'
+    ? scheduledDate
+      ? new Date(`${scheduledDate}T00:00:00`).toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'Daily Puzzle'
     : isSolo
       ? 'You cleared the Bunch!'
       : won
@@ -175,10 +195,7 @@ export default function Results() {
     }
   }
 
-  const streak = isDaily ? currentStreak() : 0;
-
-  const scheduledDate = (room.mode_config as { scheduledDate?: string }).scheduledDate;
-  const shareDate = new Date(scheduledDate ? `${scheduledDate}T00:00:00` : Date.now())
+  const shareDate =new Date(scheduledDate ? `${scheduledDate}T00:00:00` : Date.now())
     .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const shareText = [
     'Plantain Pieces Daily Puzzle',
@@ -192,18 +209,21 @@ export default function Results() {
   ].filter(Boolean).join('\n');
 
   async function handleShare() {
+    setCopyFailed(false);
     try {
       await navigator.clipboard.writeText(shareText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard blocked — ignore
+      setCopyFailed(true);
     }
   }
 
   return (
     <div className="centered">
-      <h1 className="results-callout">PLANTAINS!</h1>
+      <h1 className={isDaily ? 'results-callout daily-solved-callout' : 'results-callout'}>
+        {isDaily ? 'Solved!' : 'PLANTAINS!'}
+      </h1>
       <p className="winner-line">{headline}</p>
 
       {isDaily && streak > 0 && (
@@ -287,9 +307,17 @@ export default function Results() {
 
       {isDaily ? (
         <>
-          <button type="button" onClick={handleShare}>
-            {copied ? 'Copied!' : 'Share Result'}
-          </button>
+          <div className="daily-share-card">
+            <span className="daily-share-title">Share your result</span>
+            <pre className="daily-share-text">{shareText}</pre>
+            <button type="button" onClick={handleShare}>
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+            {copyFailed && (
+              <p className="error">Couldn't copy automatically. Select the text above instead.</p>
+            )}
+          </div>
+          <p className="daily-note">Come back tomorrow for the next puzzle.</p>
           <button className="btn-secondary" onClick={() => navigate('/')}>
             Back to Home
           </button>

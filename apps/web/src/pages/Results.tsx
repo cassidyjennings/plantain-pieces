@@ -20,6 +20,12 @@ export default function Results() {
   const [me, setMe] = useState<PublicPlayer | null>(null);
   const [longestWord, setLongestWord] = useState<string | null>(null);
   const [earned, setEarned] = useState<AchievementType[]>([]);
+  // Distinct from `me`/`earned` being merely present: this flips true only once the LAST
+  // scheduled achievements re-check has landed, so the achievements sub-section can show a
+  // placeholder instead of silently having zero, then suddenly gaining a box once the
+  // word-based achievements (submitted async by the client, see submitSummaryOnce in Game.tsx)
+  // actually land.
+  const [achievementsSettled, setAchievementsSettled] = useState(false);
   const [rematching, setRematching] = useState(false);
   const [rematchError, setRematchError] = useState<string | null>(null);
   const [myBoard, setMyBoard] = useState<RoomBoardRow | null>(null);
@@ -45,13 +51,14 @@ export default function Results() {
   useEffect(() => {
     if (!roomId) return;
     let cancelled = false;
-    // `cancelled` only guards post-unmount updates -- it does nothing to order the immediate call
-    // against the delayed one below. If the immediate call is slow (>1500ms) it can resolve AFTER
-    // the delayed one already applied the complete achievement list, and silently revert it to an
-    // earlier, incomplete snapshot. `latestSeq` tracks which of the two was issued last so a
-    // slower, earlier-issued response can't overwrite a result that's already newer.
+    setAchievementsSettled(false);
+    // `cancelled` only guards post-unmount updates -- it does nothing to order these calls against
+    // each other. If an earlier one is slow it can resolve AFTER a later one already applied the
+    // complete achievement list, and silently revert it to an earlier, incomplete snapshot.
+    // `latestSeq` tracks which was issued last so a slower, earlier-issued response can't
+    // overwrite a result that's already newer.
     let latestSeq = 0;
-    async function load() {
+    async function load(isFinal: boolean) {
       const seq = ++latestSeq;
       const [players, achievements] = await Promise.all([fetchPlayers(roomId!), fetchMyAchievements()]);
       if (cancelled || seq !== latestSeq) return;
@@ -61,12 +68,19 @@ export default function Results() {
           .filter((a) => (a.meta as { roomId?: string })?.roomId === roomId)
           .map((a) => a.type),
       );
+      if (isFinal) setAchievementsSettled(true);
     }
-    load();
-    const t = setTimeout(load, 1500);
+    load(false);
+    // Two closer-spaced re-checks (400ms/1000ms) instead of one blind 1500ms wait — the client's
+    // own word-based achievement submission (submitSummaryOnce, fired right as this room's game
+    // ends) usually lands well under a second, so most games see the real list at 400ms instead
+    // of waiting out the old worst-case timer every time.
+    const t1 = setTimeout(() => load(false), 400);
+    const t2 = setTimeout(() => load(true), 1000);
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, [roomId, profileId]);
 
@@ -97,7 +111,7 @@ export default function Results() {
       }
     }
     load();
-    const t = setTimeout(load, 1500);
+    const t = setTimeout(load, 1000);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -240,6 +254,38 @@ export default function Results() {
         </div>
       )}
 
+      {/* Skeleton mirrors the real panel's tile layout (same conditionals, no values yet) so
+          when `me` lands the content fills in place instead of a new box appearing below. */}
+      {!me && (
+        <div className="panel results-earned" aria-hidden="true">
+          <h3>Your game</h3>
+          <div className="results-stat-row">
+            {!isSolo && !isDaily && (
+              <div className="stat-tile">
+                <span className="stat-value"><span className="skeleton-bar" /></span>
+                <span className="stat-label">Result</span>
+              </div>
+            )}
+            {!isDaily && (
+              <div className="stat-tile">
+                <span className="stat-value"><span className="skeleton-bar" /></span>
+                <span className="stat-label">Tiles</span>
+              </div>
+            )}
+            <div className="stat-tile">
+              <span className="stat-value"><span className="skeleton-bar" /></span>
+              <span className="stat-label">Longest word</span>
+            </div>
+            {(isTimed || isDaily) && durationMs != null && (
+              <div className="stat-tile">
+                <span className="stat-value"><span className="skeleton-bar" /></span>
+                <span className="stat-label">Time</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {me && (
         <div className="panel results-earned">
           <h3>Your game</h3>
@@ -270,6 +316,13 @@ export default function Results() {
               </div>
             )}
           </div>
+          {earned.length === 0 && !achievementsSettled && (
+            <div className="results-achievements" aria-hidden="true">
+              <span className="results-achievements-label">
+                Checking achievements… <span className="skeleton-bar" />
+              </span>
+            </div>
+          )}
           {earned.length > 0 && (
             <div className="results-achievements">
               <span className="results-achievements-label">Achievements unlocked</span>

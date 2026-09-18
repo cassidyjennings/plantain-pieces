@@ -445,21 +445,25 @@ app.post('/rooms/:roomId/plantains', async (c) => {
   });
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
 
-  await admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid });
-
-  // Phase 1: roll the server-authoritative half of the game (peels, dumps, wins, streaks,
-  // achievements) straight into profile_stats while room_players/room_events still exist.
-  // Nothing per-game is stored — see migration 20260728000006. A rollup failure must not fail
-  // the win, and game_over still fires either way so nobody is stranded on the game screen.
-  try {
-    const { error: rollupError } = await admin.rpc('archive_game', {
-      p_room_id: roomId,
-      p_winner: profileId,
-    });
-    if (rollupError) console.error('stat rollup failed', rollupError.message);
-  } catch (err) {
-    console.error('stat rollup threw', (err as Error).message);
-  }
+  // persist_grid (board for the post-game viewer) and archive_game (Phase 1 stat rollup) touch
+  // disjoint state — grid_state vs profile_stats/achievements — so they run concurrently instead
+  // of back-to-back; that was pure serialized latency on the critical path the winner's client
+  // blocks on before it can even show the PLANTAINS! callout. A rollup failure must not fail the
+  // win, and game_over still fires either way so nobody is stranded on the game screen.
+  await Promise.all([
+    admin.rpc('persist_grid', { p_room_id: roomId, p_profile: profileId, p_grid: body.grid }),
+    (async () => {
+      try {
+        const { error: rollupError } = await admin.rpc('archive_game', {
+          p_room_id: roomId,
+          p_winner: profileId,
+        });
+        if (rollupError) console.error('stat rollup failed', rollupError.message);
+      } catch (err) {
+        console.error('stat rollup threw', (err as Error).message);
+      }
+    })(),
+  ]);
 
   await admin.rpc('append_room_event', {
     p_room_id: roomId,

@@ -1648,7 +1648,12 @@ button:disabled {
   transition: transform var(--transition-fast), border-color var(--transition-fast);
 }
 
-.results-board-window:hover {
+/* :not(:disabled) bumps this to (0,3,0), beating the generic `button:hover:not(:disabled)`
+   rule's (0,2,1) — without it that rule's `background: var(--color-accent-hover)` wins on
+   the type-selector tiebreak and paints this button orange, which then collided with
+   `.results-board-window-hint`'s own `--color-accent` text (orange on orange, unreadable). */
+.results-board-window:hover:not(:disabled) {
+  background: var(--color-surface);
   border-color: var(--color-accent);
   transform: translateY(-2px);
 }
@@ -1669,6 +1674,24 @@ button:disabled {
   font-weight: 800;
   font-size: var(--text-small);
   color: var(--color-text-primary);
+}
+
+/* Stats-loading placeholder: fills the exact space the real "Your game" panel and its
+   achievements row will occupy, so the real data fading in swaps content in place rather than
+   inserting a new box that shoves the layout below it down. */
+.skeleton-bar {
+  display: inline-block;
+  width: 3em;
+  height: 1em;
+  border-radius: var(--radius-sm);
+  background: var(--color-border);
+  vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-bar {
+    animation: hint-pulse 1.4s ease-in-out infinite;
+  }
 }
 
 .results-board-window-hint {

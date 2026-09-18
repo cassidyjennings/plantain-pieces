@@ -55,7 +55,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementType, AchievementDef> = {
   },
   nail_biter: {
     title: 'Nail Biter',
-    description: 'Win a game within 5 seconds of an opponent finishing.',
+    description: 'Win a game while an opponent has just one tile left to place.',
   },
 };
 

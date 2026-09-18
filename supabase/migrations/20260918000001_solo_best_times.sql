@@ -7,10 +7,13 @@
 alter table public.profile_stats
   add column if not exists solo_best_times jsonb not null default '{}'::jsonb;
 
--- _archive_game_impl — same body as 20260808000002's version, plus one new block: on a Timed
--- solo win, record the game's duration (finished_at - started_at, both already set by the time
--- archive_game runs) into solo_best_times, keeping the minimum per bunch size. Zen has no clock
--- (mode_config.timed = false), so it's excluded rather than recording a meaningless time.
+-- _archive_game_impl — rebased onto 20260918000001_nail_biter_one_tile_left's version (the
+-- remaining_count = 1 detection, not the older rejected-Plantains-within-5s check this file
+-- originally carried — that would have silently regressed the nail-biter fix on replace), plus
+-- one new block: on a Timed solo win, record the game's duration (finished_at - started_at, both
+-- already set by the time archive_game runs) into solo_best_times, keeping the minimum per bunch
+-- size. Zen has no clock (mode_config.timed = false), so it's excluded rather than recording a
+-- meaningless time.
 create or replace function public._archive_game_impl(p_room_id uuid, p_winner uuid)
 returns jsonb
 language plpgsql
@@ -56,12 +59,11 @@ begin
     where room_id = p_room_id and type = 'game_started' and created_at >= v_since;
 
   select exists (
-    select 1 from public.room_events e
-    where e.room_id = p_room_id
-      and e.type = 'plantains_rejected'
-      and coalesce(e.payload ->> 'actor', '') <> p_winner::text
-      and e.created_at <= v_room.finished_at
-      and e.created_at >= v_room.finished_at - interval '5 seconds'
+    select 1 from public.room_players
+    where room_id = p_room_id
+      and not is_spectator
+      and profile_id <> p_winner
+      and remaining_count = 1
   ) into v_nail_biter;
 
   v_game_date := coalesce(v_room.finished_at, now())::date;

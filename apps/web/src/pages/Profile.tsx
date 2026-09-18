@@ -4,6 +4,7 @@ import {
   ACHIEVEMENT_DEFS,
   ACHIEVEMENT_ORDER,
   ACCESSORY_SETS,
+  BUNCH_SIZE_PRESETS,
   validateDisplayName,
   normalizeAvatarConfig,
   type AvatarConfig,
@@ -51,7 +52,7 @@ function isStinaLocked(slot: AccessorySlot, option: string, xtinaRole: 'owner' |
 
 type Tab = 'overview' | 'stats' | 'achievements' | 'accessibility';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
+  { id: 'overview', label: 'Profile' },
   { id: 'stats', label: 'Stats' },
   { id: 'achievements', label: 'Achievements' },
   { id: 'accessibility', label: 'Accessibility' },
@@ -469,6 +470,15 @@ interface StatsBoardProps {
   locked?: boolean;
 }
 
+/** mm:ss, matching Game.tsx's Timed solo elapsed-time card and Results.tsx's summary. */
+function formatBestTime(ms: number | undefined): string {
+  if (ms == null) return '-';
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: StatsBoardProps) {
   const filterOptions: { id: StatsFilter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -518,6 +528,16 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       : tiedLetters.join(', ');
   }
 
+  // Best time per Bunch size is solo-only (multiplayer has no clock), same rule as the peel
+  // streak / win rate tiles above — hidden on the 'multiplayer' filter.
+  const showSoloBestTimes = filter !== 'multiplayer';
+  const soloBestTimeTiles = showSoloBestTimes
+    ? BUNCH_SIZE_PRESETS.map((preset) => ({
+        label: `Best time · ${preset.label}`,
+        value: formatBestTime(stats.solo_best_times?.[String(preset.size)]),
+      }))
+    : [];
+
   const tiles: { label: string; value: string | number }[] = [
     { label: 'Games played', value: stats.games_played },
     ...(showCompetitiveStats ? [{ label: 'Wins', value: `${stats.games_won} (${winRate}%)` }] : []),
@@ -532,6 +552,7 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
     ...(showCompetitiveStats
       ? [{ label: 'Best peel streak', value: (stats.best_peel_streak ?? 0) > 0 ? stats.best_peel_streak : '-' }]
       : []),
+    ...soloBestTimeTiles,
   ];
 
   return (

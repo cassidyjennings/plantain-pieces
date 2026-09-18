@@ -45,6 +45,9 @@ export interface ProfileStatsRow {
   rarest_word_score: number;
   best_peel_streak: number;
   first_letter_counts: Record<string, number>;
+  /** Solo mode only (empty on every multiplayer/xtina row): best (lowest) completion ms for a
+   * Timed solo win, keyed by bunch size as a string, e.g. { "54": 143000 }. */
+  solo_best_times: Record<string, number>;
 }
 
 export interface AchievementRow {
@@ -79,6 +82,7 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
   let fastestPeel: number | null = null;
   let bestStreak = 0;
   const letterCounts: Record<string, number> = {};
+  const bestTimes: Record<string, number> = {};
   for (const r of rows) {
     if (r.longest_word_length > longestLen) {
       longestLen = r.longest_word_length;
@@ -94,6 +98,11 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     bestStreak = Math.max(bestStreak, r.best_peel_streak ?? 0);
     for (const [letter, count] of Object.entries(r.first_letter_counts ?? {})) {
       letterCounts[letter] = (letterCounts[letter] ?? 0) + count;
+    }
+    // Only the 'solo' row ever populates this, but merging key-wise (min) rather than just
+    // taking that row means no mode-specific branch is needed here either.
+    for (const [bunchSize, ms] of Object.entries(r.solo_best_times ?? {})) {
+      bestTimes[bunchSize] = bestTimes[bunchSize] != null ? Math.min(bestTimes[bunchSize], ms) : ms;
     }
   }
 
@@ -113,6 +122,7 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     rarest_word_score: rarestScore,
     best_peel_streak: bestStreak,
     first_letter_counts: letterCounts,
+    solo_best_times: bestTimes,
   };
 }
 

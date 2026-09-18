@@ -4130,6 +4130,18 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   animation: none;
 }
 
+/* Revisited from Home long after the win, so its own tighter rhythm rather than
+   .centered's uniform gap: more room above "Solved!" (it's the page's whole opening
+   beat), less below it before the date sits right underneath. */
+.daily-solved-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+  margin-bottom: calc(var(--space-2) - var(--space-8));
+}
+
 .daily-share-card {
   display: flex;
   flex-direction: column;

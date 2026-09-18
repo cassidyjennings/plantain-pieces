@@ -204,7 +204,8 @@ export default function Results() {
       ? `⏱ ${Math.floor(durationMs / 60000)}:${Math.floor((durationMs % 60000) / 1000).toString().padStart(2, '0')}`
       : '',
     streak > 0 ? `🔥 ${streak}-day streak` : '',
-    longestWord ? `📝 ${longestWord}` : '',
+    // The word itself would spoil the puzzle for anyone this gets shared with — length only.
+    longestWord ? `📝 Longest word: ${longestWord.length} letters` : '',
     'plantainpieces.com',
   ].filter(Boolean).join('\n');
 
@@ -221,10 +222,17 @@ export default function Results() {
 
   return (
     <div className="centered">
-      <h1 className={isDaily ? 'results-callout daily-solved-callout' : 'results-callout'}>
-        {isDaily ? 'Solved!' : 'PLANTAINS!'}
-      </h1>
-      <p className="winner-line">{headline}</p>
+      {isDaily ? (
+        <div className="daily-solved-head">
+          <h1 className="results-callout daily-solved-callout">Solved!</h1>
+          <p className="winner-line">{headline}</p>
+        </div>
+      ) : (
+        <>
+          <h1 className="results-callout">PLANTAINS!</h1>
+          <p className="winner-line">{headline}</p>
+        </>
+      )}
 
       {isDaily && streak > 0 && (
         <div className="daily-streak-update">

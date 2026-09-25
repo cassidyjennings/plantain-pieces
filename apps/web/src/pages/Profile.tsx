@@ -484,6 +484,7 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
     { id: 'all', label: 'All' },
     { id: 'multiplayer', label: 'Multiplayer' },
     { id: 'solo', label: 'Solo' },
+    { id: 'daily', label: 'Daily' },
   ];
 
   const modeSelector = locked ? null : (
@@ -512,7 +513,7 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
   const winRate = stats.games_played > 0 ? Math.round((stats.games_won / stats.games_played) * 100) : 0;
   // Peel streak is multiplayer-only by definition (best_peel_streak is never set for solo/xtina
   // rows), so it's hidden on the solo filter alongside win rate — see the 2026-08-08 spec.
-  const showCompetitiveStats = filter !== 'solo';
+  const showCompetitiveStats = filter !== 'solo' && filter !== 'daily';
   const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '-';
 
   const letterEntries = Object.entries(stats.first_letter_counts ?? {});
@@ -538,6 +539,19 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       }))
     : [];
 
+  // Best time is safe to show on 'all' too (min is associative regardless of which modes
+  // contributed). Average is daily-filter-only: on 'all', stats.games_played is summed across
+  // every mode, so dividing daily_total_time_ms by it there would silently produce a wrong
+  // number rather than a missing one — see the 2026-09-24 design doc.
+  const showDailyBestTime = filter !== 'multiplayer' && filter !== 'solo';
+  const dailyBestTimeTile = showDailyBestTime
+    ? [{ label: 'Best time (daily)', value: formatBestTime(stats.daily_best_time_ms ?? undefined) }]
+    : [];
+  const dailyAverageTimeTile =
+    filter === 'daily' && stats.games_played > 0
+      ? [{ label: 'Average time (daily)', value: formatBestTime(stats.daily_total_time_ms / stats.games_played) }]
+      : [];
+
   const tiles: { label: string; value: string | number }[] = [
     { label: 'Games played', value: stats.games_played },
     ...(showCompetitiveStats ? [{ label: 'Wins', value: `${stats.games_won} (${winRate}%)` }] : []),
@@ -553,6 +567,8 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       ? [{ label: 'Best peel streak', value: (stats.best_peel_streak ?? 0) > 0 ? stats.best_peel_streak : '-' }]
       : []),
     ...soloBestTimeTiles,
+    ...dailyBestTimeTile,
+    ...dailyAverageTimeTile,
   ];
 
   return (

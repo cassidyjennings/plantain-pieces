@@ -80,6 +80,14 @@ export interface DailyTodayResult {
   minLength: number | null;
 }
 
+export interface DailyResultSummary {
+  available: boolean;
+  beatPercent?: number | null;
+  totalPlayersToday?: number;
+  isPersonalBest?: boolean;
+  personalBestMs?: number | null;
+}
+
 export interface JoinRoomResult {
   roomId: string;
   code: string;
@@ -157,6 +165,9 @@ export const api = {
 
   getDailyToday: (date: string) =>
     call<DailyTodayResult>(`/daily/today?date=${encodeURIComponent(date)}`),
+
+  getDailyResultSummary: (puzzleId: string) =>
+    call<DailyResultSummary>(`/daily/${encodeURIComponent(puzzleId)}/result-summary`),
 
   joinRoom: (code: string, displayName: string, spectator = false) =>
     call<JoinRoomResult>('/rooms/join', {

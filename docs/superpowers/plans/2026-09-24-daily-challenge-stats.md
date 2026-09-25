@@ -40,7 +40,7 @@ filter on the Profile Stats tab.
 ### Task 1: Schema — `profile_stats` accepts `'daily'`, gains two columns; new `daily_results` table
 
 **Files:**
-- Create: `supabase/migrations/20260924000001_daily_stats_schema.sql`
+- Create: `supabase/migrations/20260924000002_daily_stats_schema.sql`
 - Create: `scripts/smoke-daily-stats.mjs`
 
 **Interfaces:**
@@ -155,7 +155,7 @@ Expected: FAIL — the insert with `mode = 'daily'` raises
 
 - [ ] **Step 3: Write the migration**
 
-Create `supabase/migrations/20260924000001_daily_stats_schema.sql`:
+Create `supabase/migrations/20260924000002_daily_stats_schema.sql`:
 
 ```sql
 -- Daily challenge stats — schema.
@@ -213,7 +213,7 @@ checks and `All smoke-daily-stats checks passed.`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260924000001_daily_stats_schema.sql scripts/smoke-daily-stats.mjs
+git add supabase/migrations/20260924000002_daily_stats_schema.sql scripts/smoke-daily-stats.mjs
 git commit -m "$(cat <<'EOF'
 fix(daily): allow profile_stats mode='daily', add daily_results table
 
@@ -232,7 +232,7 @@ EOF
 ### Task 2: `_archive_game_impl` — new `mode = 'daily'` branch
 
 **Files:**
-- Create: `supabase/migrations/20260924000002_daily_stats_archive.sql`
+- Create: `supabase/migrations/20260924000003_daily_stats_archive.sql`
 - Modify: `scripts/smoke-daily-stats.mjs`
 
 **Interfaces:**
@@ -348,7 +348,7 @@ so the migration simply redefines it with one new block added. Read the latest v
 `supabase/migrations/20260918000001_nail_biter_one_tile_left.sql` (the most recent
 `create or replace function public._archive_game_impl` before this plan) and reproduce it
 verbatim with the new block inserted. Create
-`supabase/migrations/20260924000002_daily_stats_archive.sql`:
+`supabase/migrations/20260924000003_daily_stats_archive.sql`:
 
 ```sql
 -- _archive_game_impl — add a mode = 'daily' branch: record this completion into daily_results
@@ -554,7 +554,7 @@ Expected: all checks print `ok`, ending with `All smoke-daily-stats checks passe
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260924000002_daily_stats_archive.sql scripts/smoke-daily-stats.mjs
+git add supabase/migrations/20260924000003_daily_stats_archive.sql scripts/smoke-daily-stats.mjs
 git commit -m "$(cat <<'EOF'
 feat(daily): roll daily completions into daily_results + profile_stats
 
@@ -572,7 +572,7 @@ EOF
 ### Task 3: `get_daily_result_summary` RPC
 
 **Files:**
-- Create: `supabase/migrations/20260924000003_daily_result_summary_rpc.sql`
+- Create: `supabase/migrations/20260924000004_daily_result_summary_rpc.sql`
 - Modify: `scripts/smoke-daily-stats.mjs`
 
 **Interfaces:**
@@ -656,7 +656,7 @@ does not exist`.
 
 - [ ] **Step 3: Write the migration**
 
-Create `supabase/migrations/20260924000003_daily_result_summary_rpc.sql`:
+Create `supabase/migrations/20260924000004_daily_result_summary_rpc.sql`:
 
 ```sql
 -- get_daily_result_summary: live "beat X% of today's players" comparison plus this player's
@@ -718,7 +718,7 @@ Expected: all checks print `ok`, ending with `All smoke-daily-stats checks passe
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260924000003_daily_result_summary_rpc.sql scripts/smoke-daily-stats.mjs
+git add supabase/migrations/20260924000004_daily_result_summary_rpc.sql scripts/smoke-daily-stats.mjs
 git commit -m "$(cat <<'EOF'
 feat(daily): add get_daily_result_summary RPC for the beat-% comparison
 

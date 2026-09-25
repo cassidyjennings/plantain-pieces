@@ -286,7 +286,9 @@ passed.');` line (replace that line with the block below, which ends with the sa
     return { roomId, puzzleId: room.puzzleId };
   }
 
-  const puzzleA = await makeDailyPuzzle(31);
+  // create_daily_room only accepts a date within 1 day of UTC "today" — puzzles used through it
+  // must stay inside {yesterday, today, tomorrow}.
+  const puzzleA = await makeDailyPuzzle(-1);
   const alice = await makeUser(`alice-${Date.now()}@example.test`);
   const { puzzleId: puzzleAId } = await playDailyRoom(alice, puzzleA.scheduled_date, 100000);
 
@@ -306,7 +308,7 @@ passed.');` line (replace that line with the block below, which ends with the sa
 
   // A second, SLOWER daily game (different puzzle/day) must not raise the best time, but must
   // add to the running total.
-  const puzzleB = await makeDailyPuzzle(32);
+  const puzzleB = await makeDailyPuzzle(0);
   await playDailyRoom(alice, puzzleB.scheduled_date, 150000);
   const stat2 = (await client.query(
     `select daily_best_time_ms, daily_total_time_ms from public.profile_stats
@@ -618,7 +620,7 @@ and `main().catch(...)`):
 
   // A puzzle only one player has ever finished: beatPercent must be null (nothing to compare
   // against), not 0 or 100.
-  const puzzleC = await makeDailyPuzzle(33);
+  const puzzleC = await makeDailyPuzzle(1);
   const carol = await makeUser(`carol-${Date.now()}@example.test`);
   const { puzzleId: puzzleCId } = await playDailyRoom(carol, puzzleC.scheduled_date, 80000);
   const carolSummary = (await client.query(

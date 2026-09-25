@@ -26,6 +26,18 @@ async function makeUser(email) {
 
 async function main() {
   await client.connect();
+
+  // Idempotent rerun: daily_puzzles enforces one scheduled row per (language, date), and this
+  // script's puzzles are pinned to {yesterday, today, tomorrow} (the only dates create_daily_room
+  // accepts) — so a second run without an intervening `db:reset` would collide with the previous
+  // run's rows. Clean up only this script's own rows (marked by first_word = 'TEST'), never a
+  // real puzzle.
+  await client.query(
+    `delete from public.daily_results where puzzle_id in
+       (select id from public.daily_puzzles where first_word = 'TEST')`,
+  );
+  await client.query(`delete from public.daily_puzzles where first_word = 'TEST'`);
+
   console.log('profile_stats accepts mode = daily');
 
   const p1 = await makeUser(`daily1-${Date.now()}@example.test`);
@@ -132,6 +144,46 @@ async function main() {
   )).rows[0];
   assert(stat2.daily_best_time_ms === 100000, 'a slower second game does not raise daily_best_time_ms');
   assert(Number(stat2.daily_total_time_ms) === 250000, 'daily_total_time_ms accumulates across games (100000+150000)');
+
+  console.log('\nget_daily_result_summary');
+
+  // Two players on the same puzzle: alice (100000ms, from the archive test above) and a
+  // freshly-added faster player, bob (50000ms).
+  const bob = await makeUser(`bob-${Date.now()}@example.test`);
+  await playDailyRoom(bob, puzzleA.scheduled_date, 50000);
+
+  const aliceSummary = (await client.query(
+    `select public.get_daily_result_summary($1, $2) as s`, [puzzleAId, alice],
+  )).rows[0].s;
+  assert(aliceSummary.available === true, 'alice has a result for puzzleA');
+  assert(aliceSummary.totalPlayersToday === 2, 'two players have played puzzleA');
+  assert(aliceSummary.beatPercent === 0, 'alice (100000ms) beat 0% — the only other player (bob) was faster');
+  assert(aliceSummary.isPersonalBest === true, 'alice\'s puzzleA time (100000ms) is still her personal best (her puzzleB run was slower, at 150000ms)');
+  assert(aliceSummary.personalBestMs === 100000, 'personalBestMs reflects her best time, 100000ms');
+
+  const bobSummary = (await client.query(
+    `select public.get_daily_result_summary($1, $2) as s`, [puzzleAId, bob],
+  )).rows[0].s;
+  assert(bobSummary.beatPercent === 100, 'bob (50000ms) beat 100% — the only other player (alice) was slower');
+  assert(bobSummary.isPersonalBest === true, 'bob\'s first daily game is trivially his personal best');
+
+  // A puzzle only one player has ever finished: beatPercent must be null (nothing to compare
+  // against), not 0 or 100.
+  const puzzleC = await makeDailyPuzzle(1);
+  const carol = await makeUser(`carol-${Date.now()}@example.test`);
+  const { puzzleId: puzzleCId } = await playDailyRoom(carol, puzzleC.scheduled_date, 80000);
+  const carolSummary = (await client.query(
+    `select public.get_daily_result_summary($1, $2) as s`, [puzzleCId, carol],
+  )).rows[0].s;
+  assert(carolSummary.beatPercent === null, 'beatPercent is null when no one else has played this puzzle yet');
+  assert(carolSummary.totalPlayersToday === 1, 'totalPlayersToday is 1 (just carol)');
+
+  // A profile who never played this puzzle at all.
+  const dave = await makeUser(`dave-${Date.now()}@example.test`);
+  const daveSummary = (await client.query(
+    `select public.get_daily_result_summary($1, $2) as s`, [puzzleCId, dave],
+  )).rows[0].s;
+  assert(daveSummary.available === false, 'a profile with no result for this puzzle gets available: false');
 
   console.log('\nAll smoke-daily-stats checks passed.');
   await client.end();

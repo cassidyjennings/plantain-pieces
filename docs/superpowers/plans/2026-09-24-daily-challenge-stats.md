@@ -89,6 +89,18 @@ async function makeUser(email) {
 
 async function main() {
   await client.connect();
+
+  // Idempotent rerun: daily_puzzles enforces one scheduled row per (language, date), and this
+  // script's puzzles are pinned to {yesterday, today, tomorrow} (the only dates create_daily_room
+  // accepts) — so a second run without an intervening `db:reset` would collide with the previous
+  // run's rows. Clean up only this script's own rows (marked by first_word = 'TEST'), never a
+  // real puzzle.
+  await client.query(
+    `delete from public.daily_results where puzzle_id in
+       (select id from public.daily_puzzles where first_word = 'TEST')`,
+  );
+  await client.query(`delete from public.daily_puzzles where first_word = 'TEST'`);
+
   console.log('profile_stats accepts mode = daily');
 
   const p1 = await makeUser(`daily1-${Date.now()}@example.test`);

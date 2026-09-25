@@ -368,14 +368,14 @@ export default function Results() {
               )}
               {dailySummary?.available && dailySummary.beatPercent != null && (
                 <span className="daily-streak-update">
-                  🏆 Beat {dailySummary.beatPercent}% of today's players
+                  Beat {dailySummary.beatPercent}% of today's players
                 </span>
               )}
               {dailySummary?.available && dailySummary.beatPercent == null && (
-                <span className="daily-streak-update">🥇 Be the first to solve today!</span>
+                <span className="daily-streak-update">Be the first to solve today!</span>
               )}
               {dailySummary?.isPersonalBest && (
-                <span className="daily-personal-best">✨ New personal best!</span>
+                <span className="daily-personal-best">New personal best!</span>
               )}
             </div>
           )}

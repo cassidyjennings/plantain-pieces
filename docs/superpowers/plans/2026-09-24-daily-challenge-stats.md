@@ -1109,14 +1109,14 @@ line 338's `</div>`):
               )}
               {dailySummary?.available && dailySummary.beatPercent != null && (
                 <span className="daily-streak-update">
-                  🏆 Beat {dailySummary.beatPercent}% of today's players
+                  Beat {dailySummary.beatPercent}% of today's players
                 </span>
               )}
               {dailySummary?.available && dailySummary.beatPercent == null && (
-                <span className="daily-streak-update">🥇 Be the first to solve today!</span>
+                <span className="daily-streak-update">Be the first to solve today!</span>
               )}
               {dailySummary?.isPersonalBest && (
-                <span className="daily-personal-best">✨ New personal best!</span>
+                <span className="daily-personal-best">New personal best!</span>
               )}
             </div>
           )}
@@ -1224,7 +1224,7 @@ On the **second (slower)** session's Results page, confirm:
 - The "Beat X% of today's players" tile appears (should read `Beat 0%` — the only other player,
   session 1, was faster).
 - No personal-best badge on this second play if it's this guest's first-ever daily game, it
-  IS trivially a personal best — confirm the "✨ New personal best!" line appears (first daily
+  IS trivially a personal best — confirm the "New personal best!" line appears (first daily
   game for a fresh profile is always a personal best, same as the smoke test's `bob` case).
 
 On the **first (faster)** session's Results page (reopen `/daily` and re-navigate to its

@@ -10,7 +10,7 @@ import { fetchMyCustomWordSets } from './dictionaries.js';
 /** Owner-scoped reads gated by RLS (no Worker round-trip) — mirrors lib/dictionaries.ts.
  * Writes (update/delete/summary) go through the Worker; see lib/api.ts. */
 
-export type GameMode = 'multiplayer' | 'solo';
+export type GameMode = 'multiplayer' | 'solo' | 'daily';
 
 export interface ProfileRow {
   id: string;
@@ -48,6 +48,10 @@ export interface ProfileStatsRow {
   /** Solo mode only (empty on every multiplayer/xtina row): best (lowest) completion ms for a
    * Timed solo win, keyed by bunch size as a string, e.g. { "54": 143000 }. */
   solo_best_times: Record<string, number>;
+  /** Daily challenge only (null/0 on every other mode's row). Average is total/games_played,
+   * computed at render time — no stored average column. */
+  daily_best_time_ms: number | null;
+  daily_total_time_ms: number;
 }
 
 export interface AchievementRow {
@@ -83,6 +87,8 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
   let bestStreak = 0;
   const letterCounts: Record<string, number> = {};
   const bestTimes: Record<string, number> = {};
+  let dailyBestMs: number | null = null;
+  let dailyTotalMs = 0;
   for (const r of rows) {
     if (r.longest_word_length > longestLen) {
       longestLen = r.longest_word_length;
@@ -104,6 +110,10 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     for (const [bunchSize, ms] of Object.entries(r.solo_best_times ?? {})) {
       bestTimes[bunchSize] = bestTimes[bunchSize] != null ? Math.min(bestTimes[bunchSize], ms) : ms;
     }
+    if (r.daily_best_time_ms != null) {
+      dailyBestMs = dailyBestMs == null ? r.daily_best_time_ms : Math.min(dailyBestMs, r.daily_best_time_ms);
+    }
+    dailyTotalMs += r.daily_total_time_ms ?? 0;
   }
 
   return {
@@ -123,6 +133,8 @@ function aggregateStats(rows: ProfileStatsRow[]): ProfileStatsRow | null {
     best_peel_streak: bestStreak,
     first_letter_counts: letterCounts,
     solo_best_times: bestTimes,
+    daily_best_time_ms: dailyBestMs,
+    daily_total_time_ms: dailyTotalMs,
   };
 }
 

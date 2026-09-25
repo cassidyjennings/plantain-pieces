@@ -40,7 +40,7 @@ filter on the Profile Stats tab.
 ### Task 1: Schema — `profile_stats` accepts `'daily'`, gains two columns; new `daily_results` table
 
 **Files:**
-- Create: `supabase/migrations/20260924000001_daily_stats_schema.sql`
+- Create: `supabase/migrations/20260924000002_daily_stats_schema.sql`
 - Create: `scripts/smoke-daily-stats.mjs`
 
 **Interfaces:**
@@ -89,6 +89,18 @@ async function makeUser(email) {
 
 async function main() {
   await client.connect();
+
+  // Idempotent rerun: daily_puzzles enforces one scheduled row per (language, date), and this
+  // script's puzzles are pinned to {yesterday, today, tomorrow} (the only dates create_daily_room
+  // accepts) — so a second run without an intervening `db:reset` would collide with the previous
+  // run's rows. Clean up only this script's own rows (marked by first_word = 'TEST'), never a
+  // real puzzle.
+  await client.query(
+    `delete from public.daily_results where puzzle_id in
+       (select id from public.daily_puzzles where first_word = 'TEST')`,
+  );
+  await client.query(`delete from public.daily_puzzles where first_word = 'TEST'`);
+
   console.log('profile_stats accepts mode = daily');
 
   const p1 = await makeUser(`daily1-${Date.now()}@example.test`);
@@ -155,7 +167,7 @@ Expected: FAIL — the insert with `mode = 'daily'` raises
 
 - [ ] **Step 3: Write the migration**
 
-Create `supabase/migrations/20260924000001_daily_stats_schema.sql`:
+Create `supabase/migrations/20260924000002_daily_stats_schema.sql`:
 
 ```sql
 -- Daily challenge stats — schema.
@@ -213,7 +225,7 @@ checks and `All smoke-daily-stats checks passed.`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260924000001_daily_stats_schema.sql scripts/smoke-daily-stats.mjs
+git add supabase/migrations/20260924000002_daily_stats_schema.sql scripts/smoke-daily-stats.mjs
 git commit -m "$(cat <<'EOF'
 fix(daily): allow profile_stats mode='daily', add daily_results table
 
@@ -232,7 +244,7 @@ EOF
 ### Task 2: `_archive_game_impl` — new `mode = 'daily'` branch
 
 **Files:**
-- Create: `supabase/migrations/20260924000002_daily_stats_archive.sql`
+- Create: `supabase/migrations/20260924000003_daily_stats_archive.sql`
 - Modify: `scripts/smoke-daily-stats.mjs`
 
 **Interfaces:**
@@ -286,7 +298,9 @@ passed.');` line (replace that line with the block below, which ends with the sa
     return { roomId, puzzleId: room.puzzleId };
   }
 
-  const puzzleA = await makeDailyPuzzle(31);
+  // create_daily_room only accepts a date within 1 day of UTC "today" — puzzles used through it
+  // must stay inside {yesterday, today, tomorrow}.
+  const puzzleA = await makeDailyPuzzle(-1);
   const alice = await makeUser(`alice-${Date.now()}@example.test`);
   const { puzzleId: puzzleAId } = await playDailyRoom(alice, puzzleA.scheduled_date, 100000);
 
@@ -306,7 +320,7 @@ passed.');` line (replace that line with the block below, which ends with the sa
 
   // A second, SLOWER daily game (different puzzle/day) must not raise the best time, but must
   // add to the running total.
-  const puzzleB = await makeDailyPuzzle(32);
+  const puzzleB = await makeDailyPuzzle(0);
   await playDailyRoom(alice, puzzleB.scheduled_date, 150000);
   const stat2 = (await client.query(
     `select daily_best_time_ms, daily_total_time_ms from public.profile_stats
@@ -348,7 +362,7 @@ so the migration simply redefines it with one new block added. Read the latest v
 `supabase/migrations/20260918000001_nail_biter_one_tile_left.sql` (the most recent
 `create or replace function public._archive_game_impl` before this plan) and reproduce it
 verbatim with the new block inserted. Create
-`supabase/migrations/20260924000002_daily_stats_archive.sql`:
+`supabase/migrations/20260924000003_daily_stats_archive.sql`:
 
 ```sql
 -- _archive_game_impl — add a mode = 'daily' branch: record this completion into daily_results
@@ -554,7 +568,7 @@ Expected: all checks print `ok`, ending with `All smoke-daily-stats checks passe
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260924000002_daily_stats_archive.sql scripts/smoke-daily-stats.mjs
+git add supabase/migrations/20260924000003_daily_stats_archive.sql scripts/smoke-daily-stats.mjs
 git commit -m "$(cat <<'EOF'
 feat(daily): roll daily completions into daily_results + profile_stats
 
@@ -572,7 +586,7 @@ EOF
 ### Task 3: `get_daily_result_summary` RPC
 
 **Files:**
-- Create: `supabase/migrations/20260924000003_daily_result_summary_rpc.sql`
+- Create: `supabase/migrations/20260924000004_daily_result_summary_rpc.sql`
 - Modify: `scripts/smoke-daily-stats.mjs`
 
 **Interfaces:**
@@ -618,7 +632,7 @@ and `main().catch(...)`):
 
   // A puzzle only one player has ever finished: beatPercent must be null (nothing to compare
   // against), not 0 or 100.
-  const puzzleC = await makeDailyPuzzle(33);
+  const puzzleC = await makeDailyPuzzle(1);
   const carol = await makeUser(`carol-${Date.now()}@example.test`);
   const { puzzleId: puzzleCId } = await playDailyRoom(carol, puzzleC.scheduled_date, 80000);
   const carolSummary = (await client.query(
@@ -656,7 +670,7 @@ does not exist`.
 
 - [ ] **Step 3: Write the migration**
 
-Create `supabase/migrations/20260924000003_daily_result_summary_rpc.sql`:
+Create `supabase/migrations/20260924000004_daily_result_summary_rpc.sql`:
 
 ```sql
 -- get_daily_result_summary: live "beat X% of today's players" comparison plus this player's
@@ -718,7 +732,7 @@ Expected: all checks print `ok`, ending with `All smoke-daily-stats checks passe
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260924000003_daily_result_summary_rpc.sql scripts/smoke-daily-stats.mjs
+git add supabase/migrations/20260924000004_daily_result_summary_rpc.sql scripts/smoke-daily-stats.mjs
 git commit -m "$(cat <<'EOF'
 feat(daily): add get_daily_result_summary RPC for the beat-% comparison
 
@@ -1095,14 +1109,14 @@ line 338's `</div>`):
               )}
               {dailySummary?.available && dailySummary.beatPercent != null && (
                 <span className="daily-streak-update">
-                  🏆 Beat {dailySummary.beatPercent}% of today's players
+                  Beat {dailySummary.beatPercent}% of today's players
                 </span>
               )}
               {dailySummary?.available && dailySummary.beatPercent == null && (
-                <span className="daily-streak-update">🥇 Be the first to solve today!</span>
+                <span className="daily-streak-update">Be the first to solve today!</span>
               )}
               {dailySummary?.isPersonalBest && (
-                <span className="daily-personal-best">✨ New personal best!</span>
+                <span className="daily-personal-best">New personal best!</span>
               )}
             </div>
           )}
@@ -1210,7 +1224,7 @@ On the **second (slower)** session's Results page, confirm:
 - The "Beat X% of today's players" tile appears (should read `Beat 0%` — the only other player,
   session 1, was faster).
 - No personal-best badge on this second play if it's this guest's first-ever daily game, it
-  IS trivially a personal best — confirm the "✨ New personal best!" line appears (first daily
+  IS trivially a personal best — confirm the "New personal best!" line appears (first daily
   game for a fresh profile is always a personal best, same as the smoke test's `bob` case).
 
 On the **first (faster)** session's Results page (reopen `/daily` and re-navigate to its

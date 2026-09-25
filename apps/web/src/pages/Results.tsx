@@ -6,7 +6,7 @@ import { fetchMyAchievements } from '../lib/profile.js';
 import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/boards.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
-import { api, ApiError, getErrorMessage } from '../lib/api.js';
+import { api, ApiError, getErrorMessage, type DailyResultSummary } from '../lib/api.js';
 import { recordSolved, recordDailyResult, currentStreak, getLastResult } from '../lib/dailyStreak.js';
 import BoardPreview from '../components/BoardPreview.js';
 
@@ -34,6 +34,7 @@ export default function Results() {
   const [copyFailed, setCopyFailed] = useState(false);
   const [streak, setStreak] = useState(0);
   const [roomMissing, setRoomMissing] = useState(false);
+  const [dailySummary, setDailySummary] = useState<DailyResultSummary | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -136,6 +137,29 @@ export default function Results() {
     // during render showed the pre-solve streak until some unrelated state change re-rendered.
     setStreak(currentStreak());
   }, [room, longestWord]);
+
+  // The beat-percent comparison depends on the same async archive_game write as the streak
+  // recording above, so it uses the same "fetch, then retry once after the write has likely
+  // landed" pattern as the board-fetch effect.
+  useEffect(() => {
+    if (!room || room.mode !== 'daily' || room.status !== 'finished') return;
+    const puzzleId = (room.mode_config as { puzzleId?: string }).puzzleId;
+    if (!puzzleId) return;
+    let cancelled = false;
+    let latestSeq = 0;
+    async function load() {
+      const seq = ++latestSeq;
+      const summary = await api.getDailyResultSummary(puzzleId!);
+      if (cancelled || seq !== latestSeq) return;
+      setDailySummary(summary);
+    }
+    load();
+    const t = setTimeout(load, 1000);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [room]);
 
   // A rematch resets THIS room back to a lobby, so everyone still on the results screen has to
   // follow it there — otherwise only the player who clicked would move and the others would sit
@@ -333,6 +357,26 @@ export default function Results() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+          {isDaily && (
+            <div className="daily-beat-percent">
+              {!dailySummary && (
+                <span className="results-achievements-label">
+                  Checking today's rankings… <span className="skeleton-bar" />
+                </span>
+              )}
+              {dailySummary?.available && dailySummary.beatPercent != null && (
+                <span className="daily-streak-update">
+                  Beat {dailySummary.beatPercent}% of today's players
+                </span>
+              )}
+              {dailySummary?.available && dailySummary.beatPercent == null && (
+                <span className="daily-streak-update">Be the first to solve today!</span>
+              )}
+              {dailySummary?.isPersonalBest && (
+                <span className="daily-personal-best">New personal best!</span>
+              )}
             </div>
           )}
         </div>

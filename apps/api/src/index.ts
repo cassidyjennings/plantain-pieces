@@ -165,6 +165,21 @@ app.get('/daily/today', async (c) => {
   });
 });
 
+// Live "beat X% of today's players" + personal-best comparison for one daily puzzle. Recomputed
+// on every call — never cached — so it climbs as more players finish the same puzzle later in
+// the day. profileId comes from requireAuth (already applied to /daily/*).
+app.get('/daily/:puzzleId/result-summary', async (c) => {
+  const profileId = c.get('profileId');
+  const puzzleId = c.req.param('puzzleId');
+  const admin = createAdminClient(c.env);
+  const { data, error } = await admin.rpc('get_daily_result_summary', {
+    p_puzzle_id: puzzleId,
+    p_profile_id: profileId,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  return c.json(data);
+});
+
 // Daily mode: creates the room, seeds the puzzle's exact letter set, deals the
 // opening hand, and marks it active — all in one RPC call.
 app.post('/rooms/daily', async (c) => {

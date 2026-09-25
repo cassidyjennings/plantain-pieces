@@ -4220,3 +4220,14 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   font-size: var(--text-body);
   color: var(--color-secondary);
 }
+
+/* Results page — daily-puzzle personal-best badge, under the beat-percent pill. */
+.daily-personal-best {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-small);
+  color: var(--color-accent);
+  text-align: center;
+}

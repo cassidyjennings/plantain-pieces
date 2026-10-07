@@ -39,6 +39,7 @@ const KNOWN_ERRORS: Record<string, number> = {
   // Solo mode
   INVALID_BUNCH_SIZE: 400,
   INVALID_TIMED_FLAG: 400,
+  INVALID_PEEL_BATCH: 400,
 };
 
 export function statusForRpcError(message: string): 400 | 401 | 403 | 404 | 409 {

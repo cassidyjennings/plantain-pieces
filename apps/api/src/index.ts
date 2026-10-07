@@ -120,6 +120,9 @@ app.post('/rooms/solo', async (c) => {
     p_dictionary_config: body.dictionaryConfig ?? null,
     p_bunch_size: body.modeConfig.bunchSize,
     p_timed: body.modeConfig.timed,
+    // Optional: absent (an old client, or a Results rematch of a pre-batch room) -> null -> the
+    // RPC defaults it to 1. Range was already checked by validateSoloModeConfig above.
+    p_peel_batch: body.modeConfig.peelBatch ?? null,
   });
   if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
   return c.json(data);

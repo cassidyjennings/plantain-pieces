@@ -3579,6 +3579,15 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   color: var(--color-text-faint);
   font-weight: 700;
 }
+/* Stats-tab loading skeleton: the shared .skeleton-bar is 1em tall and vertical-align: middle,
+   which at .stat-value's 1.4rem pokes out of the 22px `line-height: normal` line box and makes
+   every skeleton row ~1px taller than the real one -- the grid then shrinks when data lands.
+   Pinning it to the line top at under 1em keeps it inside the strut, so the tile height is set
+   by the font exactly as a real value's is. */
+.stats-grid .stat-value .skeleton-bar {
+  vertical-align: top;
+  height: 0.9em;
+}
 
 /* Guest gate — stats/achievements locked behind linking a Google account.
    The real panel stays rendered underneath so the prompt reads as "claim this", not "nothing

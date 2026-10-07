@@ -12,14 +12,15 @@ import {
 import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import {
-  fetchMyStats,
+  fetchMyStatsRows,
   fetchMyAchievements,
   fetchMyProfile,
   guestHasProgress,
   type ProfileStatsRow,
   type AchievementRow,
 } from '../lib/profile.js';
-import { buildStatTiles, type StatsFilter, type StreakInfo } from '../lib/statTiles.js';
+import { buildStatTiles, visibleStatTiles, type StatsFilter, type StreakInfo } from '../lib/statTiles.js';
+import { deriveStatsView } from '../lib/statsView.js';
 import {
   signOut,
   upgradeWith,
@@ -67,20 +68,34 @@ export default function Profile() {
   const guestGateLocked = isGuest && profileHydrated;
   const [tab, setTab] = useState<Tab>('overview');
   const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
-  const [stats, setStats] = useState<ProfileStatsRow | null>(null);
-  const [streak, setStreak] = useState<{ current: number; longest: number } | null>(null);
+  // Every profile_stats row the caller owns (one per mode played), fetched once. Each pill is a
+  // synchronous derivation, so a click never waits on the network or races an earlier reply.
+  const [statsRows, setStatsRows] = useState<ProfileStatsRow[]>([]);
+  const [streak, setStreak] = useState<StreakInfo | null>(null);
+  // Distinct from "loaded, no games": while true the Stats tab renders a same-size skeleton
+  // grid, not the empty-state message that used to swap out for the full grid on first load.
+  const [statsLoading, setStatsLoading] = useState(true);
   const [achievements, setAchievements] = useState<AchievementRow[]>([]);
 
   useEffect(() => {
-    fetchMyStats(statsFilter === 'all' ? undefined : statsFilter).then(setStats);
-  }, [statsFilter]);
-
-  useEffect(() => {
-    fetchMyProfile().then((p) => {
-      if (p) setStreak({ current: p.current_streak, longest: p.longest_streak });
+    let cancelled = false;
+    // Streak lives on profiles, stats on profile_stats. Both must land before the grid renders,
+    // or the two streak tiles pop in after the rest.
+    Promise.all([fetchMyStatsRows(), fetchMyProfile()]).then(([rows, profile]) => {
+      if (cancelled) return;
+      setStatsRows(rows);
+      setStreak(profile ? { current: profile.current_streak, longest: profile.longest_streak } : null);
+      setStatsLoading(false);
     });
-    fetchMyAchievements().then(setAchievements);
+    fetchMyAchievements().then((a) => {
+      if (!cancelled) setAchievements(a);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const stats = useMemo(() => deriveStatsView(statsRows, statsFilter), [statsRows, statsFilter]);
 
   return (
     <div className="centered profile-screen">
@@ -113,6 +128,7 @@ export default function Profile() {
             <StatsBoard
               stats={stats}
               streak={streak}
+              loading={statsLoading}
               filter={statsFilter}
               onFilterChange={setStatsFilter}
               locked={guestGateLocked}
@@ -465,9 +481,12 @@ interface StatsBoardProps {
   /** Rendered behind a GuestGate veil: drop the mode selector so nothing focusable sits behind
    * it. See GuestGate for why that matters more than it looks. */
   locked?: boolean;
+  /** True until stats AND streak have both loaded: render a skeleton the same size as the real
+   * grid for this filter instead of the empty state. */
+  loading?: boolean;
 }
 
-function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: StatsBoardProps) {
+function StatsBoard({ stats, streak, filter, onFilterChange, locked = false, loading = false }: StatsBoardProps) {
   const filterOptions: { id: StatsFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'multiplayer', label: 'Multiplayer' },
@@ -488,6 +507,27 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       ))}
     </div>
   );
+
+  if (loading) {
+    // Same tile count and labels as the real grid for this filter (visibleStatTiles is
+    // data-free); .skeleton-bar sits inside .stat-value so the line box -- and so the tile
+    // height -- matches a real value.
+    return (
+      <div className="panel profile-panel">
+        {modeSelector}
+        <div className="stats-grid" aria-busy="true">
+          {visibleStatTiles(filter).map((def) => (
+            <div key={def.label} className="stat-tile" aria-hidden="true">
+              <span className="stat-value">
+                <span className="skeleton-bar" />
+              </span>
+              <span className="stat-label">{def.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!stats || stats.games_played === 0) {
     return (

@@ -4,7 +4,6 @@ import {
   ACHIEVEMENT_DEFS,
   ACHIEVEMENT_ORDER,
   ACCESSORY_SETS,
-  BUNCH_SIZE_PRESETS,
   validateDisplayName,
   normalizeAvatarConfig,
   type AvatarConfig,
@@ -13,14 +12,15 @@ import {
 import { api, getErrorMessage } from '../lib/api.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import {
-  fetchMyStats,
+  fetchMyStatsRows,
   fetchMyAchievements,
   fetchMyProfile,
   guestHasProgress,
   type ProfileStatsRow,
   type AchievementRow,
-  type GameMode,
 } from '../lib/profile.js';
+import { buildStatTiles, visibleStatTiles, type StatsFilter, type StreakInfo } from '../lib/statTiles.js';
+import { deriveStatsView } from '../lib/statsView.js';
 import {
   signOut,
   upgradeWith,
@@ -58,8 +58,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'accessibility', label: 'Accessibility' },
 ];
 
-type StatsFilter = 'all' | GameMode;
-
 export default function Profile() {
   const navigate = useNavigate();
   const isGuest = useSessionStore((s) => s.isGuest);
@@ -70,20 +68,34 @@ export default function Profile() {
   const guestGateLocked = isGuest && profileHydrated;
   const [tab, setTab] = useState<Tab>('overview');
   const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
-  const [stats, setStats] = useState<ProfileStatsRow | null>(null);
-  const [streak, setStreak] = useState<{ current: number; longest: number } | null>(null);
+  // Every profile_stats row the caller owns (one per mode played), fetched once. Each pill is a
+  // synchronous derivation, so a click never waits on the network or races an earlier reply.
+  const [statsRows, setStatsRows] = useState<ProfileStatsRow[]>([]);
+  const [streak, setStreak] = useState<StreakInfo | null>(null);
+  // Distinct from "loaded, no games": while true the Stats tab renders a same-size skeleton
+  // grid, not the empty-state message that used to swap out for the full grid on first load.
+  const [statsLoading, setStatsLoading] = useState(true);
   const [achievements, setAchievements] = useState<AchievementRow[]>([]);
 
   useEffect(() => {
-    fetchMyStats(statsFilter === 'all' ? undefined : statsFilter).then(setStats);
-  }, [statsFilter]);
-
-  useEffect(() => {
-    fetchMyProfile().then((p) => {
-      if (p) setStreak({ current: p.current_streak, longest: p.longest_streak });
+    let cancelled = false;
+    // Streak lives on profiles, stats on profile_stats. Both must land before the grid renders,
+    // or the two streak tiles pop in after the rest.
+    Promise.all([fetchMyStatsRows(), fetchMyProfile()]).then(([rows, profile]) => {
+      if (cancelled) return;
+      setStatsRows(rows);
+      setStreak(profile ? { current: profile.current_streak, longest: profile.longest_streak } : null);
+      setStatsLoading(false);
     });
-    fetchMyAchievements().then(setAchievements);
+    fetchMyAchievements().then((a) => {
+      if (!cancelled) setAchievements(a);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const stats = useMemo(() => deriveStatsView(statsRows, statsFilter), [statsRows, statsFilter]);
 
   return (
     <div className="centered profile-screen">
@@ -116,6 +128,7 @@ export default function Profile() {
             <StatsBoard
               stats={stats}
               streak={streak}
+              loading={statsLoading}
               filter={statsFilter}
               onFilterChange={setStatsFilter}
               locked={guestGateLocked}
@@ -462,24 +475,18 @@ function LockGlyph() {
 
 interface StatsBoardProps {
   stats: ProfileStatsRow | null;
-  streak: { current: number; longest: number } | null;
+  streak: StreakInfo | null;
   filter: StatsFilter;
   onFilterChange: (f: StatsFilter) => void;
   /** Rendered behind a GuestGate veil: drop the mode selector so nothing focusable sits behind
    * it. See GuestGate for why that matters more than it looks. */
   locked?: boolean;
+  /** True until stats AND streak have both loaded: render a skeleton the same size as the real
+   * grid for this filter instead of the empty state. */
+  loading?: boolean;
 }
 
-/** mm:ss, matching Game.tsx's Timed solo elapsed-time card and Results.tsx's summary. */
-function formatBestTime(ms: number | undefined): string {
-  if (ms == null) return '-';
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: StatsBoardProps) {
+function StatsBoard({ stats, streak, filter, onFilterChange, locked = false, loading = false }: StatsBoardProps) {
   const filterOptions: { id: StatsFilter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'multiplayer', label: 'Multiplayer' },
@@ -501,6 +508,27 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
     </div>
   );
 
+  if (loading) {
+    // Same tile count and labels as the real grid for this filter (visibleStatTiles is
+    // data-free); .skeleton-bar sits inside .stat-value so the line box -- and so the tile
+    // height -- matches a real value.
+    return (
+      <div className="panel profile-panel">
+        {modeSelector}
+        <div className="stats-grid" aria-busy="true">
+          {visibleStatTiles(filter).map((def) => (
+            <div key={def.label} className="stat-tile" aria-hidden="true">
+              <span className="stat-value">
+                <span className="skeleton-bar" />
+              </span>
+              <span className="stat-label">{def.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (!stats || stats.games_played === 0) {
     return (
       <div className="panel profile-panel">
@@ -509,67 +537,9 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       </div>
     );
   }
-  const avgLen = stats.total_words > 0 ? (stats.total_word_length / stats.total_words).toFixed(1) : '-';
-  const winRate = stats.games_played > 0 ? Math.round((stats.games_won / stats.games_played) * 100) : 0;
-  // Peel streak is multiplayer-only by definition (best_peel_streak is never set for solo/xtina
-  // rows), so it's hidden on the solo filter alongside win rate — see the 2026-08-08 spec.
-  const showCompetitiveStats = filter !== 'solo' && filter !== 'daily';
-  const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '-';
-
-  const letterEntries = Object.entries(stats.first_letter_counts ?? {});
-  const maxLetterCount = letterEntries.reduce((max, [, count]) => Math.max(max, count), 0);
-  let favoriteLetters = '-';
-  if (maxLetterCount > 0) {
-    const tiedLetters = letterEntries
-      .filter(([, count]) => count === maxLetterCount)
-      .map(([letter]) => letter)
-      .sort();
-    favoriteLetters = tiedLetters.length > 4
-      ? `${tiedLetters.slice(0, 4).join(', ')} +${tiedLetters.length - 4}`
-      : tiedLetters.join(', ');
-  }
-
-  // Best time per Bunch size is solo-only (multiplayer has no clock), same rule as the peel
-  // streak / win rate tiles above — hidden on the 'multiplayer' filter.
-  const showSoloBestTimes = filter !== 'multiplayer';
-  const soloBestTimeTiles = showSoloBestTimes
-    ? BUNCH_SIZE_PRESETS.map((preset) => ({
-        label: `Best time · ${preset.label}`,
-        value: formatBestTime(stats.solo_best_times?.[String(preset.size)]),
-      }))
-    : [];
-
-  // Best time is safe to show on 'all' too (min is associative regardless of which modes
-  // contributed). Average is daily-filter-only: on 'all', stats.games_played is summed across
-  // every mode, so dividing daily_total_time_ms by it there would silently produce a wrong
-  // number rather than a missing one — see the 2026-09-24 design doc.
-  const showDailyBestTime = filter !== 'multiplayer' && filter !== 'solo';
-  const dailyBestTimeTile = showDailyBestTime
-    ? [{ label: 'Best time (daily)', value: formatBestTime(stats.daily_best_time_ms ?? undefined) }]
-    : [];
-  const dailyAverageTimeTile =
-    filter === 'daily' && stats.games_played > 0
-      ? [{ label: 'Average time (daily)', value: formatBestTime(stats.daily_total_time_ms / stats.games_played) }]
-      : [];
-
-  const tiles: { label: string; value: string | number }[] = [
-    { label: 'Games played', value: stats.games_played },
-    ...(showCompetitiveStats ? [{ label: 'Wins', value: `${stats.games_won} (${winRate}%)` }] : []),
-    ...(streak ? [{ label: 'Current streak', value: streak.current }, { label: 'Longest streak', value: streak.longest }] : []),
-    { label: 'Longest word', value: stats.longest_word ?? '-' },
-    { label: 'Rarest word', value: stats.rarest_word ?? '-' },
-    { label: 'Avg word length', value: avgLen },
-    { label: 'Fastest peel', value: fastestPeel },
-    { label: 'Tiles peeled', value: stats.total_peels },
-    { label: 'Tiles dumped', value: stats.total_dumps },
-    { label: 'Favorite starting letter', value: favoriteLetters },
-    ...(showCompetitiveStats
-      ? [{ label: 'Best peel streak', value: (stats.best_peel_streak ?? 0) > 0 ? stats.best_peel_streak : '-' }]
-      : []),
-    ...soloBestTimeTiles,
-    ...dailyBestTimeTile,
-    ...dailyAverageTimeTile,
-  ];
+  // Which tiles show on which pill is decided per tile in lib/statTiles.ts (STAT_TILE_DEFS'
+  // `modes`) -- e.g. daily hides the peel/dump/Bunch-size tiles it can never move.
+  const tiles = buildStatTiles(stats, streak, filter);
 
   return (
     <div className="panel profile-panel">

@@ -4263,6 +4263,9 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: text;
+  /* Room for all six share lines up front: the streak and longest-word lines only join once
+     their data lands, and without this the panel (and everything below it) grew as they did. */
+  min-height: calc(6 * 1.6em);
 }
 
 /* A middle-aligned 1em bar grows the .stat-value line box by ~1px past the real text's, so a

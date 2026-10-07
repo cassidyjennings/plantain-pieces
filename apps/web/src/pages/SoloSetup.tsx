@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DEFAULT_DICTIONARY_CONFIG, BUNCH_SIZE_PRESETS, WORD_LENGTH_MAX, type DictionaryConfig } from '@plantain/shared';
+import {
+  DEFAULT_DICTIONARY_CONFIG,
+  BUNCH_SIZE_PRESETS,
+  WORD_LENGTH_MAX,
+  MIN_PEEL_BATCH,
+  MAX_PEEL_BATCH,
+  clampPeelBatch,
+  defaultPeelBatchForBunchSize,
+  type DictionaryConfig,
+} from '@plantain/shared';
 import { api, getErrorMessage } from '../lib/api.js';
 import {
   fetchMyCustomWordSets,
@@ -33,6 +42,10 @@ export default function SoloSetup() {
   const setBunchSize = useSettingsStore((s) => s.setSoloBunchSize);
   const timed = useSettingsStore((s) => s.soloTimed);
   const setTimed = useSettingsStore((s) => s.setSoloTimed);
+  // Tiles per peel. Deliberately local state, not persisted: it starts at the current Bunch
+  // size's default and resets to the new preset's default whenever the preset changes (spec
+  // 3.1), so a remembered value would just be overwritten on the first preset click anyway.
+  const [peelBatch, setPeelBatch] = useState<number>(() => defaultPeelBatchForBunchSize(bunchSize));
 
   const [dictConfig, setDictConfig] = useState<DictionaryConfig>(DEFAULT_DICTIONARY_CONFIG);
   const [mySets, setMySets] = useState<CustomWordSetSummary[]>([]);
@@ -62,7 +75,7 @@ export default function SoloSetup() {
     setBusy(true);
     setError(null);
     try {
-      const room = await api.createSoloRoom(name, dictConfig, { bunchSize, timed });
+      const room = await api.createSoloRoom(name, dictConfig, { bunchSize, timed, peelBatch });
       // The room is already active by the time this returns, so skip a Lobby entirely.
       navigate(`/room/${room.roomId}/game`);
     } catch (err) {
@@ -110,12 +123,37 @@ export default function SoloSetup() {
                 key={preset.label}
                 type="button"
                 className={`choice-tile toggle-btn${bunchSize === preset.size ? ' selected' : ''}`}
-                onClick={() => setBunchSize(preset.size)}
+                onClick={() => {
+                  setBunchSize(preset.size);
+                  setPeelBatch(preset.defaultPeelBatch);
+                }}
               >
                 <span className="t">{preset.label}</span>
                 <span className="s">{preset.size} tiles</span>
               </button>
             ))}
+          </div>
+        </div>
+
+        <div className="solo-section">
+          <label className="solo-section-label" htmlFor="peel-batch">
+            Tiles per peel
+          </label>
+          <div className="peel-batch-row">
+            <input
+              id="peel-batch"
+              type="range"
+              className="peel-batch-slider"
+              min={MIN_PEEL_BATCH}
+              max={MAX_PEEL_BATCH}
+              step={1}
+              value={peelBatch}
+              onChange={(e) => setPeelBatch(clampPeelBatch(Number(e.target.value)))}
+              aria-valuetext={`${peelBatch} ${peelBatch === 1 ? 'tile' : 'tiles'} per peel`}
+            />
+            <output className="peel-batch-value" htmlFor="peel-batch">
+              {peelBatch}
+            </output>
           </div>
         </div>
 

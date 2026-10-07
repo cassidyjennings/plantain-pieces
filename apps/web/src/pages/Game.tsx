@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   EASTER_EGG_WORDS,
+  isEasterEggWord,
   extractWordsWithCells,
   makeKey,
   parseKey,
@@ -26,6 +27,7 @@ import {
 } from '../lib/rooms.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useMoveTracker } from '../hooks/useMoveTracker.js';
+import { useEasterEggs, type EggTriggers } from '../hooks/useEasterEggs.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { useSettingsStore } from '../store/settingsStore.js';
 import {
@@ -1407,6 +1409,28 @@ export default function Game() {
     }, 1000);
     return () => clearTimeout(handle);
   }, [remainingCount, roomId]);
+
+  // --- Easter eggs ------------------------------------------------------------
+
+  // Egg words currently validly on the board. With word validation on, "validly" = every cell of
+  // the word is in validCells (so an egg crossing an invalid word doesn't count). With validation
+  // off there is no verdict for crossing words at all, but an egg needs no dictionary — count it
+  // on presence; anything with a real consequence (Supercali) is re-validated by the Worker.
+  const eggsOnBoard = useMemo(() => {
+    const out = new Set<string>();
+    for (const w of extractWordsWithCells(grid)) {
+      if (!isEasterEggWord(w.word)) continue;
+      if (!wordValidationEnabled || w.cells.every((c) => validCells.has(c))) out.add(w.word);
+    }
+    return out;
+  }, [grid, validCells, wordValidationEnabled]);
+
+  // MIT has no trigger — its tint is continuous (mitCells). GHOST / FREEZE / SUPERCALI are added
+  // by the tasks that implement them; an egg without a trigger is still recorded as found.
+  const eggTriggers: EggTriggers = {};
+
+  const { getFoundEggs } = useEasterEggs(eggsOnBoard, eggTriggers);
+  void getFoundEggs;
 
   // --- Auto-detect Peel / Plantains ------------------------------------------
 

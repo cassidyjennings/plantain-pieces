@@ -174,6 +174,7 @@ async function sectionGhost() {
   );
   assert(again.n === 1, 'a repeat GHOST report is a no-op (no second event)');
 
+
   seen = await playersSeenBy(guest, roomId);
   h = seen.find((r) => r.profile_id === host);
   const g = seen.find((r) => r.profile_id === guest);
@@ -210,6 +211,36 @@ async function sectionGhost() {
     'GAME_NOT_ACTIVE',
     'a stranger hits the room-status gate first (room is in lobby)',
   );
+}
+
+async function sectionGhostEventLeak() {
+  // [review] the ghost mask must hold in room_events too, not just room_players_public: every
+  // event written after the GHOST latch is readable by room members.
+  const { roomId, host, guest } = await startedRoom('leak-host', 'leak-guest');
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [roomId, host]);
+  const ghostEvt = await one(
+    `select max(id) as id from public.room_events where room_id = $1 and payload ->> 'ghosted' = 'true'`,
+    [roomId],
+  );
+  await q(`select public.report_progress($1, $2, 3)`, [roomId, host]);
+  const hostRow = await one(`select tile_count, remaining_count from public.room_players where room_id = $1 and profile_id = $2`, [roomId, host]);
+  assert(hostRow.remaining_count === 3, 'a ghosted report_progress still updates the row');
+  await q(`select public.peel($1, $2, $3)`, [roomId, host, hostRow.tile_count]);
+  const guestCount = (await one(`select tile_count from public.room_players where room_id = $1 and profile_id = $2`, [roomId, guest])).tile_count;
+  await q(`select public.peel($1, $2, $3)`, [roomId, guest, guestCount]);
+  const guestRack = (await one(`select rack from public.room_players where room_id = $1 and profile_id = $2`, [roomId, guest])).rack;
+  await q(`select public.dump($1, $2, $3)`, [roomId, guest, guestRack[0]]);
+  const after = await q(`select type, payload from public.room_events where room_id = $1 and id > $2 order by id`, [roomId, ghostEvt.id]);
+  assert(after.some((e) => e.type === 'progress') && after.some((e) => e.type === 'peel') && after.some((e) => e.type === 'dump'),
+    `post-GHOST progress, peel and dump events were written (${after.map((e) => e.type).join(',')})`);
+  const leaks = after.filter((e) => {
+    if (e.type === 'progress' && e.payload.profileId === host && 'remaining' in e.payload) return true;
+    return (e.payload.tileCounts ?? []).some((t) => t.profileId === host && t.tileCount !== null);
+  });
+  assert(leaks.length === 0, `no post-GHOST room_events payload carries the ghosted player's counts (${JSON.stringify(leaks)})`);
+  const guestVisible = after.filter((e) => e.type !== 'progress')
+    .every((e) => (e.payload.tileCounts ?? []).some((t) => t.profileId === guest && typeof t.tileCount === 'number'));
+  assert(guestVisible, "the non-ghosted player's tileCount stays in event payloads");
 }
 
 async function soloRoom(tag, timed) {
@@ -257,6 +288,24 @@ async function sectionFreeze() {
   await q(`select public.report_egg_flags($1, $2, '{"freezeUsed": true}'::jsonb)`, [mp.roomId, mp.host]);
   const fm = await one(`select freeze_used from public.room_players where room_id = $1 and profile_id = $2`, [mp.roomId, mp.host]);
   assert(fm.freeze_used === false, 'multiplayer: FREEZE is ignored (rankings stay fair)');
+
+  // [review] GHOST hides counts from opponents — only meaningful (and only accepted) in multiplayer.
+  const gs = await soloRoom('ghost-solo', false);
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [gs.roomId, gs.p]);
+  const gsr = await one(`select ghosted from public.room_players where room_id = $1`, [gs.roomId]);
+  assert(gsr.ghosted === false, 'solo: GHOST is ignored');
+  const gx = await startedRoom('ghost-x-host', 'ghost-x-guest');
+  await q(`update public.rooms set mode = 'xtina' where id = $1`, [gx.roomId]);
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [gx.roomId, gx.host]);
+  const gxr = await one(`select ghosted from public.room_players where room_id = $1 and profile_id = $2`, [gx.roomId, gx.host]);
+  assert(gxr.ghosted === false, 'xtina: GHOST is ignored');
+  const gxe = await one(`select count(*)::int as n from public.room_events where room_id = $1 and type = 'progress'`, [gx.roomId]);
+  assert(gxe.n === 0, 'an ignored GHOST broadcasts nothing');
+  const gsp = await startedRoom('ghost-spec-host', 'ghost-spec-guest');
+  await q(`update public.room_players set is_spectator = true where room_id = $1 and profile_id = $2`, [gsp.roomId, gsp.guest]);
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [gsp.roomId, gsp.guest]);
+  const gspr = await one(`select ghosted from public.room_players where room_id = $1 and profile_id = $2`, [gsp.roomId, gsp.guest]);
+  assert(gspr.ghosted === false, 'a spectator cannot GHOST');
 }
 
 async function sectionSupercali() {
@@ -329,8 +378,24 @@ async function sectionMysteryAchievements() {
     'a second game accumulates eggs_found across rooms',
   );
   assert(await hasAchievement(me, 'collector'), 'collector unlocked once every egg in the list is found');
+  // [review] room2 was NOT won via supercali_win, so a reported SUPERCALI word is a spoof: it must
+  // not land in lifetime word stats (eggs_found above still accepts it — spoofable by spec).
   const st = await one(`select longest_word from public.profile_stats where profile_id = $1 and mode = 'multiplayer'`, [me]);
-  assert(st.longest_word === SUPERCALI, 'the 34-letter egg counts as a word in stats');
+  assert(st.longest_word !== SUPERCALI, `a spoofed SUPERCALI word does not set longest_word (got ${st.longest_word})`);
+
+  // [review] a genuine supercali_win winner's summary DOES count it.
+  const real = await startedRoom('sc-real-host', 'sc-real-guest');
+  await q(
+    `update public.room_players set rack = $3::jsonb, tile_count = 34 where room_id = $1 and profile_id = $2`,
+    [real.roomId, real.host, JSON.stringify([...SUPERCALI])],
+  );
+  await q(`select public.supercali_win($1, $2, $3::jsonb)`, [real.roomId, real.host, rowGrid(SUPERCALI, 5, 10)]);
+  await submit(real.roomId, real.guest, summary([SUPERCALI, 'GHOST'], []));
+  const loser = await one(`select longest_word from public.profile_stats where profile_id = $1 and mode = 'multiplayer'`, [real.guest]);
+  assert(loser.longest_word === 'GHOST', `the LOSER of a supercali game cannot claim the word (an ordinary word still counts) (got ${loser.longest_word})`);
+  await submit(real.roomId, real.host, summary([SUPERCALI], []));
+  const winner = await one(`select longest_word from public.profile_stats where profile_id = $1 and mode = 'multiplayer'`, [real.host]);
+  assert(winner.longest_word === SUPERCALI, 'the genuine supercali winner gets the 34-letter word in stats');
 
   await submit(r1.roomId, r1.guest, summary(['CAT'], []));
   assert((await eggsOf(r1.guest)).length === 0 && !(await hasAchievement(r1.guest, 'egg_hunter')), 'no eggs: nothing persisted, no egg_hunter');
@@ -370,7 +435,7 @@ async function sectionMysteryAchievements() {
   assert(!(await hasAchievement(await dailyGame('speed-slow', 75000), 'speedrun')), 'speedrun: 75 s does not count');
 }
 
-const SECTIONS = [sectionEggValidation, sectionGhost, sectionFreeze, sectionSupercali, sectionMysteryAchievements];
+const SECTIONS = [sectionEggValidation, sectionGhost, sectionGhostEventLeak, sectionFreeze, sectionSupercali, sectionMysteryAchievements];
 
 async function main() {
   await client.connect();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { ACHIEVEMENT_DEFS, FREEZE_DURATION_MS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
+import { ACHIEVEMENT_DEFS, FREEZE_DURATION_MS, SUPERCALI, type AchievementType, type SoloModeConfig } from '@plantain/shared';
 import { fetchDisplayName, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyAchievements } from '../lib/profile.js';
 import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/boards.js';
@@ -94,7 +94,11 @@ export default function Results() {
       setEarned(
         achievements
           .filter((a) => (a.meta as { roomId?: string })?.roomId === roomId)
-          .map((a) => a.type),
+          .map((a) => a.type)
+          // A type this client build doesn't know (the server can unlock achievements a stale
+          // deploy has no def for — e.g. practically_perfect) would crash the strip's
+          // ACHIEVEMENT_DEFS[t] lookup, and there is no error boundary: skip it instead.
+          .filter((t) => t in ACHIEVEMENT_DEFS),
       );
       if (isFinal) setAchievementsSettled(true);
     }
@@ -219,6 +223,7 @@ export default function Results() {
   // as soon as the room does, instead of waiting on the players read.
   const gameReady = isDaily || me != null;
   const isTimed = isSolo && (room.mode_config as { timed?: boolean }).timed === true;
+  const isSupercali = room.win_kind === 'supercali';
   // Derived from the room's own timestamps rather than a stored duration_ms. A FREEZE easter egg
   // (Timed solo) took 10 s off the clock — the archived best time already subtracts it, so the
   // tile must too or the two disagree.
@@ -239,11 +244,15 @@ export default function Results() {
           day: 'numeric',
         })
       : 'Daily Puzzle'
-    : isSolo
-      ? 'You cleared the Bunch!'
-      : won
-        ? 'You take the win!'
-        : `${winnerName} takes the win!`;
+    : isSupercali
+      ? won
+        ? 'Practically perfect. Instant win!'
+        : `${winnerName} said the magic word.`
+      : isSolo
+        ? 'You cleared the Bunch!'
+        : won
+          ? 'You take the win!'
+          : `${winnerName} takes the win!`;
   const name = displayName.trim() || 'Guest';
 
   async function handlePlayAgain() {
@@ -302,7 +311,9 @@ export default function Results() {
         </div>
       ) : (
         <>
-          <h1 className="results-callout">PLANTAINS!</h1>
+          <h1 className={`results-callout${isSupercali ? ' results-callout-supercali' : ''}`}>
+            {isSupercali ? SUPERCALI : 'PLANTAINS!'}
+          </h1>
           <p className="winner-line">{headline}</p>
         </>
       )}

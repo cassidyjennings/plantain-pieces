@@ -3,6 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   EASTER_EGG_WORDS,
   FREEZE_DURATION_MS,
+  SUPERCALI,
+  isConnected,
+  findOrphans,
   isEasterEggWord,
   extractWordsWithCells,
   makeKey,
@@ -87,6 +90,16 @@ function useMediaQuery(query: string): boolean {
 }
 
 const CALLOUT_MS = 900;
+/** Supercali refusals that just mean "not yet" — the trigger re-arms silently. */
+const SUPERCALI_SILENT_ERRORS = new Set([
+  'EXTRA_TILES',
+  'NOT_CONNECTED',
+  'ORPHAN_TILE',
+  'NO_SUPERCALI',
+  'EMPTY_GRID',
+  'INVALID_WORDS',
+  'GAME_NOT_ACTIVE',
+]);
 /**
  * Auto-fire rejections that are a normal part of building a board, not failures worth a banner.
  * The player is mid-word; the tile colours already say what's wrong. Everything NOT in this set
@@ -1462,6 +1475,27 @@ export default function Game() {
         await api.reportEggFlags(roomId, { freezeUsed: true });
       } catch {
         // see above — deliberately not re-armed
+      }
+    },
+    // SUPERCALI…: instant win. Cheap local pre-checks first (connected, no orphans, every placed
+    // tile in a valid word) so a refusal is rare; a refusal re-arms so fixing the board retries.
+    [SUPERCALI]: async () => {
+      if (!roomId || busyRef.current || isXtinaPartner) return false;
+      const g = gridRef.current;
+      if (!isConnected(g) || findOrphans(g).length > 0) return false;
+      if (wordValidationEnabled && Object.keys(g).some((k) => !validCells.has(k))) return false;
+      busyRef.current = true;
+      try {
+        await api.supercali(roomId, g);
+        submitSummaryOnce();
+        fireCallout('SUPERCALI!');
+        setTimeout(() => navigate(`/room/${roomId}/results`, { replace: true }), CALLOUT_MS);
+        return true;
+      } catch (err) {
+        if (!(err instanceof ApiError && SUPERCALI_SILENT_ERRORS.has(err.message))) reportActionError(err);
+        return false;
+      } finally {
+        busyRef.current = false;
       }
     },
   };

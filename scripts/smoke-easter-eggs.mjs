@@ -259,7 +259,47 @@ async function sectionFreeze() {
   assert(fm.freeze_used === false, 'multiplayer: FREEZE is ignored (rankings stay fair)');
 }
 
-const SECTIONS = [sectionEggValidation, sectionGhost, sectionFreeze];
+async function sectionSupercali() {
+  const WORD = rowGrid(SUPERCALI, 5, 10);
+  async function roomWithRack(tag, rack) {
+    const r = await startedRoom(`${tag}-host`, `${tag}-guest`);
+    await q(
+      `update public.room_players set rack = $3::jsonb, tile_count = jsonb_array_length($3::jsonb)
+         where room_id = $1 and profile_id = $2`,
+      [r.roomId, r.host, JSON.stringify(rack)],
+    );
+    return r;
+  }
+  const win = (r, grid, who = r.host) =>
+    one(`select public.supercali_win($1, $2, $3::jsonb) as r`, [r.roomId, who, grid]);
+
+  const short = await roomWithRack('sc-short', [...SUPERCALI].slice(1));
+  await expectError(win(short, WORD), 'EXTRA_TILES', 'letters not in the rack are refused');
+
+  const r = await roomWithRack('sc', [...SUPERCALI, 'Q', 'I']);
+  await expectError(win(r, { ...WORD, ...rowGrid('QI', 5, 20) }), 'NOT_CONNECTED', 'a disconnected grid is refused');
+  await expectError(win(r, rowGrid('QI', 5, 20)), 'NO_SUPERCALI', 'a grid without the word is refused');
+  await expectError(win(r, { ...WORD, '39,10': 'I' }), 'NO_SUPERCALI', 'the word inside a longer run does not count');
+  await expectError(win(r, { 'a,b': 'S' }), 'MALFORMED_GRID', 'malformed cell keys are refused');
+  await expectError(win(r, WORD, await makeUser('sc-stranger')), 'NOT_IN_ROOM', 'a non-member is refused');
+  const mid = await one(`select status, bunch_count from public.rooms where id = $1`, [r.roomId]);
+  assert(mid.status === 'active', 'refusals leave the room active');
+  assert(mid.bunch_count > 2, `the Bunch is nowhere near low (${mid.bunch_count}) — the win below bypasses that gate`);
+
+  const ok = (await win(r, WORD)).r;
+  assert(ok.ok === true && ok.supercali === true, 'supercali_win accepts the word with tiles still in hand');
+  const room = await one(`select status, winner_id, win_kind from public.rooms where id = $1`, [r.roomId]);
+  assert(room.status === 'finished' && room.winner_id === r.host && room.win_kind === 'supercali', 'room finished, caller wins, win_kind = supercali');
+  const saved = await one(`select grid_state from public.room_players where room_id = $1 and profile_id = $2`, [r.roomId, r.host]);
+  assert(Object.keys(saved.grid_state).length === 34, 'the winning board is saved for the post-game viewer');
+  assert(await hasAchievement(r.host, 'practically_perfect'), 'practically_perfect unlocked for the winner');
+  assert(!(await hasAchievement(r.guest, 'practically_perfect')), 'practically_perfect not unlocked for the loser');
+  const pub = await asUser(r.guest, `select win_kind from public.rooms_public where id = $1`, [r.roomId]);
+  assert(pub[0].win_kind === 'supercali', 'rooms_public exposes win_kind to room members');
+  await expectError(win(r, WORD), 'GAME_NOT_ACTIVE', 'a finished room cannot be won again');
+}
+
+const SECTIONS = [sectionEggValidation, sectionGhost, sectionFreeze, sectionSupercali];
 
 async function main() {
   await client.connect();

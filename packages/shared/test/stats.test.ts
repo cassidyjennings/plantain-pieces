@@ -75,6 +75,12 @@ describe('validateGameSummary', () => {
     expect(validateGameSummary(good)).toEqual({ valid: true });
   });
 
+  it('accepts an easter-egg word longer than the 20-letter custom-word cap', () => {
+    expect(validateGameSummary({ ...good, words: ['CAT', 'SUPERCALIFRAGILISTICEXPIALIDOCIOUS'] })).toEqual({
+      valid: true,
+    });
+  });
+
   it('accepts null move-stat fields', () => {
     expect(
       validateGameSummary({ ...good, moveStats: { peelEfficiency: null, idleTileRatio: null, dumpRegret: 0 } }),

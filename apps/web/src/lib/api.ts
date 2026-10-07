@@ -236,6 +236,12 @@ export const api = {
       body: JSON.stringify({ grid }),
     }),
 
+  supercali: (roomId: string, grid: GridState) =>
+    call<{ ok: true; supercali: true }>(`/rooms/${roomId}/supercali`, {
+      method: 'POST',
+      body: JSON.stringify({ grid }),
+    }),
+
   createWordSet: (name: string, words: string[]) =>
     call<WordSetResult>('/dictionaries/sets', { method: 'POST', body: JSON.stringify({ name, words }) }),
 

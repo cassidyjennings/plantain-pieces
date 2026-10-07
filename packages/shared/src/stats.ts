@@ -1,4 +1,5 @@
 import { WORD_PATTERN } from './dictionary.js';
+import { isEasterEggWord } from './easterEggs.js';
 
 /** How many of a player's subsequent moves count as "soon" when deciding whether a dumped
  * tile would have completed a word (dump-regret lookahead). */
@@ -113,7 +114,11 @@ export function validateGameSummary(
   if (!Array.isArray(s.words)) return { valid: false, reason: 'MALFORMED' };
   if (s.words.length > MAX_SUMMARY_WORDS) return { valid: false, reason: 'OUT_OF_RANGE' };
   for (const w of s.words) {
-    if (typeof w !== 'string' || !WORD_PATTERN.test(w)) return { valid: false, reason: 'INVALID_WORD' };
+    // Egg words are exempt from the 2-20 custom-word pattern: SUPERCALI… is 34 letters and is
+    // exactly the word a Supercali winner's summary will contain.
+    if (typeof w !== 'string' || !(WORD_PATTERN.test(w) || isEasterEggWord(w))) {
+      return { valid: false, reason: 'INVALID_WORD' };
+    }
   }
 
   if (!Number.isInteger(s.placedCount) || (s.placedCount as number) < 0) {

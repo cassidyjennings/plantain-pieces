@@ -1691,6 +1691,16 @@ button:disabled {
   max-width: 100%;
 }
 
+/* Supercali easter-egg win: the 34-letter word as the callout. Smaller fluid size and anywhere-
+   wrapping so it never overflows a 280px phone (the 2026-07-27 mobile rule). Set via the size
+   variable (not font-size directly) so the text-stroke scales down with it. */
+.results-callout.results-callout-supercali {
+  --results-callout-size: clamp(1.1rem, 5.2vw, 2.4rem);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .winner-line {
   font-family: var(--font-body);
   font-weight: 800;

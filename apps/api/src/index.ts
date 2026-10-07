@@ -8,6 +8,7 @@ import {
   validateGameSummary,
   validateSoloModeConfig,
   isValidGridShape,
+  validateSupercaliStructure,
   type GridState,
   type DictionaryConfig,
   type AvatarConfig,
@@ -502,6 +503,67 @@ app.post('/rooms/:roomId/plantains', async (c) => {
     p_room_id: roomId,
     p_type: 'game_over',
     p_payload: { winner: profileId },
+  });
+
+  return c.json(data as object);
+});
+
+// Supercali! (Phase 4 easter egg): SUPERCALIFRAGILISTICEXPIALIDOCIOUS validly on the board wins
+// instantly, in any mode. Unlike Plantains the grid need only use a SUB-multiset of the rack
+// (tiles may still be in hand) and the bunch-low gate does not apply. supercali_win re-checks the
+// structural half authoritatively; the dictionary check lives here, exactly as for Plantains.
+// A refusal appends nothing (plantains_rejected feeds Nail Biter and must stay Plantains-only).
+app.post('/rooms/:roomId/supercali', async (c) => {
+  const profileId = c.get('profileId');
+  const roomId = c.req.param('roomId');
+  const body = await c.req.json<{ grid: unknown }>();
+  if (!isValidGridShape(body.grid)) return c.json({ error: 'MALFORMED_GRID' }, 400);
+  const grid = body.grid;
+  const admin = createAdminClient(c.env);
+
+  let rack;
+  try {
+    rack = await fetchRack(admin, roomId, profileId);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 403);
+  }
+
+  const structural = validateSupercaliStructure(grid, rack);
+  if (!structural.valid) {
+    return c.json({ error: structural.reason, orphans: structural.orphans }, 400);
+  }
+
+  const { data: invalidWords, error: dictError } = await admin.rpc('find_invalid_words', {
+    p_room_id: roomId,
+    p_words: structural.words,
+  });
+  if (dictError) return c.json({ error: dictError.message }, statusForRpcError(dictError.message));
+  if (invalidWords && invalidWords.length > 0) {
+    return c.json({ error: 'INVALID_WORDS', invalidWords }, 400);
+  }
+
+  const { data, error } = await admin.rpc('supercali_win', {
+    p_room_id: roomId,
+    p_profile: profileId,
+    p_grid: grid,
+  });
+  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+
+  // Same rule as Plantains: a rollup failure must not fail the win, and game_over fires either way.
+  try {
+    const { error: rollupError } = await admin.rpc('archive_game', {
+      p_room_id: roomId,
+      p_winner: profileId,
+    });
+    if (rollupError) console.error('stat rollup failed', rollupError.message);
+  } catch (err) {
+    console.error('stat rollup threw', (err as Error).message);
+  }
+
+  await admin.rpc('append_room_event', {
+    p_room_id: roomId,
+    p_type: 'game_over',
+    p_payload: { winner: profileId, supercali: true },
   });
 
   return c.json(data as object);

@@ -77,6 +77,22 @@ async function lastPeelPayload(roomId) {
   return rows[0].payload;
 }
 
+/** Mark a room finished and run the real stats rollup (archive_game -> _archive_game_impl). */
+async function finishAndArchive(roomId, winner) {
+  await client.query(
+    `update public.rooms set status = 'finished', finished_at = now(), winner_id = $2 where id = $1`,
+    [roomId, winner],
+  );
+  await client.query('select public.archive_game($1, $2)', [roomId, winner]);
+}
+
+async function totalPeels(profile, mode) {
+  const { rows } = await client.query(
+    'select total_peels from public.profile_stats where profile_id = $1 and mode = $2', [profile, mode],
+  );
+  return rows[0]?.total_peels;
+}
+
 async function peelRefused(roomId, profile) {
   try {
     await peel(roomId, profile);
@@ -181,6 +197,37 @@ async function main() {
   assert(hs.bunch_count === 100, 'one multiplayer peel removes exactly 2 tiles (1 per player)');
   assert(hs.tile_count === 22 && gs.tile_count === 22, 'each player received exactly 1 tile');
   assert((await lastPeelPayload(mpId)).drawn === 1, 'multiplayer peel event carries drawn = 1');
+
+  console.log('\n"Tiles peeled" (profile_stats.total_peels) counts tiles drawn, not peel events');
+  // Solo, batch 3, two peels -> 6 tiles.
+  const e = await freshUser();
+  const roomE = await soloRoom(e, 54, 3);
+  await peel(roomE, e);
+  await peel(roomE, e);
+  await finishAndArchive(roomE, e);
+  assert(await totalPeels(e, 'solo') === 6, 'solo batch 3 x 2 peels -> total_peels = 6');
+
+  // Remainder: roomA drew 7 + 7 + 5.
+  await finishAndArchive(roomA, a);
+  assert(await totalPeels(a, 'solo') === 19, 'solo batch 7 with a 5-tile remainder peel -> total_peels = 19');
+
+  // Peel events written before this migration have no 'drawn' key -> 1 per event (old behaviour).
+  const f = await freshUser();
+  const roomF = await soloRoom(f, 54, 3);
+  await peel(roomF, f);
+  await peel(roomF, f);
+  await client.query(
+    `update public.room_events set payload = payload - 'drawn' where room_id = $1 and type = 'peel'`, [roomF],
+  );
+  await finishAndArchive(roomF, f);
+  assert(await totalPeels(f, 'solo') === 2, "legacy peel events (no 'drawn') count 1 each");
+
+  // Multiplayer: still per-actor (the peeler), and the actor draws 1 -> numerically unchanged
+  // from the old count(*) of the player's own peel events. Host has peeled twice, guest never.
+  await peel(mpId, host);
+  await finishAndArchive(mpId, host);
+  assert(await totalPeels(host, 'multiplayer') === 2, 'multiplayer: host peeled twice -> total_peels = 2');
+  assert(await totalPeels(guest, 'multiplayer') === 0, 'multiplayer: guest received tiles but never peeled -> 0');
 
   console.log('\nall smoke checks passed');
 }

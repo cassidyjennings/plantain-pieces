@@ -4070,6 +4070,36 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   opacity: 0.75;
 }
 
+/* Solo "Tiles per peel" slider. The global `input` rule styles every input as a padded,
+   bordered text field; none of that suits a range control, so it is reset here. flex: 1 needs
+   min-width: 0 or the range's intrinsic width can push the value readout out of the panel on a
+   narrow phone (same flexbox trap as .join-row input). */
+.peel-batch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.peel-batch-slider {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.peel-batch-value {
+  flex: none;
+  min-width: 2ch;
+  text-align: right;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--color-text-primary);
+}
+
 /* The lobby's label-over-control triple, reused here with no box around it. */
 .solo-rules {
   display: flex;

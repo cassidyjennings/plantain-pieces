@@ -4,6 +4,7 @@ import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@pl
 import { fetchDisplayName, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyAchievements } from '../lib/profile.js';
 import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/boards.js';
+import { resultsFetchPlan } from '../lib/resultsPlan.js';
 import { useRoomEvents } from '../hooks/useRoomEvents.js';
 import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError, getErrorMessage, type DailyResultSummary } from '../lib/api.js';
@@ -30,6 +31,9 @@ export default function Results() {
   const [rematchError, setRematchError] = useState<string | null>(null);
   const [myBoard, setMyBoard] = useState<RoomBoardRow | null>(null);
   const [boardCount, setBoardCount] = useState(0);
+  // True once the board read has a real answer (our board's words resolved) or its final retry
+  // ran. Until then the board window and the Longest word value hold placeholders.
+  const [boardsSettled, setBoardsSettled] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [streak, setStreak] = useState(0);
@@ -45,25 +49,41 @@ export default function Results() {
     });
   }, [roomId]);
 
-  // This game's numbers come from the ROOM, not from a stored per-game record — nothing
-  // per-game is kept (migration 20260728000006). Achievements are matched on the roomId their
-  // meta carries. Refetched once shortly after because achievements unlocked by the client's
-  // own word summary land a beat after the game ends.
+  const roomMode = room?.mode;
+
+  // `me` only feeds the Tiles tile, which is final the moment the game ends, so one read is
+  // enough. It needs nothing from the room, so it starts on mount alongside fetchRoom.
   useEffect(() => {
     if (!roomId) return;
     let cancelled = false;
+    fetchPlayers(roomId).then((players) => {
+      if (!cancelled) setMe(players.find((p) => p.profile_id === profileId) ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, profileId]);
+
+  // This game's achievements are matched on the roomId their meta carries (nothing per-game is
+  // stored, migration 20260728000006). The mode decides whether to look at all: daily can't
+  // unlock any of them, so it skips the read and its re-polls entirely (resultsFetchPlan).
+  useEffect(() => {
+    if (!roomId || !roomMode) return;
+    const plan = resultsFetchPlan(roomMode);
+    if (!plan.achievements) {
+      setAchievementsSettled(true);
+      return;
+    }
+    let cancelled = false;
     setAchievementsSettled(false);
-    // `cancelled` only guards post-unmount updates -- it does nothing to order these calls against
-    // each other. If an earlier one is slow it can resolve AFTER a later one already applied the
-    // complete achievement list, and silently revert it to an earlier, incomplete snapshot.
-    // `latestSeq` tracks which was issued last so a slower, earlier-issued response can't
-    // overwrite a result that's already newer.
+    // `cancelled` only guards post-unmount updates. `latestSeq` stops a slow, earlier-issued
+    // read from resolving after a later one and reverting to an incomplete snapshot.
     let latestSeq = 0;
+    const rechecks = plan.achievementRechecksMs;
     async function load(isFinal: boolean) {
       const seq = ++latestSeq;
-      const [players, achievements] = await Promise.all([fetchPlayers(roomId!), fetchMyAchievements()]);
+      const achievements = await fetchMyAchievements();
       if (cancelled || seq !== latestSeq) return;
-      setMe(players.find((p) => p.profile_id === profileId) ?? null);
       setEarned(
         achievements
           .filter((a) => (a.meta as { roomId?: string })?.roomId === roomId)
@@ -71,31 +91,23 @@ export default function Results() {
       );
       if (isFinal) setAchievementsSettled(true);
     }
-    load(false);
-    // Two closer-spaced re-checks (400ms/1000ms) instead of one blind 1500ms wait — the client's
-    // own word-based achievement submission (submitSummaryOnce, fired right as this room's game
-    // ends) usually lands well under a second, so most games see the real list at 400ms instead
-    // of waiting out the old worst-case timer every time.
-    const t1 = setTimeout(() => load(false), 400);
-    const t2 = setTimeout(() => load(true), 1000);
+    load(rechecks.length === 0);
+    const timers = rechecks.map((ms, i) => setTimeout(() => load(i === rechecks.length - 1), ms));
     return () => {
       cancelled = true;
-      clearTimeout(t1);
-      clearTimeout(t2);
+      timers.forEach(clearTimeout);
     };
-  }, [roomId, profileId]);
+  }, [roomId, roomMode]);
 
-  // Your own final board, for the preview window. Refetched on the same delay as the stats
-  // above because every client persists its board asynchronously right as the game ends —
-  // including this client's own.
+  // Your own final board, for the preview window. Retried once at 1000ms because every client
+  // persists its board asynchronously right as the game ends, including this one. Needs nothing
+  // from the room, so it starts on mount.
   useEffect(() => {
     if (!roomId) return;
     let cancelled = false;
-    // Same ordering guard as the achievements effect above -- without it a slow immediate load()
-    // can resolve after the delayed one and revert myBoard/boardCount/longestWord to an earlier,
-    // less-complete snapshot right after the correct one was already shown.
+    // Same ordering guard as the achievements effect above.
     let latestSeq = 0;
-    async function load() {
+    async function load(isFinal: boolean) {
       const seq = ++latestSeq;
       const rows = await fetchRoomBoards(roomId!);
       if (cancelled || seq !== latestSeq) return;
@@ -110,9 +122,10 @@ export default function Results() {
           words.reduce<string | null>((best, w) => (!best || w.length > best.length ? w : best), null),
         );
       }
+      if (mine || isFinal) setBoardsSettled(true);
     }
-    load();
-    const t = setTimeout(load, 1000);
+    load(false);
+    const t = setTimeout(() => load(true), 1000);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -142,7 +155,7 @@ export default function Results() {
   // recording above, so it uses the same "fetch, then retry once after the write has likely
   // landed" pattern as the board-fetch effect.
   useEffect(() => {
-    if (!room || room.mode !== 'daily' || room.status !== 'finished') return;
+    if (!room || !resultsFetchPlan(room.mode).dailySummary || room.status !== 'finished') return;
     const puzzleId = (room.mode_config as { puzzleId?: string }).puzzleId;
     if (!puzzleId) return;
     let cancelled = false;
@@ -178,6 +191,9 @@ export default function Results() {
   const won = room.winner_id === profileId;
   const isSolo = room.mode === 'solo';
   const isDaily = room.mode === 'daily';
+  // Daily's "Your game" panel shows nothing that comes from `me` (no Tiles tile), so it renders
+  // as soon as the room does, instead of waiting on the players read.
+  const gameReady = isDaily || me != null;
   const isTimed = isSolo && (room.mode_config as { timed?: boolean }).timed === true;
   // Derived from the room's own timestamps rather than a stored duration_ms.
   const durationMs =
@@ -272,15 +288,17 @@ export default function Results() {
         </>
       )}
 
-      {isDaily && streak > 0 && (
-        <div className="daily-streak-update">
+      {/* Rendered (invisible) before the streak is recorded, so its arrival can't push the
+          page down. Phase 2 removes this pill entirely. */}
+      {isDaily && (
+        <div className={`daily-streak-update${streak > 0 ? '' : ' reserve-space'}`} aria-hidden={streak === 0}>
           🔥 {streak}-day streak!
         </div>
       )}
 
       {/* Skeleton mirrors the real panel's tile layout (same conditionals, no values yet) so
           when `me` lands the content fills in place instead of a new box appearing below. */}
-      {!me && (
+      {!gameReady && (
         <div className="panel results-earned" aria-hidden="true">
           <h3>Your game</h3>
           <div className="results-stat-row">
@@ -310,7 +328,7 @@ export default function Results() {
         </div>
       )}
 
-      {me && (
+      {gameReady && (
         <div className="panel results-earned">
           <h3>Your game</h3>
           <div className="results-stat-row">
@@ -322,12 +340,14 @@ export default function Results() {
             )}
             {!isDaily && (
               <div className="stat-tile">
-                <span className="stat-value">{me.tile_count}</span>
+                <span className="stat-value">{me?.tile_count ?? '-'}</span>
                 <span className="stat-label">Tiles</span>
               </div>
             )}
             <div className="stat-tile">
-              <span className="stat-value">{longestWord ?? '-'}</span>
+              <span className="stat-value">
+                {longestWord ?? (boardsSettled ? '-' : <span className="skeleton-bar" />)}
+              </span>
               <span className="stat-label">Longest word</span>
             </div>
             {(isTimed || isDaily) && durationMs != null && (
@@ -361,22 +381,28 @@ export default function Results() {
           )}
           {isDaily && (
             <div className="daily-beat-percent">
-              {!dailySummary && (
-                <span className="results-achievements-label">
-                  Checking today's rankings… <span className="skeleton-bar" />
-                </span>
-              )}
-              {dailySummary?.available && dailySummary.beatPercent != null && (
-                <span className="daily-streak-update">
-                  Beat {dailySummary.beatPercent}% of today's players
-                </span>
-              )}
-              {dailySummary?.available && dailySummary.beatPercent == null && (
-                <span className="daily-streak-update">Be the first to solve today!</span>
-              )}
-              {dailySummary?.isPersonalBest && (
-                <span className="daily-personal-best">New personal best!</span>
-              )}
+              {/* One pill box in every state (loading, ranked, first solver, unavailable), so the
+                  panel's height is fixed before the summary lands. */}
+              <span
+                className={`daily-streak-update${dailySummary && !dailySummary.available ? ' reserve-space' : ''}`}
+                aria-hidden={dailySummary != null && !dailySummary.available}
+              >
+                {!dailySummary ? (
+                  <>
+                    Checking today's rankings… <span className="skeleton-bar" />
+                  </>
+                ) : dailySummary.beatPercent != null ? (
+                  `Beat ${dailySummary.beatPercent}% of today's players`
+                ) : (
+                  'Be the first to solve today!'
+                )}
+              </span>
+              <span
+                className={`daily-personal-best${dailySummary?.isPersonalBest ? '' : ' reserve-space'}`}
+                aria-hidden={!dailySummary?.isPersonalBest}
+              >
+                New personal best!
+              </span>
             </div>
           )}
         </div>
@@ -384,6 +410,21 @@ export default function Results() {
 
       {/* The board window: a look at what you actually built, and the way into everyone
           else's. Only offered once there's a game archived to look at. */}
+      {/* Same shell, title and fixed-height frame as the real window below, so the board
+          landing swaps content in place instead of inserting a box. */}
+      {!myBoard && !boardsSettled && (
+        <div className="results-board-window results-board-window-placeholder" aria-hidden="true">
+          <span className="results-board-window-head">
+            <span className="results-board-window-title">
+              {isSolo || isDaily ? 'Your board' : "Everyone's boards"}
+            </span>
+            <span className="results-board-window-hint">
+              <span className="skeleton-bar" />
+            </span>
+          </span>
+          <span className="results-board-window-frame" />
+        </div>
+      )}
       {myBoard && (
         <button
           type="button"

@@ -1658,6 +1658,23 @@ button:disabled {
   transform: translateY(-2px);
 }
 
+/* Results: holds a section's final footprint before its data lands (spec 1.4). visibility, not
+   display, so the box keeps its size. */
+.reserve-space {
+  visibility: hidden;
+}
+
+/* A <div>, not the real window's <button>: nothing to click until the board arrives, so it
+   doesn't take the window's hover lift either. */
+.results-board-window-placeholder {
+  cursor: default;
+}
+
+.results-board-window-placeholder:hover:not(:disabled) {
+  border-color: var(--color-border);
+  transform: none;
+}
+
 .results-board-window:active {
   transform: translateY(0);
 }

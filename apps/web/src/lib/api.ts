@@ -211,6 +211,13 @@ export const api = {
       body: JSON.stringify({ remaining }),
     }),
 
+  /** Phase 4 easter-egg flags (one-way). Same route as reportProgress; see the Worker. */
+  reportEggFlags: (roomId: string, flags: { ghosted?: true; freezeUsed?: true }) =>
+    call<{ ok: true }>(`/rooms/${roomId}/progress`, {
+      method: 'POST',
+      body: JSON.stringify(flags),
+    }),
+
   peel: (roomId: string, grid: GridState) =>
     call<PeelResult>(`/rooms/${roomId}/peel`, { method: 'POST', body: JSON.stringify({ grid }) }),
 

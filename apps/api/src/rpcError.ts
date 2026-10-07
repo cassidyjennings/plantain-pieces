@@ -39,6 +39,12 @@ const KNOWN_ERRORS: Record<string, number> = {
   // Solo mode
   INVALID_BUNCH_SIZE: 400,
   INVALID_TIMED_FLAG: 400,
+  // Easter eggs
+  EXTRA_TILES: 400,
+  NOT_CONNECTED: 400,
+  ORPHAN_TILE: 400,
+  NO_SUPERCALI: 400,
+  EMPTY_GRID: 400,
   INVALID_PEEL_BATCH: 400,
 };
 

@@ -346,19 +346,34 @@ app.post('/rooms/:roomId/final-grid', async (c) => {
 });
 
 // Progress: the client reports its own private "tiles remaining" number (debounced) so
-// opponents' pills mean something. Dedupe/broadcast-on-change lives in the RPC.
+// opponents' pills mean something, and — Phase 4 easter eggs — one-way egg flags (GHOST hides
+// your counts from opponents; FREEZE marks a Timed solo clock pause). Either or both may be sent.
+// Dedupe/broadcast-on-change lives in the RPCs.
 app.post('/rooms/:roomId/progress', async (c) => {
   const profileId = c.get('profileId');
   const roomId = c.req.param('roomId');
-  const body = await c.req.json<{ remaining: number }>();
+  const body = await c.req.json<{ remaining?: number; ghosted?: boolean; freezeUsed?: boolean }>();
+  const hasFlags = body.ghosted === true || body.freezeUsed === true;
+  if (body.remaining === undefined && !hasFlags) return c.json({ error: 'INVALID_REMAINING' }, 400);
+
   const admin = createAdminClient(c.env);
-  const { data, error } = await admin.rpc('report_progress', {
-    p_room_id: roomId,
-    p_profile: profileId,
-    p_remaining: body.remaining,
-  });
-  if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
-  return c.json(data);
+  if (body.remaining !== undefined) {
+    const { error } = await admin.rpc('report_progress', {
+      p_room_id: roomId,
+      p_profile: profileId,
+      p_remaining: body.remaining,
+    });
+    if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  }
+  if (hasFlags) {
+    const { error } = await admin.rpc('report_egg_flags', {
+      p_room_id: roomId,
+      p_profile: profileId,
+      p_flags: { ghosted: body.ghosted === true, freezeUsed: body.freezeUsed === true },
+    });
+    if (error) return c.json({ error: error.message }, statusForRpcError(error.message));
+  }
+  return c.json({ ok: true });
 });
 
 // Live validation: which of the submitted words are NOT in the room's dictionary.

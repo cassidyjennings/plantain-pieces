@@ -143,7 +143,76 @@ async function sectionEggValidation() {
   assert(/from unnest\(v_candidates\)/i.test(src), 'dictionary query runs over the egg-stripped candidates array');
 }
 
-const SECTIONS = [sectionEggValidation];
+async function playersSeenBy(uid, roomId) {
+  return asUser(
+    uid,
+    `select profile_id, tile_count, remaining_count, ghosted from public.room_players_public where room_id = $1`,
+    [roomId],
+  );
+}
+
+async function sectionGhost() {
+  const { roomId, host, guest } = await startedRoom('ghost-host', 'ghost-guest');
+  await q(`select public.report_progress($1, $2, 7)`, [roomId, host]);
+
+  let seen = await playersSeenBy(guest, roomId);
+  let h = seen.find((r) => r.profile_id === host);
+  assert(h.tile_count === 21 && h.remaining_count === 7 && h.ghosted === false, 'before GHOST: opponent sees real counts');
+
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [roomId, host]);
+  const events = await q(
+    `select payload from public.room_events where room_id = $1 and type = 'progress' and payload ->> 'ghosted' = 'true'`,
+    [roomId],
+  );
+  assert(events.length === 1, 'GHOST appends one progress event');
+  assert(!('remaining' in events[0].payload) && !('tileCount' in events[0].payload), 'the event carries no counts');
+
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [roomId, host]);
+  const again = await one(
+    `select count(*)::int as n from public.room_events where room_id = $1 and type = 'progress' and payload ->> 'ghosted' = 'true'`,
+    [roomId],
+  );
+  assert(again.n === 1, 'a repeat GHOST report is a no-op (no second event)');
+
+  seen = await playersSeenBy(guest, roomId);
+  h = seen.find((r) => r.profile_id === host);
+  const g = seen.find((r) => r.profile_id === guest);
+  assert(h.tile_count === null && h.remaining_count === null && h.ghosted === true, 'opponent sees null counts for the ghosted player');
+  assert(g.tile_count === 21 && g.ghosted === false, 'the non-ghosted player is unaffected');
+
+  await q(`select public.report_egg_flags($1, $2, '{"ghosted": false}'::jsonb)`, [roomId, host]);
+  const still = await one(`select ghosted from public.room_players where room_id = $1 and profile_id = $2`, [roomId, host]);
+  assert(still.ghosted === true, 'GHOST lasts the rest of the game (no un-ghost path)');
+
+  await q(`update public.rooms set status = 'finished', finished_at = now(), winner_id = $2 where id = $1`, [roomId, guest]);
+  seen = await playersSeenBy(guest, roomId);
+  h = seen.find((r) => r.profile_id === host);
+  assert(h.tile_count === 21, 'finished room: the mask lifts');
+
+  await q(`update public.rooms set win_kind = 'supercali' where id = $1`, [roomId]);
+  await q(`update public.room_players set freeze_used = true where room_id = $1`, [roomId]);
+  await q(`select public.rematch_room($1, $2)`, [roomId, guest]);
+  const rp = await one(
+    `select bool_or(ghosted) as g, bool_or(freeze_used) as f from public.room_players where room_id = $1`,
+    [roomId],
+  );
+  assert(rp.g === false && rp.f === false, 'rematch_room clears ghosted and freeze_used');
+  const rm = await one(`select win_kind from public.rooms where id = $1`, [roomId]);
+  assert(rm.win_kind === null, 'rematch_room clears win_kind');
+
+  await expectError(
+    q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [roomId, host]),
+    'GAME_NOT_ACTIVE',
+    'report_egg_flags is refused outside an active game',
+  );
+  await expectError(
+    q(`select public.report_egg_flags($1, $2, '{"ghosted": true}'::jsonb)`, [roomId, await makeUser('ghost-stranger')]),
+    'GAME_NOT_ACTIVE',
+    'a stranger hits the room-status gate first (room is in lobby)',
+  );
+}
+
+const SECTIONS = [sectionEggValidation, sectionGhost];
 
 async function main() {
   await client.connect();

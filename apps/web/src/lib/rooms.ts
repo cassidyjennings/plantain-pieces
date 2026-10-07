@@ -30,6 +30,9 @@ export interface PublicRoom {
    * and nothing else orders them. Optional so a web deploy that lands before the migration is
    * run degrades to the old behaviour instead of freezing the Bunch meter at its initial value. */
   state_version?: number;
+  /** 'supercali' when the game was won by the SUPERCALI… easter egg (migration 20261006000402).
+   * Optional so a web deploy that lands before the migration degrades to a normal Results page. */
+  win_kind?: 'supercali' | null;
 }
 
 export interface PublicPlayer {
@@ -39,13 +42,18 @@ export interface PublicPlayer {
   seat: number;
   is_ready: boolean;
   is_spectator: boolean;
-  tile_count: number;
+  /** Null while this player is GHOSTed and the game is active (Phase 4 easter egg) — render "??". */
+  tile_count: number | null;
   connected: boolean;
   avatar_config: AvatarConfig;
   /** Self-reported "tiles remaining" (tray + placed-but-invalid), debounced from the client.
    * Null until that player's client has reported at least once this game (a fresh join,
    * reload, or an old client build) — fall back to tile_count in that case. */
   remaining_count: number | null;
+  /** GHOST easter egg fired for this player this game (opponents see "??"). */
+  ghosted?: boolean;
+  /** FREEZE easter egg fired (Timed solo) — Results subtracts the frozen 10 s from the clock. */
+  freeze_used?: boolean;
 }
 
 export async function fetchRoom(roomId: string): Promise<PublicRoom | null> {

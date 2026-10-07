@@ -1427,7 +1427,19 @@ export default function Game() {
 
   // MIT has no trigger — its tint is continuous (mitCells). GHOST / FREEZE / SUPERCALI are added
   // by the tasks that implement them; an egg without a trigger is still recorded as found.
-  const eggTriggers: EggTriggers = {};
+  const eggTriggers: EggTriggers = {
+    // GHOST: opponents see "??" for the rest of the game. Only meaningful with opponents; solo and
+    // daily still record it as found (achievements) but skip the request. A failed request re-arms
+    // so the next board change retries; the server latch makes a repeat harmless.
+    GHOST: async () => {
+      if (!roomId || room?.mode !== 'multiplayer') return;
+      try {
+        await api.reportEggFlags(roomId, { ghosted: true });
+      } catch {
+        return false;
+      }
+    },
+  };
 
   const { getFoundEggs } = useEasterEggs(eggsOnBoard, eggTriggers);
   void getFoundEggs;
@@ -1713,11 +1725,14 @@ export default function Game() {
   const mobileVisiblePlayers = activePlayers.slice(0, MOBILE_CHIP_LIMIT);
   const mobileOverflowCount = activePlayers.length - mobileVisiblePlayers.length;
 
-  function playerCount(p: PublicPlayer): number {
+  function playerCount(p: PublicPlayer): number | '??' {
     // Self uses the live local count (no debounce lag on your own number); everyone else uses
     // what THEY last reported, falling back to the raw inventory size (tile_count) until their
-    // client reports at least once this game.
-    return p.profile_id === profileId ? remainingCount : (p.remaining_count ?? p.tile_count);
+    // client reports at least once this game. A GHOSTed opponent's counts come back null from
+    // room_players_public for the rest of the game (Phase 4 easter egg) — shown as "??".
+    if (p.profile_id === profileId) return remainingCount;
+    if (p.ghosted || p.tile_count === null) return '??';
+    return p.remaining_count ?? p.tile_count;
   }
 
   function renderRosterChip(p: PublicPlayer) {

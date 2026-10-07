@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { ACHIEVEMENT_DEFS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
+import { ACHIEVEMENT_DEFS, FREEZE_DURATION_MS, type AchievementType, type SoloModeConfig } from '@plantain/shared';
 import { fetchDisplayName, fetchPlayers, fetchRoom, type PublicPlayer, type PublicRoom } from '../lib/rooms.js';
 import { fetchMyAchievements } from '../lib/profile.js';
 import { fetchRoomBoards, resolveBoardWords, type RoomBoardRow } from '../lib/boards.js';
@@ -219,11 +219,17 @@ export default function Results() {
   // as soon as the room does, instead of waiting on the players read.
   const gameReady = isDaily || me != null;
   const isTimed = isSolo && (room.mode_config as { timed?: boolean }).timed === true;
-  // Derived from the room's own timestamps rather than a stored duration_ms.
-  const durationMs =
+  // Derived from the room's own timestamps rather than a stored duration_ms. A FREEZE easter egg
+  // (Timed solo) took 10 s off the clock — the archived best time already subtracts it, so the
+  // tile must too or the two disagree.
+  const rawDurationMs =
     room.started_at && room.finished_at
       ? new Date(room.finished_at).getTime() - new Date(room.started_at).getTime()
       : null;
+  const durationMs =
+    rawDurationMs !== null && isTimed && me?.freeze_used
+      ? Math.max(0, rawDurationMs - FREEZE_DURATION_MS)
+      : rawDurationMs;
   const scheduledDate = (room.mode_config as { scheduledDate?: string }).scheduledDate;
   const headline = isDaily
     ? scheduledDate

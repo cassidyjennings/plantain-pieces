@@ -877,6 +877,12 @@ button:disabled {
   line-height: 1;
 }
 
+/* FREEZE easter egg: the Timed solo clock is standing still. Colour plus the "Frozen" label, so
+   the state never relies on colour alone. */
+.topbar-elapsed-card.frozen .elapsed-value {
+  color: #8fd3f4;
+}
+
 .topbar-actions-card {
   display: flex;
   align-items: center;

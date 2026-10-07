@@ -212,7 +212,54 @@ async function sectionGhost() {
   );
 }
 
-const SECTIONS = [sectionEggValidation, sectionGhost];
+async function soloRoom(tag, timed) {
+  // Built from create_room + a mode flip rather than create_solo_room, so this test does not
+  // depend on create_solo_room's signature (Phase 3 touches solo room creation).
+  const p = await makeUser(tag);
+  const room = (await one(`select public.create_room($1, 'Solo', null) as r`, [p])).r;
+  await q(`select public.start_game($1, $2)`, [room.roomId, p]);
+  await q(`update public.rooms set mode = 'solo', mode_config = $2::jsonb where id = $1`, [
+    room.roomId,
+    { bunchSize: 144, timed },
+  ]);
+  return { roomId: room.roomId, p };
+}
+
+async function finishSoloAndReadBest(roomId, p) {
+  await q(
+    `update public.rooms set status = 'finished', finished_at = now(),
+            started_at = now() - interval '70 seconds', winner_id = $2 where id = $1`,
+    [roomId, p],
+  );
+  await q(`select public.archive_game($1, $2)`, [roomId, p]);
+  return (await one(
+    `select (solo_best_times ->> '144')::int as ms from public.profile_stats where profile_id = $1 and mode = 'solo'`,
+    [p],
+  )).ms;
+}
+
+async function sectionFreeze() {
+  const a = await soloRoom('freeze-a', true);
+  await q(`select public.report_egg_flags($1, $2, '{"freezeUsed": true}'::jsonb)`, [a.roomId, a.p]);
+  const fa = await one(`select freeze_used from public.room_players where room_id = $1`, [a.roomId]);
+  assert(fa.freeze_used === true, 'Timed solo: FREEZE is recorded');
+  assert((await finishSoloAndReadBest(a.roomId, a.p)) === 60000, 'FREEZE: 70 s of wall clock archives as 60000 ms');
+
+  const b = await soloRoom('freeze-b', true);
+  assert((await finishSoloAndReadBest(b.roomId, b.p)) === 70000, 'control: no FREEZE archives the full 70000 ms');
+
+  const zen = await soloRoom('freeze-zen', false);
+  await q(`select public.report_egg_flags($1, $2, '{"freezeUsed": true}'::jsonb)`, [zen.roomId, zen.p]);
+  const fz = await one(`select freeze_used from public.room_players where room_id = $1`, [zen.roomId]);
+  assert(fz.freeze_used === false, 'Zen solo: FREEZE is ignored');
+
+  const mp = await startedRoom('freeze-mp-host', 'freeze-mp-guest');
+  await q(`select public.report_egg_flags($1, $2, '{"freezeUsed": true}'::jsonb)`, [mp.roomId, mp.host]);
+  const fm = await one(`select freeze_used from public.room_players where room_id = $1 and profile_id = $2`, [mp.roomId, mp.host]);
+  assert(fm.freeze_used === false, 'multiplayer: FREEZE is ignored (rankings stay fair)');
+}
+
+const SECTIONS = [sectionEggValidation, sectionGhost, sectionFreeze];
 
 async function main() {
   await client.connect();

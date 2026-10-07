@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   EASTER_EGG_WORDS,
+  FREEZE_DURATION_MS,
   isEasterEggWord,
   extractWordsWithCells,
   makeKey,
@@ -205,6 +206,11 @@ export default function Game() {
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
   const [room, setRoom] = useState<PublicRoom | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  // FREEZE easter egg (Timed solo): when the clock stopped, or null. The ticker subtracts the frozen
+  // span, so the display holds still for 10 s and then resumes 10 s behind wall clock — matching
+  // what _archive_game_impl subtracts server-side.
+  const freezeStartRef = useRef<number | null>(null);
+  const [frozen, setFrozen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [callout, setCallout] = useState<string | null>(null);
   const [validCells, setValidCells] = useState<Set<string>>(new Set());
@@ -634,7 +640,12 @@ export default function Game() {
   useEffect(() => {
     if ((!isTimed && !isDaily) || !room?.started_at) return;
     const startedAt = new Date(room.started_at).getTime();
-    const tick = () => setElapsedMs(Date.now() - startedAt);
+    const tick = () => {
+      const now = Date.now();
+      const fs = freezeStartRef.current;
+      const frozenMs = fs === null ? 0 : Math.min(now, fs + FREEZE_DURATION_MS) - fs;
+      setElapsedMs(now - startedAt - frozenMs);
+    };
     tick();
     const handle = setInterval(tick, 1000);
     return () => clearInterval(handle);
@@ -1439,6 +1450,20 @@ export default function Game() {
         return false;
       }
     },
+    // FREEZE: Timed solo only, once per game. Never re-arms — even if the report fails the local
+    // clock already paused, and the worst case is the server not subtracting (accepted).
+    FREEZE: async () => {
+      if (!isTimed || !roomId || freezeStartRef.current !== null) return;
+      freezeStartRef.current = Date.now();
+      setFrozen(true);
+      fireCallout('FREEZE!');
+      setTimeout(() => setFrozen(false), FREEZE_DURATION_MS);
+      try {
+        await api.reportEggFlags(roomId, { freezeUsed: true });
+      } catch {
+        // see above — deliberately not re-armed
+      }
+    },
   };
 
   const { getFoundEggs } = useEasterEggs(eggsOnBoard, eggTriggers);
@@ -1770,8 +1795,8 @@ export default function Game() {
 
         {isSolo || isDaily ? (
           (isTimed || isDaily) && (
-            <div className="topbar-card topbar-elapsed-card">
-              <span className="elapsed-label">Elapsed</span>
+            <div className={`topbar-card topbar-elapsed-card${frozen ? ' frozen' : ''}`}>
+              <span className="elapsed-label">{frozen ? 'Frozen' : 'Elapsed'}</span>
               <span className="elapsed-value">{formatElapsed(elapsedMs)}</span>
             </div>
           )

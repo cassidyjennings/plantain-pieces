@@ -127,7 +127,7 @@ button:active:not(:disabled) {
 .toggle-btn:active:not(:disabled),
 .journal-icon-btn:active:not(:disabled),
 .journal-close:active:not(:disabled),
-.home-profile-btn:active:not(:disabled),
+.home-profile-inline:active:not(:disabled),
 .btn-leave:active:not(:disabled) {
   box-shadow: none;
 }
@@ -222,6 +222,76 @@ button:disabled {
 .join-row input {
   flex: 1;
   min-width: 0;
+}
+
+/* Display-name field with the Profile button embedded at its right end. The button's width is
+   one token so the input's right padding can reserve exactly that much room: a long name then
+   ellipsizes before it reaches the button instead of running underneath it. */
+.name-field {
+  --home-profile-inline-w: 96px;
+  position: relative;
+  display: flex;
+}
+.name-field-input {
+  flex: 1;
+  min-width: 0;
+  padding-right: calc(var(--home-profile-inline-w) + 10px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* top/bottom insets (not top:50% + translateY) so the shared button:active translateY press
+   doesn't fight a centering transform. */
+.home-profile-inline {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  bottom: 5px;
+  width: var(--home-profile-inline-w);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px 0 4px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: var(--text-caption);
+  line-height: 1;
+  white-space: nowrap;
+}
+.home-profile-inline:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  /* Restated per the hover convention: a background-only hover can strand a colour another
+     rule set. */
+  color: var(--color-text-primary);
+}
+.home-profile-inline:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* "or" between Create Room and the code + Join row: a rule on each side of the word. */
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-faintest);
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: var(--text-caption);
+  text-transform: lowercase;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-border);
 }
 
 .error {
@@ -3285,23 +3355,6 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   gap: var(--space-3);
   flex-wrap: wrap;
   justify-content: center;
-}
-.home-profile-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 8px 16px 8px 8px;
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  box-shadow: none;
-  font-family: var(--font-body);
-  font-weight: 800;
-  font-size: var(--text-small);
-}
-.home-profile-btn:hover:not(:disabled) {
-  background: var(--color-surface-raised);
 }
 
 /* Danger button variant */

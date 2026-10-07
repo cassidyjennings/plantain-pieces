@@ -72,19 +72,38 @@ export default function Home() {
       </div>
 
       <div className="panel">
-        <label className="field">
-          Display name
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Guest"
-            maxLength={24}
-          />
-        </label>
+        {/* A div, not the old wrapping <label>: the Profile button now sits inside the field, and
+            interactive content nested in a <label> is invalid and muddies what a click activates. */}
+        <div className="field">
+          <label htmlFor="home-display-name">Display name</label>
+          <div className="name-field">
+            <input
+              id="home-display-name"
+              className="name-field-input"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Guest"
+              maxLength={24}
+            />
+            <button
+              type="button"
+              className="home-profile-inline"
+              onClick={() => navigate('/profile')}
+              aria-label="My Profile"
+            >
+              <Avatar config={avatarConfig} size={22} />
+              <span>Profile</span>
+            </button>
+          </div>
+        </div>
 
         <button disabled={busy} onClick={handleCreate}>
           Create Room
         </button>
+
+        <div className="or-divider">
+          <span>or</span>
+        </div>
 
         <div className="join-row">
           <input
@@ -127,10 +146,6 @@ export default function Home() {
       </div>
 
       <div className="home-links">
-        <button type="button" className="home-profile-btn" onClick={() => navigate('/profile')}>
-          <Avatar config={avatarConfig} size={32} />
-          <span>My Profile</span>
-        </button>
         <button type="button" className="dictionary-open-btn" onClick={() => setShowJournal(true)}>
           My Dictionaries
         </button>

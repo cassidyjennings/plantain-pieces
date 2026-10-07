@@ -1552,12 +1552,29 @@ button:disabled {
      (translateY(-2px)), and the count-badge overhang (top:-6px/right:-6px) — without this,
      overflow-y:auto's clipping box cuts those off at the scroll container's exact edges. */
   padding: 8px 10px 12px;
+  /* One chip row + this rule's own 8px/12px vertical padding (border-box), so an empty tray is
+     exactly as tall as a one-row tray and a freshly drawn tile -- even a .pending, invisible
+     one -- can't grow the dock. Restated wherever .tile-chip's height changes (the
+     min-width:1024px block); the landscape block caps it with min() against its own max-height. */
+  --rack-row-h: 66px;
+  min-height: var(--rack-row-h);
   /* Reserve the scrollbar's width up front so a hand that grows into scrolling territory
      doesn't reflow/overlap the last column of tiles. */
   scrollbar-gutter: stable;
   /* Firefox scrollbar theming (Chromium/WebKit theming is the ::-webkit-scrollbar-* block below). */
   scrollbar-width: thin;
   scrollbar-color: var(--color-accent) var(--color-surface-inner);
+}
+
+/* Empty tray: center the "All tiles placed" hint inside the reserved one-row height. Uses
+   align-content, not margin:auto -- a wrapping flex line is only as tall as its content, so auto
+   margins would have nothing to distribute. */
+.tile-rack.empty {
+  align-content: center;
+}
+
+.tile-rack.empty .hint {
+  margin: 0;
 }
 
 .tile-rack::-webkit-scrollbar {
@@ -3084,6 +3101,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 
   .tile-rack {
     gap: 14px;
+    --rack-row-h: 78px; /* 58px chip (below) + 20px vertical rack padding */
   }
 
   .tile-chip {
@@ -3148,6 +3166,15 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   .topbar-elapsed-card {
     order: 3;
     flex: 1 1 100%;
+  }
+
+  /* Daily has no Bunch card (spec 1.6): without this, row 1 would hold the actions card alone
+     and the elapsed card would sit on a row of its own beneath it. (0,3,0) beats the (0,1,0)
+     order/flex rule above regardless of position. */
+  .game-topbar.no-bunch .topbar-elapsed-card {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .topbar-roster-card {
@@ -3305,6 +3332,9 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
      within the tray, not lost or hidden tiles. */
   .tile-rack {
     max-height: 18vh;
+    /* min-height beats max-height when they conflict, so cap the one-row floor at the same 18vh
+       or an empty tray would end up taller than this block lets a full one be. */
+    min-height: min(var(--rack-row-h), 18vh);
   }
 }
 

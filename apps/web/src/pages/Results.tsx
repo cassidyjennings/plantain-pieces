@@ -10,6 +10,7 @@ import { useSessionStore } from '../store/sessionStore.js';
 import { api, ApiError, getErrorMessage, type DailyResultSummary } from '../lib/api.js';
 import { recordSolved, recordDailyResult, currentStreak, getLastResult } from '../lib/dailyStreak.js';
 import BoardPreview from '../components/BoardPreview.js';
+import DailyYourGame from '../components/DailyYourGame.js';
 
 export default function Results() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -34,9 +35,14 @@ export default function Results() {
   // True once the board read has a real answer (our board's words resolved) or its final retry
   // ran. Until then the board window and the Longest word value hold placeholders.
   const [boardsSettled, setBoardsSettled] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
-  const [streak, setStreak] = useState(0);
+  // null until the solve is recorded below, so the Day streak tile shows a skeleton instead of
+  // flashing 0 for a render.
+  const [streak, setStreak] = useState<number | null>(null);
+  // longestWord === null means both "not loaded yet" and "no words"; only the first is a skeleton.
+  const [longestWordReady, setLongestWordReady] = useState(false);
+  // True once the LAST scheduled summary attempt lands or fails, so an early `available: false`
+  // (archive_game not written yet) keeps the skeleton instead of flashing "-".
+  const [dailySummarySettled, setDailySummarySettled] = useState(false);
   const [roomMissing, setRoomMissing] = useState(false);
   const [dailySummary, setDailySummary] = useState<DailyResultSummary | null>(null);
 
@@ -109,20 +115,27 @@ export default function Results() {
     let latestSeq = 0;
     async function load(isFinal: boolean) {
       const seq = ++latestSeq;
-      const rows = await fetchRoomBoards(roomId!);
-      if (cancelled || seq !== latestSeq) return;
-      setBoardCount(rows.length);
-      const mine = rows.find((r) => r.profile_id === profileId) ?? null;
-      setMyBoard(mine);
-      // Longest word is derived from the board rather than read back from a stored record.
-      if (mine) {
-        const { words } = await resolveBoardWords(roomId!, mine.grid_state);
+      try {
+        const rows = await fetchRoomBoards(roomId!);
         if (cancelled || seq !== latestSeq) return;
-        setLongestWord(
-          words.reduce<string | null>((best, w) => (!best || w.length > best.length ? w : best), null),
-        );
+        setBoardCount(rows.length);
+        const mine = rows.find((r) => r.profile_id === profileId) ?? null;
+        setMyBoard(mine);
+        // Longest word is derived from the board rather than read back from a stored record.
+        if (mine) {
+          const { words } = await resolveBoardWords(roomId!, mine.grid_state);
+          if (cancelled || seq !== latestSeq) return;
+          setLongestWord(
+            words.reduce<string | null>((best, w) => (!best || w.length > best.length ? w : best), null),
+          );
+          setLongestWordReady(true);
+        }
+        if (mine || isFinal) setBoardsSettled(true);
+      } finally {
+        // The last retry settles the daily Longest word tile either way, so a board that never
+        // arrived (or whose words failed to resolve) shows "-" rather than an endless skeleton.
+        if (isFinal && !cancelled) setLongestWordReady(true);
       }
-      if (mine || isFinal) setBoardsSettled(true);
     }
     load(false);
     const t = setTimeout(() => load(true), 1000);
@@ -157,17 +170,26 @@ export default function Results() {
   useEffect(() => {
     if (!room || !resultsFetchPlan(room.mode).dailySummary || room.status !== 'finished') return;
     const puzzleId = (room.mode_config as { puzzleId?: string }).puzzleId;
-    if (!puzzleId) return;
+    if (!puzzleId) {
+      setDailySummarySettled(true);
+      return;
+    }
     let cancelled = false;
     let latestSeq = 0;
-    async function load() {
+    async function load(isFinal: boolean) {
       const seq = ++latestSeq;
-      const summary = await api.getDailyResultSummary(puzzleId!);
-      if (cancelled || seq !== latestSeq) return;
-      setDailySummary(summary);
+      try {
+        const summary = await api.getDailyResultSummary(puzzleId!);
+        if (cancelled || seq !== latestSeq) return;
+        setDailySummary(summary);
+      } catch {
+        // A failed attempt keeps whatever an earlier one returned; the final one settles below.
+      } finally {
+        if (isFinal && !cancelled) setDailySummarySettled(true);
+      }
     }
-    load();
-    const t = setTimeout(load, 1000);
+    load(false);
+    const t = setTimeout(() => load(true), 1000);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -257,22 +279,11 @@ export default function Results() {
     durationMs != null
       ? `⏱ ${Math.floor(durationMs / 60000)}:${Math.floor((durationMs % 60000) / 1000).toString().padStart(2, '0')}`
       : '',
-    streak > 0 ? `🔥 ${streak}-day streak` : '',
+    streak != null && streak > 0 ? `🔥 ${streak}-day streak` : '',
     // The word itself would spoil the puzzle for anyone this gets shared with — length only.
     longestWord ? `📝 Longest word: ${longestWord.length} letters` : '',
     'plantainpieces.com',
   ].filter(Boolean).join('\n');
-
-  async function handleShare() {
-    setCopyFailed(false);
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopyFailed(true);
-    }
-  }
 
   return (
     <div className="centered">
@@ -288,37 +299,41 @@ export default function Results() {
         </>
       )}
 
-      {/* Rendered (invisible) before the streak is recorded, so its arrival can't push the
-          page down. Phase 2 removes this pill entirely. */}
+      {/* Daily never waits on `me`: none of its four tiles come from fetchPlayers, and each tile
+          holds its own skeleton until its value lands. */}
       {isDaily && (
-        <div className={`daily-streak-update${streak > 0 ? '' : ' reserve-space'}`} aria-hidden={streak === 0}>
-          🔥 {streak}-day streak!
-        </div>
+        <DailyYourGame
+          longestWord={longestWord}
+          longestWordReady={longestWordReady}
+          durationMs={durationMs}
+          streak={streak}
+          summary={dailySummary}
+          summarySettled={dailySummarySettled}
+          shareText={shareText}
+        />
       )}
 
       {/* Skeleton mirrors the real panel's tile layout (same conditionals, no values yet) so
           when `me` lands the content fills in place instead of a new box appearing below. */}
-      {!gameReady && (
+      {!isDaily && !gameReady && (
         <div className="panel results-earned" aria-hidden="true">
           <h3>Your game</h3>
           <div className="results-stat-row">
-            {!isSolo && !isDaily && (
+            {!isSolo && (
               <div className="stat-tile">
                 <span className="stat-value"><span className="skeleton-bar" /></span>
                 <span className="stat-label">Result</span>
               </div>
             )}
-            {!isDaily && (
-              <div className="stat-tile">
-                <span className="stat-value"><span className="skeleton-bar" /></span>
-                <span className="stat-label">Tiles</span>
-              </div>
-            )}
+            <div className="stat-tile">
+              <span className="stat-value"><span className="skeleton-bar" /></span>
+              <span className="stat-label">Tiles</span>
+            </div>
             <div className="stat-tile">
               <span className="stat-value"><span className="skeleton-bar" /></span>
               <span className="stat-label">Longest word</span>
             </div>
-            {(isTimed || isDaily) && durationMs != null && (
+            {isTimed && durationMs != null && (
               <div className="stat-tile">
                 <span className="stat-value"><span className="skeleton-bar" /></span>
                 <span className="stat-label">Time</span>
@@ -328,29 +343,27 @@ export default function Results() {
         </div>
       )}
 
-      {gameReady && (
+      {!isDaily && gameReady && (
         <div className="panel results-earned">
           <h3>Your game</h3>
           <div className="results-stat-row">
-            {!isSolo && !isDaily && (
+            {!isSolo && (
               <div className="stat-tile">
                 <span className="stat-value">{won ? 'Win' : 'Loss'}</span>
                 <span className="stat-label">Result</span>
               </div>
             )}
-            {!isDaily && (
-              <div className="stat-tile">
-                <span className="stat-value">{me?.tile_count ?? '-'}</span>
-                <span className="stat-label">Tiles</span>
-              </div>
-            )}
+            <div className="stat-tile">
+              <span className="stat-value">{me?.tile_count ?? '-'}</span>
+              <span className="stat-label">Tiles</span>
+            </div>
             <div className="stat-tile">
               <span className="stat-value">
                 {longestWord ?? (boardsSettled ? '-' : <span className="skeleton-bar" />)}
               </span>
               <span className="stat-label">Longest word</span>
             </div>
-            {(isTimed || isDaily) && durationMs != null && (
+            {isTimed && durationMs != null && (
               <div className="stat-tile">
                 <span className="stat-value">
                   {Math.floor(durationMs / 60000)}:
@@ -379,37 +392,9 @@ export default function Results() {
               </div>
             </div>
           )}
-          {isDaily && (
-            <div className="daily-beat-percent">
-              {/* One pill box in every state (loading, ranked, first solver, unavailable), so the
-                  panel's height is fixed before the summary lands. */}
-              <span
-                className={`daily-streak-update${dailySummary && !dailySummary.available ? ' reserve-space' : ''}`}
-                aria-hidden={dailySummary != null && !dailySummary.available}
-              >
-                {!dailySummary ? (
-                  <>
-                    Checking today's rankings… <span className="skeleton-bar" />
-                  </>
-                ) : dailySummary.beatPercent != null ? (
-                  `Beat ${dailySummary.beatPercent}% of today's players`
-                ) : (
-                  'Be the first to solve today!'
-                )}
-              </span>
-              <span
-                className={`daily-personal-best${dailySummary?.isPersonalBest ? '' : ' reserve-space'}`}
-                aria-hidden={!dailySummary?.isPersonalBest}
-              >
-                New personal best!
-              </span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* The board window: a look at what you actually built, and the way into everyone
-          else's. Only offered once there's a game archived to look at. */}
       {/* Same shell, title and fixed-height frame as the real window below, so the board
           landing swaps content in place instead of inserting a box. */}
       {!myBoard && !boardsSettled && (
@@ -425,6 +410,8 @@ export default function Results() {
           <span className="results-board-window-frame" />
         </div>
       )}
+      {/* The board window: a look at what you actually built, and the way into everyone
+          else's. Only offered once there's a game archived to look at. */}
       {myBoard && (
         <button
           type="button"
@@ -453,16 +440,6 @@ export default function Results() {
 
       {isDaily ? (
         <>
-          <div className="daily-share-card">
-            <span className="daily-share-title">Share your result</span>
-            <pre className="daily-share-text">{shareText}</pre>
-            <button type="button" onClick={handleShare}>
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-            {copyFailed && (
-              <p className="error">Couldn't copy automatically. Select the text above instead.</p>
-            )}
-          </div>
           <p className="daily-note">Come back tomorrow for the next puzzle.</p>
           <button className="btn-secondary" onClick={() => navigate('/')}>
             Back to Home

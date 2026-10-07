@@ -1404,7 +1404,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `supabase/migrations/20261006000403_freeze_archive.sql`
-- Latest definition replaced: `_archive_game_impl` (`supabase/migrations/20260924000003_daily_stats_archive.sql:7-208`). `archive_game` (`20260805000002_xtina_deal.sql:437-456`) is a wrapper and is NOT redefined.
+- Latest definition replaced: `_archive_game_impl` — **now `supabase/migrations/20261006000003_solo_peel_batch.sql`** (Phase 3 changed v_peels to sum the peel event's `drawn` field: Tiles peeled counts tiles drawn). Copy THAT body, not 20260924000003, or the tiles-drawn change is silently reverted. The v_peels query below must read: `select coalesce(sum(coalesce((payload ->> 'drawn')::int, 1)), 0)::int into v_peels from public.room_events where ...`. `archive_game` (`20260805000002_xtina_deal.sql:437-456`) is a wrapper and is NOT redefined.
 - Modify: `apps/web/src/pages/Game.tsx` — imports (`FREEZE_DURATION_MS`), new refs/state near `elapsedMs` (:203), the ticker effect (:607-614), the elapsed card (:1704-1712), `eggTriggers`
 - Modify: `apps/web/src/pages/Results.tsx:181-185` (`durationMs`)
 - Modify: `apps/web/src/styles.css` (after the existing `.topbar-elapsed-card` rules)
@@ -1479,7 +1479,7 @@ Expected: FAIL — `FAIL: FREEZE: 70 s of wall clock archives as 60000 ms` (the 
 -- reported and spoofable; accepted by the spec. Daily is untouched: report_egg_flags never sets
 -- freeze_used outside Timed solo, so daily rankings stay fair.
 --
--- _archive_game_impl: verbatim from 20260924000003 plus the [phase4] lines (the loop also selects
+-- _archive_game_impl: verbatim from 20261006000003_solo_peel_batch plus the [phase4] lines (the loop also selects
 -- freeze_used; the Timed-solo duration subtracts it).
 create or replace function public._archive_game_impl(p_room_id uuid, p_winner uuid)
 returns jsonb
@@ -1541,7 +1541,7 @@ begin
     where room_id = p_room_id and not is_spectator
     order by seat
   loop
-    select count(*) into v_peels from public.room_events
+    select coalesce(sum(coalesce((payload ->> 'drawn')::int, 1)), 0)::int into v_peels from public.room_events
       where room_id = p_room_id and type = 'peel'
         and payload ->> 'actor' = v_p.profile_id::text and created_at >= v_since;
     select count(*) into v_dumps from public.room_events

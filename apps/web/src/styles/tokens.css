@@ -9,6 +9,9 @@
   --color-surface: #173028;
   --color-surface-raised: #1c3a2f;
   --color-surface-inner: #0f2f1e;
+  /* One step below --color-surface-inner: a well nested inside a panel that already holds
+     surface-inner tiles (the daily Results share box). */
+  --color-surface-sunken: #0a2116;
   --color-border: #2a4a37;
 
   /* Text */
@@ -91,6 +94,7 @@
   /* Fonts */
   --font-display: 'Grandstander', sans-serif;
   --font-body: 'Nunito', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 
   /* Elevation — "pressed button" hard-offset shadows, no blur */
   --shadow-panel: 0 20px 60px rgba(0, 0, 0, 0.5);

@@ -1745,6 +1745,23 @@ button:disabled {
   transform: translateY(-2px);
 }
 
+/* Results: holds a section's final footprint before its data lands (spec 1.4). visibility, not
+   display, so the box keeps its size. */
+.reserve-space {
+  visibility: hidden;
+}
+
+/* A <div>, not the real window's <button>: nothing to click until the board arrives, so it
+   doesn't take the window's hover lift either. */
+.results-board-window-placeholder {
+  cursor: default;
+}
+
+.results-board-window-placeholder:hover:not(:disabled) {
+  border-color: var(--color-border);
+  transform: none;
+}
+
 .results-board-window:active {
   transform: translateY(0);
 }
@@ -3896,6 +3913,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   --color-text-faintest: #c2d6c1;
   --color-surface: #0d241a;
   --color-surface-inner: #08170f;
+  --color-surface-sunken: #040d08;
   --focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.85);
 }
 
@@ -4287,36 +4305,97 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   margin-bottom: calc(var(--space-2) - var(--space-8));
 }
 
-.daily-share-card {
+/* Results — daily "Your game". 2x2 at every width; grid-auto-rows: 1fr keeps both rows the same
+   height, so one tile's longer value (or the absolutely-positioned badge) can't make tiles differ. */
+.daily-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--space-3);
+}
+
+.daily-stat-tile {
+  position: relative;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* Pinned to the Time tile's top-right corner and out of flow, so it never changes the tile's
+   size. Overhangs the top edge only, and is inset from the right so it can't poke past the panel. */
+.daily-pb-badge {
+  position: absolute;
+  top: calc(-1 * var(--space-2));
+  right: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-secondary);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Nested share well: one step darker than the tiles above it. */
+.daily-share-box {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+}
+
+.daily-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
-  width: min(420px, 100%);
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
 }
 
 .daily-share-title {
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: var(--text-small);
   color: var(--color-text-primary);
 }
 
+/* A compact version of the base button: same colours and hover (which only changes background,
+   so the on-accent text stays legible), smaller footprint and press shadow. */
+.daily-share-copy {
+  flex-shrink: 0;
+  padding: 6px var(--space-4);
+  font-size: var(--text-small);
+  box-shadow: var(--shadow-press-sm) var(--color-accent-shadow);
+}
+
+.daily-share-copy:active:not(:disabled) {
+  box-shadow: 0 1px 0 var(--color-accent-shadow);
+}
+
 .daily-share-text {
   margin: 0;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface-inner);
-  border-radius: var(--radius-md);
-  font-family: var(--font-body);
-  font-size: var(--text-small);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
   line-height: 1.6;
   color: var(--color-text-primary);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   user-select: text;
+  /* Room for all six share lines up front: the streak and longest-word lines only join once
+     their data lands, and without this the panel (and everything below it) grew as they did. */
+  min-height: calc(6 * 1.6em);
+}
+
+/* A middle-aligned 1em bar grows the .stat-value line box by ~1px past the real text's, so a
+   Results tile shrank when its value landed. Top-aligned and a touch shorter, it fits inside the
+   text's own line box (same fix as the Stats grid's skeleton). */
+.results-earned .stat-value .skeleton-bar {
+  vertical-align: top;
+  height: 0.9em;
 }
 
 .daily-solved-label {
@@ -4328,28 +4407,3 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   margin: 0;
 }
 
-/* Results page — streak confirmation after a daily solve. */
-.daily-streak-update {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-raised);
-  border: 2px solid var(--color-secondary);
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: var(--text-body);
-  color: var(--color-secondary);
-}
-
-/* Results page — daily-puzzle personal-best badge, under the beat-percent pill. */
-.daily-personal-best {
-  display: block;
-  margin-top: var(--space-1);
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: var(--text-small);
-  color: var(--color-accent);
-  text-align: center;
-}

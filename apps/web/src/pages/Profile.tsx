@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ACHIEVEMENT_DEFS,
   ACHIEVEMENT_ORDER,
+  achievementDisplay,
   ACCESSORY_SETS,
   validateDisplayName,
   normalizeAvatarConfig,
@@ -564,13 +564,16 @@ function AchievementGrid({ achievements }: { achievements: AchievementRow[] }) {
     <div className="panel profile-panel">
       <div className="achievement-grid">
         {ACHIEVEMENT_ORDER.map((type) => {
-          const def = ACHIEVEMENT_DEFS[type];
           const isUnlocked = unlocked.has(type);
+          const shown = achievementDisplay(type, isUnlocked);
           return (
-            <div key={type} className={`achievement-tile${isUnlocked ? ' unlocked' : ' locked'}`}>
+            <div
+              key={type}
+              className={`achievement-tile${isUnlocked ? ' unlocked' : ' locked'}${shown.mystery ? ' mystery' : ''}`}
+            >
               <span className="achievement-status">{isUnlocked ? 'Unlocked' : 'Locked'}</span>
-              <span className="achievement-title">{def.title}</span>
-              <span className="achievement-desc">{def.description}</span>
+              <span className="achievement-title">{shown.title}</span>
+              <span className="achievement-desc">{shown.description}</span>
             </div>
           );
         })}

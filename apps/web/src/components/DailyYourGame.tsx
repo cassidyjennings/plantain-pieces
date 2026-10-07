@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatDurationMs, isDailyPersonalBest, solversBeatenLabel } from '@plantain/shared';
+import { ACHIEVEMENT_DEFS, formatDurationMs, isDailyPersonalBest, solversBeatenLabel } from '@plantain/shared';
 import type { DailyResultSummary } from '../lib/api.js';
 
 export interface DailyYourGameProps {
@@ -14,6 +14,8 @@ export interface DailyYourGameProps {
   /** True once the last scheduled summary attempt has landed or failed. */
   summarySettled: boolean;
   shareText: string;
+  /** Mystery achievement Speedrun was unlocked by THIS daily solve (Phase 4). */
+  speedrunUnlocked?: boolean;
 }
 
 /** `value === null` renders a skeleton bar in the value's line, so the tile is already its final
@@ -37,6 +39,7 @@ export default function DailyYourGame({
   summary,
   summarySettled,
   shareText,
+  speedrunUnlocked = false,
 }: DailyYourGameProps) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -86,6 +89,14 @@ export default function DailyYourGame({
         <pre className="daily-share-text">{shareText}</pre>
         {copyFailed && <p className="error">Couldn't copy automatically. Select the text above instead.</p>}
       </section>
+      {/* Only when earned (rare), at the very bottom, so nothing above it shifts. A deliberate
+          exception to the fixed-placeholder rule: a permanent placeholder would advertise the
+          hidden achievement. */}
+      {speedrunUnlocked && (
+        <p className="results-achievement daily-speedrun-unlocked">
+          Achievement unlocked: {ACHIEVEMENT_DEFS.speedrun.title}
+        </p>
+      )}
     </div>
   );
 }

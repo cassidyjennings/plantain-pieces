@@ -75,6 +75,15 @@ describe('validateGameSummary', () => {
     expect(validateGameSummary(good)).toEqual({ valid: true });
   });
 
+  it('accepts an optional eggs_found list of egg words', () => {
+    expect(validateGameSummary({ ...good, eggs_found: ['MIT', 'GHOST'] })).toEqual({ valid: true });
+  });
+
+  it('rejects an eggs_found that is not a list of egg words', () => {
+    expect(validateGameSummary({ ...good, eggs_found: ['NOPE'] })).toEqual({ valid: false, reason: 'MALFORMED' });
+    expect(validateGameSummary({ ...good, eggs_found: 'MIT' })).toEqual({ valid: false, reason: 'MALFORMED' });
+  });
+
   it('accepts an easter-egg word longer than the 20-letter custom-word cap', () => {
     expect(validateGameSummary({ ...good, words: ['CAT', 'SUPERCALIFRAGILISTICEXPIALIDOCIOUS'] })).toEqual({
       valid: true,

@@ -299,7 +299,78 @@ async function sectionSupercali() {
   await expectError(win(r, WORD), 'GAME_NOT_ACTIVE', 'a finished room cannot be won again');
 }
 
-const SECTIONS = [sectionEggValidation, sectionGhost, sectionFreeze, sectionSupercali];
+async function sectionMysteryAchievements() {
+  const summary = (words, eggs) => ({
+    words,
+    placedCount: 3,
+    moveStats: { peelEfficiency: null, idleTileRatio: null, dumpRegret: 0 },
+    eggs_found: eggs,
+  });
+  const submit = (roomId, uid, s) =>
+    q(`select public.submit_game_summary($1, $2, $3::jsonb)`, [roomId, uid, JSON.stringify(s)]);
+  const eggsOf = async (uid) => (await one(`select eggs_found from public.profiles where id = $1`, [uid])).eggs_found;
+
+  const r1 = await startedRoom('egg-host', 'egg-guest');
+  const me = r1.host;
+  await submit(r1.roomId, me, summary(['MIT'], ['MIT', 'ghost', 'NOTANEGG', 42]));
+  assert(JSON.stringify(await eggsOf(me)) === JSON.stringify(['GHOST', 'MIT']), 'eggs_found persisted: uppercased, deduped, non-egg strings dropped');
+  assert(await hasAchievement(me, 'egg_hunter'), 'egg_hunter unlocked by any egg');
+  assert(await hasAchievement(me, 'mind_and_hand'), 'mind_and_hand unlocked by MIT');
+  assert(!(await hasAchievement(me, 'collector')), 'collector not yet (2 of 4)');
+
+  await submit(r1.roomId, me, summary([], [SUPERCALI, 'FREEZE']));
+  assert((await eggsOf(me)).length === 2, 'a resubmitted summary for the same room changes nothing (summary_applied)');
+
+  const room2 = (await one(`select public.create_room($1, 'Host', null) as r`, [me])).r;
+  await q(`select public.start_game($1, $2)`, [room2.roomId, me]);
+  await submit(room2.roomId, me, summary([SUPERCALI], [SUPERCALI, 'FREEZE']));
+  assert(
+    JSON.stringify(await eggsOf(me)) === JSON.stringify(['FREEZE', 'GHOST', 'MIT', SUPERCALI]),
+    'a second game accumulates eggs_found across rooms',
+  );
+  assert(await hasAchievement(me, 'collector'), 'collector unlocked once every egg in the list is found');
+  const st = await one(`select longest_word from public.profile_stats where profile_id = $1 and mode = 'multiplayer'`, [me]);
+  assert(st.longest_word === SUPERCALI, 'the 34-letter egg counts as a word in stats');
+
+  await submit(r1.roomId, r1.guest, summary(['CAT'], []));
+  assert((await eggsOf(r1.guest)).length === 0 && !(await hasAchievement(r1.guest, 'egg_hunter')), 'no eggs: nothing persisted, no egg_hunter');
+
+  const hidden = await asUser(r1.guest, `select * from public.profiles_public where id = $1`, [me]);
+  assert(hidden.length === 1 && !('eggs_found' in hidden[0]), 'eggs_found is not exposed through profiles_public');
+  const others = await asUser(r1.guest, `select eggs_found from public.profiles where id = $1`, [me]);
+  assert(others.length === 0, "another account cannot read a profile's eggs_found (profiles_select_own)");
+
+  // speedrun — server-measured daily duration < 60 s.
+  await q(`delete from public.daily_results where puzzle_id in (select id from public.daily_puzzles where first_word = 'EGGS')`);
+  await q(`delete from public.daily_puzzles where first_word = 'EGGS'`);
+  const puzzle = await one(
+    `insert into public.daily_puzzles
+       (language, letter_multiset, grid_state, dictionary_config, floor_score, spread_score,
+        distinct_board_count, replay_run_count, status, scheduled_date, generation_seed, first_word)
+     values ('en', 'AAAABBBBCCCCDDDDEEEEFFFF', '{}'::jsonb,
+             '{"minLength":2,"maxLength":null,"baseEnabled":true,"excludedTopics":[],"customSetIds":[]}'::jsonb,
+             1.0, 0.5, 1, 1, 'available', current_date + 41, 1, 'EGGS')
+     returning id`,
+  );
+  async function dailyGame(tag, ms) {
+    const p = await makeUser(tag);
+    const room = (await one(`select public.create_room($1, 'Daily', null) as r`, [p])).r;
+    await q(`select public.start_game($1, $2)`, [room.roomId, p]);
+    await q(
+      `update public.rooms set mode = 'daily', mode_config = $2::jsonb, status = 'finished',
+              finished_at = now(), started_at = now() - ($3::int * interval '1 millisecond'), winner_id = $4
+        where id = $1`,
+      [room.roomId, { puzzleId: puzzle.id }, ms, p],
+    );
+    await q(`select public.archive_game($1, $2)`, [room.roomId, p]);
+    return p;
+  }
+  assert(await hasAchievement(await dailyGame('speed-fast', 45000), 'speedrun'), 'speedrun: daily solved in 45 s');
+  assert(!(await hasAchievement(await dailyGame('speed-edge', 60000), 'speedrun')), 'speedrun: exactly 60 s does not count (< 60 s)');
+  assert(!(await hasAchievement(await dailyGame('speed-slow', 75000), 'speedrun')), 'speedrun: 75 s does not count');
+}
+
+const SECTIONS = [sectionEggValidation, sectionGhost, sectionFreeze, sectionSupercali, sectionMysteryAchievements];
 
 async function main() {
   await client.connect();

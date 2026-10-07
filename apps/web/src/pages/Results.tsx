@@ -202,6 +202,21 @@ export default function Results() {
     };
   }, [room]);
 
+  // Mystery achievement Speedrun is unlocked server-side in archive_game, which completes before
+  // game_over reaches anyone — so a single read is enough; no 400/1000ms re-poll (spec 1.4).
+  const [speedrun, setSpeedrun] = useState(false);
+  useEffect(() => {
+    if (!roomId || room?.mode !== 'daily') return;
+    let cancelled = false;
+    fetchMyAchievements().then((rows) => {
+      if (cancelled) return;
+      setSpeedrun(rows.some((a) => a.type === 'speedrun' && (a.meta as { roomId?: string })?.roomId === roomId));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, room?.mode]);
+
   // A rematch resets THIS room back to a lobby, so everyone still on the results screen has to
   // follow it there — otherwise only the player who clicked would move and the others would sit
   // on a results screen for a game that no longer exists.
@@ -329,6 +344,7 @@ export default function Results() {
           summary={dailySummary}
           summarySettled={dailySummarySettled}
           shareText={shareText}
+          speedrunUnlocked={speedrun}
         />
       )}
 

@@ -3803,6 +3803,14 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   color: var(--color-text-faint);
 }
 
+/* Mystery achievement, still locked: "???" + a vague hint. */
+.achievement-tile.mystery .achievement-title {
+  letter-spacing: 0.2em;
+}
+.achievement-tile.mystery .achievement-desc {
+  font-style: italic;
+}
+
 /* Match history */
 .match-list {
   list-style: none;

@@ -1,5 +1,5 @@
 import { WORD_PATTERN } from './dictionary.js';
-import { isEasterEggWord } from './easterEggs.js';
+import { isEasterEggWord, sanitizeEggsFound, type EggWord } from './easterEggs.js';
 
 /** How many of a player's subsequent moves count as "soon" when deciding whether a dumped
  * tile would have completed a word (dump-regret lookahead). */
@@ -54,6 +54,10 @@ export interface GameSummary {
   /** Number of tiles placed on the final grid. */
   placedCount: number;
   moveStats: MoveStats;
+  /** Easter-egg words this player had validly on their board at any point this game (Phase 4).
+   * snake_case to match the spec and the SQL reader (p_summary -> 'eggs_found'). Spoofable —
+   * accepted; re-filtered against _easter_egg_words() server-side. */
+  eggs_found?: EggWord[];
 }
 
 export interface TileLifecycle {
@@ -138,6 +142,10 @@ export function validateGameSummary(
   if (!numOrNullInRange(m.idleTileRatio, 0, 1)) return { valid: false, reason: 'OUT_OF_RANGE' };
   if (!Number.isInteger(m.dumpRegret) || (m.dumpRegret as number) < 0 || (m.dumpRegret as number) > MAX_SUMMARY_TILES) {
     return { valid: false, reason: 'OUT_OF_RANGE' };
+  }
+
+  if (s.eggs_found !== undefined && sanitizeEggsFound(s.eggs_found) === null) {
+    return { valid: false, reason: 'MALFORMED' };
   }
 
   return { valid: true };

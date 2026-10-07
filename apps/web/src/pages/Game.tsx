@@ -689,8 +689,11 @@ export default function Game() {
   function submitSummaryOnce() {
     if (!roomId || summarySubmittedRef.current) return;
     summarySubmittedRef.current = true;
-    // Words and move stats roll into lifetime profile stats and are then forgotten.
-    api.submitGameSummary(roomId, moveTracker.buildSummary(gridRef.current)).catch(() => {});
+    // Words and move stats roll into lifetime profile stats and are then forgotten. eggs_found
+    // feeds the Phase 4 mystery achievements (egg_hunter / mind_and_hand / collector).
+    api
+      .submitGameSummary(roomId, { ...moveTracker.buildSummary(gridRef.current), eggs_found: getFoundEggs() })
+      .catch(() => {});
     // The board is a separate call because it has a different lifetime: it's persisted to the
     // room for the post-game viewer and deleted along with it, never rolled into anything.
     api.persistFinalGrid(roomId, gridRef.current).catch(() => {});
@@ -1501,7 +1504,6 @@ export default function Game() {
   };
 
   const { getFoundEggs } = useEasterEggs(eggsOnBoard, eggTriggers);
-  void getFoundEggs;
 
   // --- Auto-detect Peel / Plantains ------------------------------------------
 

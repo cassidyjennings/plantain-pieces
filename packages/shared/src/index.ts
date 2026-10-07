@@ -9,3 +9,4 @@ export * from './stats.js';
 export * from './achievements.js';
 export * from './solo.js';
 export * from './xtina.js';
+export * from './dailyResults.js';

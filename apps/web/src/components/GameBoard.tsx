@@ -14,6 +14,8 @@ interface Props {
   /** Cells rendered in the accent color instead of the ordinary tile color. Takes precedence
    * over `validCells`, so an accented word never reads as an invalid one. */
   accentCells: Set<string>;
+  /** Cells of a validated MIT word (easter egg) — maroon. Below `accentCells`, above `validCells`. */
+  mitCells: Set<string>;
   /** Cell currently lifted for dragging (hidden from the board). */
   hiddenKey: string | null;
   /** Cell keys currently box-selected (select mode only). */
@@ -51,6 +53,7 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
     validCells,
     hintCells,
     accentCells,
+    mitCells,
     hiddenKey,
     selectedKeys,
     selectionOffset,
@@ -100,7 +103,9 @@ const GameBoard = forwardRef<HTMLDivElement, Props>(function GameBoard(
           return (
             <div
               key={key}
-              className={`board-tile${accentCells.has(key) ? ' accent' : validCells.has(key) ? ' valid' : ''}${selected ? ' selected' : ''}`}
+              className={`board-tile${
+                accentCells.has(key) ? ' accent' : mitCells.has(key) ? ' egg-mit' : validCells.has(key) ? ' valid' : ''
+              }${selected ? ' selected' : ''}`}
               style={{
                 left: (x + ox) * CELL,
                 top: (y + oy) * CELL,

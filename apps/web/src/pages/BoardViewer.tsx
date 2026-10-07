@@ -161,6 +161,7 @@ export default function BoardViewer() {
             grid={selected.grid_state ?? {}}
             validCells={words.validCells}
             accentCells={scriptedAccents}
+            mitCells={words.mitCells}
             label={`${isSelf ? 'Your' : `${selected.display_name}'s`} final board`}
             emptyMessage={
               isSelf

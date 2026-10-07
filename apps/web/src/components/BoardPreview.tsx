@@ -9,6 +9,8 @@ interface Props {
   /** Cell keys rendered in the accent colour. Takes precedence over `validCells`, matching the
    * in-game board: an accent word that isn't in the dictionary must not read as invalid. */
   accentCells?: Set<string>;
+  /** Cells of a validated MIT word (easter egg) — maroon, between accent and valid, as in-game. */
+  mitCells?: Set<string>;
   /** Never scale past this. A six-tile board blown up to fill a screen reads as broken, not
    * impressive, so the default is 1 (never larger than the real in-game tile size). */
   maxScale?: number;
@@ -33,6 +35,7 @@ export default function BoardPreview({
   grid,
   validCells,
   accentCells,
+  mitCells,
   maxScale = 1,
   label,
   emptyMessage = 'Board not available',
@@ -106,7 +109,13 @@ export default function BoardPreview({
             <div
               key={key}
               className={`board-tile${
-                accentCells?.has(key) ? ' accent' : validCells?.has(key) ? ' valid' : ''
+                accentCells?.has(key)
+                  ? ' accent'
+                  : mitCells?.has(key)
+                    ? ' egg-mit'
+                    : validCells?.has(key)
+                      ? ' valid'
+                      : ''
               }`}
               style={{
                 left: (x - box.minX) * CELL,

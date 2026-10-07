@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  EASTER_EGG_WORDS,
   extractWordsWithCells,
   makeKey,
   parseKey,
@@ -257,7 +258,9 @@ export default function Game() {
   // question is answerable locally. Without this, nudging a single tile re-sent every word on the
   // board and made the player wait out a debounce plus a full round trip for an answer the client
   // already had -- most visibly right at the end, when auto-Peel is waiting on it.
-  const wordVerdictsRef = useRef<Map<string, boolean>>(new Map());
+  // Seeded with the easter-egg words: they are valid under EVERY config (the server agrees — see
+  // migration 20261006000401), so they never need a /validate round trip.
+  const wordVerdictsRef = useRef<Map<string, boolean>>(new Map(EASTER_EGG_WORDS.map((w) => [w, true])));
   // Same shape again for the room_events handler's own refetches (fetchPlayers/fetchRoom below):
   // peel/dump/progress events can arrive close together, each firing its own async refetch, and
   // an earlier-issued one that resolves last would otherwise silently revert players/room to a
@@ -581,6 +584,17 @@ export default function Game() {
     () => (isXtinaPartner ? xtinaLitCells(grid) : EMPTY_CELLS),
     [isXtinaPartner, grid],
   );
+
+  // Easter egg MIT: a VALIDATED MIT word tints maroon. "Validated" = every one of its cells is in
+  // validCells, so the cross-word rule applies (a MIT crossing an invalid word doesn't tint).
+  // EMPTY_CELLS when absent keeps the prop identity stable for the memo'd GameBoard.
+  const mitCells = useMemo(() => {
+    const cells = new Set<string>();
+    for (const w of extractWordsWithCells(grid)) {
+      if (w.word === 'MIT' && w.cells.every((c) => validCells.has(c))) for (const c of w.cells) cells.add(c);
+    }
+    return cells.size > 0 ? cells : EMPTY_CELLS;
+  }, [grid, validCells]);
 
   /**
    * "Is this cell part of a word we're happy with?" — the single test behind auto-fire, the
@@ -1798,6 +1812,7 @@ export default function Game() {
           validCells={validCells}
           hintCells={xtinaHints}
           accentCells={xtinaAccents}
+          mitCells={mitCells}
           hiddenKey={null}
           selectedKeys={selectedKeys}
           selectionOffset={selectionOffset}

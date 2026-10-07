@@ -58,6 +58,11 @@
   /* "Part of a valid word" tile highlight — tokenized so colorblind modes can retint it. */
   --color-tile-valid-bg: #cde6b4;
   --color-tile-valid-border: #7fae57;
+  /* Easter egg: a validated MIT word tints MIT cardinal (maroon) instead of the valid green.
+     Tokenized so colorblind modes can retint it (see styles.css colorblind blocks). */
+  --color-tile-mit-bg: #a31f34;
+  --color-tile-mit-border: #6e1423;
+  --color-tile-mit-text: #fbf4e2;
 
   /* Bunch meter plantain — the logo's own drawing style */
   --color-plantain-peel: #a8c94a;

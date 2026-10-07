@@ -34,11 +34,13 @@ export async function fetchRoomBoards(roomId: string): Promise<RoomBoardRow[]> {
 export interface BoardWords {
   /** Cell keys belonging to a dictionary-valid word — tinted green, same cue as in-game. */
   validCells: Set<string>;
+  /** Cell keys of a valid MIT word (easter egg) — tinted maroon, same cue as in-game. */
+  mitCells: Set<string>;
   /** The valid words on this board, in reading order. */
   words: string[];
 }
 
-export const EMPTY_BOARD_WORDS: BoardWords = { validCells: new Set(), words: [] };
+export const EMPTY_BOARD_WORDS: BoardWords = { validCells: new Set(), mitCells: new Set(), words: [] };
 
 /**
  * Work out which words a finished board actually scored, by extracting them from the grid and
@@ -79,11 +81,16 @@ export async function resolveBoardWords(
     if (invalid.has(w.word)) for (const c of w.cells) bad.add(c);
   }
   const validCells = new Set<string>();
+  const mitCells = new Set<string>();
   const words: string[] = [];
   for (const w of found) {
     if (invalid.has(w.word)) continue;
     words.push(w.word);
     for (const c of w.cells) if (!bad.has(c)) validCells.add(c);
   }
-  return { validCells, words };
+  // Same cross-word rule as the green tint: a MIT cell crossing an invalid word stays untinted.
+  for (const w of found) {
+    if (w.word === 'MIT' && w.cells.every((c) => validCells.has(c))) for (const c of w.cells) mitCells.add(c);
+  }
+  return { validCells, mitCells, words };
 }

@@ -31,6 +31,7 @@ export default function Results() {
   const [rematching, setRematching] = useState(false);
   const [rematchError, setRematchError] = useState<string | null>(null);
   const [myBoard, setMyBoard] = useState<RoomBoardRow | null>(null);
+  const [myMitCells, setMyMitCells] = useState<Set<string>>(new Set());
   const [boardCount, setBoardCount] = useState(0);
   // True once the board read has a real answer (our board's words resolved) or its final retry
   // ran. Until then the board window and the Longest word value hold placeholders.
@@ -123,8 +124,9 @@ export default function Results() {
         setMyBoard(mine);
         // Longest word is derived from the board rather than read back from a stored record.
         if (mine) {
-          const { words } = await resolveBoardWords(roomId!, mine.grid_state);
+          const { words, mitCells } = await resolveBoardWords(roomId!, mine.grid_state);
           if (cancelled || seq !== latestSeq) return;
+          setMyMitCells(mitCells);
           setLongestWord(
             words.reduce<string | null>((best, w) => (!best || w.length > best.length ? w : best), null),
           );
@@ -429,6 +431,7 @@ export default function Results() {
           <span className="results-board-window-frame">
             <BoardPreview
               grid={myBoard.grid_state ?? {}}
+              mitCells={myMitCells}
               label="Your final board"
               emptyMessage="Saving your board…"
             />

@@ -1183,6 +1183,16 @@ button:disabled {
   border-color: var(--color-tile-valid-border);
 }
 
+/* Easter egg MIT. Overrides .valid (never composed with it — GameBoard/BoardPreview pick one
+   class), same precedence pattern as the xtina .accent below. Text and lip are retinted too so a
+   light-on-dark tile never sits on the green --color-tile-shadow. */
+.board-tile.egg-mit {
+  background: var(--color-tile-mit-bg);
+  border-color: var(--color-tile-mit-border);
+  color: var(--color-tile-mit-text);
+  box-shadow: 0 2px 0 var(--color-tile-mit-border);
+}
+
 /* Xtina mode: where the next word goes. An outline on an EMPTY cell, never a letter — the
    player works the word out from the tiles in their tray. pointer-events:none so it can't
    swallow a pointerdown that belongs to the board's drag system. */
@@ -3926,6 +3936,8 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   --color-danger: #e69f00;
   --color-tile-valid-bg: #bcd8f2;
   --color-tile-valid-border: #3d7cbf;
+  --color-tile-mit-bg: #d55e00;
+  --color-tile-mit-border: #8f3f00;
 }
 :root[data-colorblind='tritanopia'] {
   --color-success: #009e73;
@@ -3933,6 +3945,8 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
   --color-danger: #cc79a7;
   --color-tile-valid-bg: #b7e6d8;
   --color-tile-valid-border: #009e73;
+  --color-tile-mit-bg: #d55e00;
+  --color-tile-mit-border: #8f3f00;
 }
 
 /* Results "what you earned" strip */

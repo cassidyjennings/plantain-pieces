@@ -6,6 +6,7 @@ import {
   parseKey,
   validateStructure,
   GRID_SIZE,
+  peelThreshold,
   XTINA_STEPS,
   xtinaCellIsScripted,
   xtinaGridMatches,
@@ -294,6 +295,9 @@ export default function Game() {
   const collapsedRef = useRef(collapsed);
   const playersRef = useRef(players);
   const bunchRef = useRef(bunchCount);
+  // runAutoAction is a stable useCallback and reads live values through refs; the room's mode
+  // decides the peel threshold (solo: 1 tile left is enough, see peelThreshold).
+  const roomModeRef = useRef<PublicRoom['mode'] | undefined>(undefined);
   const boardModeRef = useRef(boardMode);
   const selectedKeysRef = useRef(selectedKeys);
   const selectionOffsetRef = useRef(selectionOffset);
@@ -304,6 +308,7 @@ export default function Game() {
   collapsedRef.current = collapsed;
   playersRef.current = players;
   bunchRef.current = bunchCount;
+  roomModeRef.current = room?.mode;
   boardModeRef.current = boardMode;
   selectedKeysRef.current = selectedKeys;
   selectionOffsetRef.current = selectionOffset;
@@ -331,7 +336,8 @@ export default function Game() {
 
   // Fire the slice-fly animation for each newly *drawn* tile. `justDrawn` is set only for genuine
   // draws (Peel/Dump) — tiles moved back from the board or recalled use newRackTile (no flag), so
-  // this correctly ignores those. Peel adds 1 tile → 1 slice; Dump adds 3 → 3 staggered slices.
+  // this correctly ignores those. Peel adds 1 tile → 1 slice (a solo peel batch adds up to 7 →
+  // up to 7 staggered slices, queued in SLICE_WAVE-sized waves); Dump adds 3 → 3 staggered slices.
   //
   // This is a layout effect (not a regular effect) so that `pendingReveal` is updated — and Tray
   // re-rendered with the fresh chips already hidden — before the browser ever paints a frame.
@@ -1390,7 +1396,9 @@ export default function Game() {
     if (busyRef.current || !roomId) return;
     const submittedGrid = gridRef.current;
     const activeCount = playersRef.current.filter((p) => !p.is_spectator).length || 1;
-    const canPeel = bunchRef.current >= activeCount;
+    // Solo peels draw min(peelBatch, bunch), so even 1 tile left is a Peel, not Plantains.
+    // Every other mode deals 1 per active player. Mirrors the gate in the peel RPC.
+    const canPeel = bunchRef.current >= peelThreshold(roomModeRef.current, activeCount);
     busyRef.current = true;
     clearMessage();
     try {

@@ -4,7 +4,6 @@ import {
   ACHIEVEMENT_DEFS,
   ACHIEVEMENT_ORDER,
   ACCESSORY_SETS,
-  BUNCH_SIZE_PRESETS,
   validateDisplayName,
   normalizeAvatarConfig,
   type AvatarConfig,
@@ -19,8 +18,8 @@ import {
   guestHasProgress,
   type ProfileStatsRow,
   type AchievementRow,
-  type GameMode,
 } from '../lib/profile.js';
+import { buildStatTiles, type StatsFilter, type StreakInfo } from '../lib/statTiles.js';
 import {
   signOut,
   upgradeWith,
@@ -57,8 +56,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'achievements', label: 'Achievements' },
   { id: 'accessibility', label: 'Accessibility' },
 ];
-
-type StatsFilter = 'all' | GameMode;
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -462,21 +459,12 @@ function LockGlyph() {
 
 interface StatsBoardProps {
   stats: ProfileStatsRow | null;
-  streak: { current: number; longest: number } | null;
+  streak: StreakInfo | null;
   filter: StatsFilter;
   onFilterChange: (f: StatsFilter) => void;
   /** Rendered behind a GuestGate veil: drop the mode selector so nothing focusable sits behind
    * it. See GuestGate for why that matters more than it looks. */
   locked?: boolean;
-}
-
-/** mm:ss, matching Game.tsx's Timed solo elapsed-time card and Results.tsx's summary. */
-function formatBestTime(ms: number | undefined): string {
-  if (ms == null) return '-';
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: StatsBoardProps) {
@@ -509,67 +497,9 @@ function StatsBoard({ stats, streak, filter, onFilterChange, locked = false }: S
       </div>
     );
   }
-  const avgLen = stats.total_words > 0 ? (stats.total_word_length / stats.total_words).toFixed(1) : '-';
-  const winRate = stats.games_played > 0 ? Math.round((stats.games_won / stats.games_played) * 100) : 0;
-  // Peel streak is multiplayer-only by definition (best_peel_streak is never set for solo/xtina
-  // rows), so it's hidden on the solo filter alongside win rate — see the 2026-08-08 spec.
-  const showCompetitiveStats = filter !== 'solo' && filter !== 'daily';
-  const fastestPeel = stats.fastest_peel_ms != null ? `${(stats.fastest_peel_ms / 1000).toFixed(1)}s` : '-';
-
-  const letterEntries = Object.entries(stats.first_letter_counts ?? {});
-  const maxLetterCount = letterEntries.reduce((max, [, count]) => Math.max(max, count), 0);
-  let favoriteLetters = '-';
-  if (maxLetterCount > 0) {
-    const tiedLetters = letterEntries
-      .filter(([, count]) => count === maxLetterCount)
-      .map(([letter]) => letter)
-      .sort();
-    favoriteLetters = tiedLetters.length > 4
-      ? `${tiedLetters.slice(0, 4).join(', ')} +${tiedLetters.length - 4}`
-      : tiedLetters.join(', ');
-  }
-
-  // Best time per Bunch size is solo-only (multiplayer has no clock), same rule as the peel
-  // streak / win rate tiles above — hidden on the 'multiplayer' filter.
-  const showSoloBestTimes = filter !== 'multiplayer';
-  const soloBestTimeTiles = showSoloBestTimes
-    ? BUNCH_SIZE_PRESETS.map((preset) => ({
-        label: `Best time · ${preset.label}`,
-        value: formatBestTime(stats.solo_best_times?.[String(preset.size)]),
-      }))
-    : [];
-
-  // Best time is safe to show on 'all' too (min is associative regardless of which modes
-  // contributed). Average is daily-filter-only: on 'all', stats.games_played is summed across
-  // every mode, so dividing daily_total_time_ms by it there would silently produce a wrong
-  // number rather than a missing one — see the 2026-09-24 design doc.
-  const showDailyBestTime = filter !== 'multiplayer' && filter !== 'solo';
-  const dailyBestTimeTile = showDailyBestTime
-    ? [{ label: 'Best time (daily)', value: formatBestTime(stats.daily_best_time_ms ?? undefined) }]
-    : [];
-  const dailyAverageTimeTile =
-    filter === 'daily' && stats.games_played > 0
-      ? [{ label: 'Average time (daily)', value: formatBestTime(stats.daily_total_time_ms / stats.games_played) }]
-      : [];
-
-  const tiles: { label: string; value: string | number }[] = [
-    { label: 'Games played', value: stats.games_played },
-    ...(showCompetitiveStats ? [{ label: 'Wins', value: `${stats.games_won} (${winRate}%)` }] : []),
-    ...(streak ? [{ label: 'Current streak', value: streak.current }, { label: 'Longest streak', value: streak.longest }] : []),
-    { label: 'Longest word', value: stats.longest_word ?? '-' },
-    { label: 'Rarest word', value: stats.rarest_word ?? '-' },
-    { label: 'Avg word length', value: avgLen },
-    { label: 'Fastest peel', value: fastestPeel },
-    { label: 'Tiles peeled', value: stats.total_peels },
-    { label: 'Tiles dumped', value: stats.total_dumps },
-    { label: 'Favorite starting letter', value: favoriteLetters },
-    ...(showCompetitiveStats
-      ? [{ label: 'Best peel streak', value: (stats.best_peel_streak ?? 0) > 0 ? stats.best_peel_streak : '-' }]
-      : []),
-    ...soloBestTimeTiles,
-    ...dailyBestTimeTile,
-    ...dailyAverageTimeTile,
-  ];
+  // Which tiles show on which pill is decided per tile in lib/statTiles.ts (STAT_TILE_DEFS'
+  // `modes`) -- e.g. daily hides the peel/dump/Bunch-size tiles it can never move.
+  const tiles = buildStatTiles(stats, streak, filter);
 
   return (
     <div className="panel profile-panel">

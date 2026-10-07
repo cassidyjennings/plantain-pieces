@@ -69,7 +69,7 @@ function Tray({
         </span>
       </div>
 
-      <div className="tile-rack" data-tray>
+      <div className={`tile-rack${items.length === 0 ? ' empty' : ''}`} data-tray>
         {items.map((item) => {
           const pending = pendingIds.has(item.id);
           const sliceLanded = sliceRevealedIds.has(item.id);

@@ -3098,6 +3098,15 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
     flex: 1 1 100%;
   }
 
+  /* Daily has no Bunch card (spec 1.6): without this, row 1 would hold the actions card alone
+     and the elapsed card would sit on a row of its own beneath it. (0,3,0) beats the (0,1,0)
+     order/flex rule above regardless of position. */
+  .game-topbar.no-bunch .topbar-elapsed-card {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
   .topbar-roster-card {
     flex-direction: column;
     align-items: stretch;

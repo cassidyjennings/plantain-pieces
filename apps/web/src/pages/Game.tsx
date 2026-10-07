@@ -600,6 +600,10 @@ export default function Game() {
   // multiplayer show nothing (mode_config.timed is only ever true for solo).
   const isTimed = room?.mode === 'solo' && (room.mode_config as { timed?: boolean }).timed === true;
   const isDaily = room?.mode === 'daily';
+  // Daily deals its whole puzzle up front (the Bunch starts at 0 and never moves), so the meter
+  // could only ever show an empty plantain: drop the card and let the other cards take the row.
+  // Waits for the room so a daily game never flashes the card while it loads.
+  const showBunchCard = room != null && !isDaily;
   // The Bunch meter fills against the room's OWN starting size -- a solo player's smaller chosen
   // Bunch (as low as 54) must still read as a whole, full plantain at the start, just one that
   // empties faster, not a plantain that's already partly eaten before a single tile is drawn.
@@ -1691,17 +1695,17 @@ export default function Game() {
 
   return (
     <div className="game-layout">
-      <div className="game-topbar">
-        <div className="topbar-card topbar-bunch-card">
-          {room && (
+      <div className={`game-topbar${showBunchCard ? '' : ' no-bunch'}`}>
+        {showBunchCard && (
+          <div className="topbar-card topbar-bunch-card">
             <BunchGraphic
               ref={plantainCutRef}
               bunchCount={bunchCount}
               startingBunchCount={startingBunchCount}
               flashSignal={flashSignal}
             />
-          )}
-        </div>
+          </div>
+        )}
 
         {isSolo || isDaily ? (
           (isTimed || isDaily) && (

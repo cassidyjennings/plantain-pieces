@@ -77,17 +77,20 @@ input {
   color: var(--color-text-primary);
   font-family: var(--font-body);
   font-size: var(--text-body);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast);
 }
 
 input::placeholder {
   color: var(--color-text-faintest);
 }
 
+/* Focus ring is an outline, not a transitioned box-shadow: Chrome on Windows at fractional
+   display scaling left unrepainted slivers of the fading shadow along the bottom/right edges
+   after blur. Outlines aren't transitioned and repaint cleanly. */
 input:focus-visible {
-  outline: none;
+  outline: 3px solid rgba(255, 159, 67, 0.55);
+  outline-offset: 0;
   border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
 }
 
 button {
@@ -2327,6 +2330,7 @@ button.journal-tab:nth-of-type(3):hover:not(:disabled) {
 }
 
 .journal-page input:focus-visible {
+  outline: none;
   border-color: var(--color-accent);
   box-shadow: var(--focus-ring);
 }
